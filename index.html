@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>RobotMagic Pro</title>
+
+<style>
+/* -----------------------------------------------
+   ESTILO HÍBRIDO DERIV + BINANCE
+   ----------------------------------------------- */
+
+:root{
+  --bg:#0a0f17;
+  --card:#111821;
+  --accent:#2ecc71;
+  --accent2:#3498db;
+  --danger:#e74c3c;
+  --muted:#9aa6b2;
+  --glass:rgba(255,255,255,0.03);
+}
+
+body{
+  margin:0;
+  font-family:Inter,system-ui;
+  background:var(--bg);
+  color:#e9f7ef;
+}
+
+header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:14px 22px;
+  border-bottom:1px solid rgba(255,255,255,0.04);
+  background:rgba(255,255,255,0.02);
+}
+
+.logoBox{
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+
+.logo{
+  width:42px;height:42px;
+  border-radius:8px;
+  background:linear-gradient(45deg,var(--accent),var(--accent2));
+  display:flex;align-items:center;justify-content:center;
+  font-weight:700;font-size:18px;color:#001;
+}
+
+main{
+  display:grid;
+  grid-template-columns:280px 1fr 340px;
+  gap:16px;
+  padding:18px;
+}
+
+/* Painéis */
+.panel{
+  background:var(--card);
+  border-radius:12px;
+  padding:14px;
+  border:1px solid rgba(255,255,255,0.03);
+  box-shadow:0 6px 18px rgba(0,0,0,0.4);
+}
+
+.leftPanel{
+  height:82vh;
+  overflow:auto;
+}
+
+.centerPanel{
+  height:82vh;
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+
+.chart{
+  flex:1;
+  border-radius:10px;
+  background:rgba(0,0,0,0.15);
+  display:flex;align-items:center;justify-content:center;
+  color:var(--muted);
+}
+
+.signals{
+  height:38%;
+  overflow:auto;
+}
+
+.signalRow{
+  padding:10px;
+  border-radius:10px;
+  margin-bottom:8px;
+  background:rgba(255,255,255,0.05);
+}
+
+.btn{
+  padding:8px 12px;
+  border-radius:8px;
+  border:none;
+  cursor:pointer;
+  background:var(--accent);
+  color:#000;
+  font-weight:600;
+}
+
+.btnDanger{
+  background:var(--danger);
+  color:#fff;
+}
+
+.btnGhost{
+  background:transparent;
+  border:1px solid rgba(255,255,255,0.05);
+  color:var(--muted);
+}
+
+label{
+  font-size:12px;
+  color:var(--muted);
+}
+
+select,input{
+  margin-top:4px;
+  padding:8px;
+  border-radius:8px;
+  background:rgba(255,255,255,0.04);
+  border:1px solid rgba(255,255,255,0.06);
+  color:#e9f7ef;
+}
+
+/* Modal Bots */
+#modalBots{
+  position:fixed;
+  top:0;left:0;
+  width:100%;height:100%;
+  background:rgba(0,0,0,0.7);
+  display:none;
+  align-items:center;
+  justify-content:center;
+}
+
+.modalContent{
+  width:400px;
+  background:var(--card);
+  padding:20px;
+  border-radius:12px;
+  border:1px solid rgba(255,255,255,0.05);
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  <div class="logoBox">
+    <div class="logo">RM</div>
+    <div>
+      <div style="font-size:18px;font-weight:600">RobotMagic Pro</div>
+      <div style="font-size:13px;color:var(--muted)">Interface híbrida Deriv + Binance</div>
+    </div>
+  </div>
+
+  <div>
+    <button class="btnGhost" id="btnRefresh">Atualizar sinais</button>
+  </div>
+</header>
+
+<main>
+
+<!-- PAINEL ESQUERDO -->
+<section class="panel leftPanel">
+
+  <h3>Configurações</h3>
+
+  <label>Ativo:</label>
+  <select id="selSymbol">
+    <option value="R_100">R_100</option>
+    <option value="R_50">R_50</option>
+    <option value="FRXEURUSD">EURUSD</option>
+  </select>
+
+  <label style="margin-top:12px">Timeframe:</label>
+  <select id="selTf">
+    <option value="5">5s</option>
+    <option value="30">30s</option>
+    <option value="60" selected>1m</option>
+    <option value="300">5m</option>
+  </select>
+
+  <hr style="opacity:.1;margin:14px 0"/>
+
+  <h3>Histórico</h3>
+  <div id="historyBox" style="font-size:13px;color:var(--muted)">
+    Nenhum histórico ainda.
+  </div>
+
+  <hr style="opacity:.1;margin:14px 0"/>
+
+  <h3>Bots Automáticos</h3>
+  <p style="font-size:12px;color:var(--muted)">
+    Os bots executam operações automáticas apenas se ativados.
+  </p>
+
+  <button class="btn" id="btnBots">Gerenciar Bots</button>
+
+</section>
+
+<!-- PAINEL CENTRAL -->
+<section class="panel centerPanel">
+
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <h3>Gráfico</h3>
+    <div style="font-size:13px;color:var(--muted)">Último sinal: <span id="lastSignal">—</span></div>
+  </div>
+
+  <div class="chart">[ Gráfico será integrado posteriormente ]</div>
+
+  <div class="signals">
+    <h3>Sinais Ativos</h3>
+    <div id="signalsBox" style="margin-top:10px;font-size:14px;color:var(--muted)">
+      Nenhum sinal no momento.
+    </div>
+  </div>
+
+</section>
+
+<!-- PAINEL DIREITO -->
+<section class="panel" style="overflow:auto;height:82vh">
+
+  <h3>Análise Técnica</h3>
+  <div id="analysisBox" style="font-size:14px;color:var(--muted)">Sem análise ainda.</div>
+
+  <hr style="opacity:.1;margin:14px 0"/>
+
+  <h3>Detalhes do Sinal</h3>
+  <div id="detailsBox" style="font-size:12px;color:var(--muted)">Selecione um sinal para ver detalhes.</div>
+
+  <hr style="opacity:.1;margin:14px 0"/>
+
+  <h3>Logs</h3>
+  <div id="logsBox" style="font-size:12px;color:var(--muted);height:180px;overflow:auto">
+    Sem logs.
+  </div>
+
+</section>
+
+</main>
+
+<!-- MODAL BOTS -->
+<div id="modalBots">
+  <div class="modalContent">
+
+    <h3>Gerenciar Bots</h3>
+
+    <label>Nome do bot:</label>
+    <input id="botName" placeholder="Ex: MagicBot 1"/>
+
+    <label style="margin-top:10px">Modo:</label>
+    <select id="botMode">
+      <option value="sandbox">Sandbox (simulado)</option>
+      <option value="real">Real (precisa token no servidor)</option>
+    </select>
+
+    <label style="margin-top:10px">Stake (USD):</label>
+    <input id="botStake" type="number" value="1"/>
+
+    <label style="margin-top:10px">Trades por hora:</label>
+    <input id="botTrades" type="number" value="5"/>
+
+    <div style="margin-top:18px;display:flex;gap:10px">
+      <button class="btn" id="btnCreateBot">Criar Bot</button>
+      <button class="btnGhost" id="btnCloseBots">Fechar</button>
+    </div>
+
+    <hr style="opacity:.1;margin:14px 0"/>
+
+    <h3>Meus Bots</h3>
+    <div id="botsList" style="font-size:12px;color:var(--muted)">Nenhum bot ainda.</div>
+
+  </div>
+</div>
+
+<script>
+const SERVER = "https://mauro-paulo-starps-previus.onrender.com";
+const selSymbol = document.getElementById("selSymbol");
+const selTf = document.getElementById("selTf");
+
+/* -------------------------------
+   FUNÇÕES DE LOG
+---------------------------------- */
+function log(t){
+  const box = document.getElementById("logsBox");
+  box.innerText = new Date().toLocaleTimeString()+" — "+t+"\n"+box.innerText;
+}
+
+/* -------------------------------
+   REQUEST DE SINAL
+---------------------------------- */
+async function fetchSignal(){
+  try{
+    let url = SERVER + "/signal?symbol="+selSymbol.value+"&tf="+selTf.value;
+    let r = await fetch(url);
+    let j = await r.json();
+
+    if(!j || !j.action){
+      document.getElementById("signalsBox").innerHTML = "<span style='color:var(--muted)'>Nenhum sinal agora.</span>";
+      return;
+    }
+
+    document.getElementById("lastSignal").innerText = j.action+" ("+(j.probability*100).toFixed(0)+"%)";
+
+    document.getElementById("signalsBox").innerHTML = `
+      <div class="signalRow">
+        <strong>${j.action} — ${(j.probability*100).toFixed(0)}%</strong>
+        <div style="font-size:12px;color:var(--muted)">
+          ${j.symbol} | TF: ${j.tf}
+        </div>
+        <div style="font-size:12px;margin-top:6px">${j.reason}</div>
+        <button class="btn" style="margin-top:6px" onclick='showDetails(${JSON.stringify(j)})'>Detalhes</button>
+      </div>
+    `;
+
+    document.getElementById("analysisBox").innerText = j.explanation;
+    updateHistory(j);
+    log("Sinal recebido: "+j.action);
+
+  }catch(e){
+    log("Erro sinal: "+e.message);
+  }
+}
+
+function updateHistory(j){
+  const box = document.getElementById("historyBox");
+  if(box.innerText.includes("Nenhum histórico")){
+    box.innerText = "";
+  }
+  box.innerText = new Date(j.generated_at).toLocaleTimeString()+" — "+j.symbol+" "+j.action+" "+(j.probability*100).toFixed(0)+"%\n"+box.innerText;
+}
+
+function showDetails(j){
+  document.getElementById("detailsBox").innerText = JSON.stringify(j, null, 2);
+}
+
+/* -------------------------------
+   REALIZAR LOOP DE SINAIS
+---------------------------------- */
+setInterval(fetchSignal, 7000);
+fetchSignal();
+
+/* -------------------------------
+   MANEJAR MODAL BOTS
+---------------------------------- */
+document.getElementById("btnBots").onclick = ()=> document.getElementById("modalBots").style.display = "flex";
+document.getElementById("btnCloseBots").onclick = ()=> document.getElementById("modalBots").style.display = "none";
+
+/* -------------------------------
+   CRIAR BOT
+---------------------------------- */
+document.getElementById("btnCreateBot").onclick = async ()=>{
+  const payload = {
+    name: document.getElementById("botName").value,
+    mode: document.getElementById("botMode").value,
+    stake: parseFloat(document.getElementById("botStake").value),
+    max_trades_per_hour: parseInt(document.getElementById("botTrades").value)
+  };
+
+  let r = await fetch(SERVER+"/bots/create", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body:JSON.stringify(payload)
+  });
+
+  let j = await r.json();
+  log("Bot criado: "+j.bot_id);
+  loadBots();
+};
+
+/* -------------------------------
+   LISTAR BOTS
+---------------------------------- */
+async function loadBots(){
+  let r = await fetch(SERVER+"/bots");
+  let bots = await r.json();
+
+  let html = "";
+
+  bots.forEach(b=>{
+    html+=`
+      <div style="padding:8px;border:1px solid rgba(255,255,255,0.05);border-radius:8px;margin-top:6px">
+        <strong>${b.name}</strong>
+        <div>ID: ${b.id}</div>
+        <div>Ativo: ${b.active}</div>
+        <div>Modo: ${b.simulate ? "Sandbox" : "Real"}</div>
+        <button class="btn" onclick="toggleBot('${b.id}', ${!b.active})" style="margin-top:6px">
+          ${b.active ? "Desativar" : "Ativar"}
+        </button>
+      </div>
+    `;
+  });
+
+  document.getElementById("botsList").innerHTML = html || "Nenhum bot criado.";
+}
+
+async function toggleBot(id, enable){
+  if(enable){
+    await fetch(SERVER+"/bots/"+id+"/activate?simulate=true", {method:"POST"});
+    log("Bot ativado: "+id);
+  }else{
+    await fetch(SERVER+"/bots/"+id+"/deactivate", {method:"POST"});
+    log("Bot desativado: "+id);
+  }
+  loadBots();
+}
+
+loadBots();
+</script>
+</body>
+</html>
