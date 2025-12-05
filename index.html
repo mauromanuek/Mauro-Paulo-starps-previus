@@ -3,91 +3,158 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IA Trader Bot</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <title>🤖 IA Trader Bot</title>
+    
     <style>
-        /* Estilos básicos para garantir que os elementos necessários existem */
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
             padding: 0;
-            background-color: #f4f4f9;
-            color: #333;
+            background-color: #1a1a2e; /* Fundo escuro */
+            color: #f0f0f0; /* Texto claro */
         }
+
         header {
             background-color: #007bff;
             color: white;
             padding: 20px;
             text-align: center;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
         }
+
         .container {
             padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
         }
-        .status-bar {
-            background-color: #e9ecef;
-            padding: 10px;
+
+        /* Estilo para todas as caixas de seção */
+        .section-box {
+            background-color: #2c2c54; /* Fundo mais escuro para as caixas */
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+            margin-bottom: 30px;
+            border-left: 5px solid #007bff; /* Detalhe da cor primária */
+        }
+
+        h2 {
+            color: #007bff;
+            border-bottom: 1px solid #4a4a7a;
+            padding-bottom: 10px;
+            margin-top: 0;
             margin-bottom: 20px;
-            border-radius: 5px;
+        }
+
+        /* Barra de Status e Conexão */
+        .status-bar {
+            background-color: #1a1a2e;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 8px;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            border: 1px solid #4a4a7a;
         }
-        .status-indicator {
-            padding: 5px 10px;
+
+        input[type="text"], input[type="number"] {
+            padding: 10px;
+            margin-right: 10px;
+            border: 1px solid #4a4a7a;
             border-radius: 5px;
-            font-weight: bold;
+            background-color: #1a1a2e;
+            color: #f0f0f0;
+            width: 200px;
         }
-        .status-ok {
-            background-color: #28a745;
-            color: white;
-        }
-        .status-error {
-            background-color: #dc3545;
-            color: white;
-        }
-        .status-pending {
-            background-color: #ffc107;
-            color: #333;
-        }
-        .section-box {
-            background-color: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-        }
-        .tabs {
-            display: flex;
-            margin-bottom: 20px;
-        }
-        .tab-button {
-            padding: 10px 20px;
-            cursor: pointer;
-            border: none;
-            background-color: #e9ecef;
-            transition: background-color 0.3s;
-        }
-        .tab-button.active {
+
+        button {
+            padding: 10px 15px;
             background-color: #007bff;
             color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
         }
-        .tab-content {
-            display: none;
+
+        button:hover {
+            background-color: #0056b3;
         }
-        .tab-content.active {
-            display: block;
+
+        /* Indicadores de Status */
+        .status-indicator {
+            padding: 8px 15px;
+            border-radius: 5px;
+            font-weight: bold;
+            text-transform: uppercase;
         }
+        .status-ok { background-color: #28a745; color: white; }
+        .status-error { background-color: #dc3545; color: white; }
+        .status-pending { background-color: #ffc107; color: #333; }
+
+        #accountInfo {
+            margin-top: 10px;
+            color: #b0b0b0;
+        }
+
+        /* Estilos das Tabs */
+        .tabs {
+            display: flex;
+            margin-bottom: 0;
+            border-bottom: 2px solid #4a4a7a;
+        }
+
+        .tab-button {
+            padding: 12px 25px;
+            cursor: pointer;
+            border: none;
+            background-color: #1a1a2e;
+            color: #b0b0b0;
+            border-radius: 5px 5px 0 0;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .tab-button:hover {
+            background-color: #2c2c54;
+            color: white;
+        }
+
+        .tab-button.active {
+            background-color: #2c2c54;
+            color: #007bff;
+            border-bottom: 2px solid #007bff;
+        }
+
+        /* Análise de Sinal */
+        #signalResult {
+            padding: 15px;
+            margin-top: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        #indicatorInfo {
+            list-style: none;
+            padding: 0;
+            margin-top: 15px;
+            display: flex;
+            gap: 30px;
+            color: #b0b0b0;
+        }
+
+        /* Gestão de Bots (Tabela) */
         table {
-            width: 100%;
-            border-collapse: collapse;
+            border: 1px solid #4a4a7a;
         }
         th, td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: left;
+            border: 1px solid #4a4a7a;
+            color: #f0f0f0;
         }
         th {
-            background-color: #f2f2f2;
+            background-color: #1a1a2e;
+        }
+        tbody tr:nth-child(even) {
+            background-color: #232342;
         }
     </style>
 </head>
@@ -122,7 +189,7 @@
         <div id="analysis" class="tab-content active section-box">
             <h2>📈 Sinal de Trading</h2>
             <p>Ativo: <span id="signalSymbol">V100</span> | Timeframe: <span id="signalTimeframe">5m</span></p>
-            <div id="signalResult" style="font-size: 24px; font-weight: bold; padding: 10px; margin-top: 10px; border-radius: 5px;">
+            <div id="signalResult" style="font-size: 24px; font-weight: bold; padding: 15px; margin-top: 15px; border-radius: 8px; text-align: center;">
                 Aguardando 20 Ticks...
             </div>
             <p>Últimos Indicadores Calculados:</p>
@@ -164,7 +231,7 @@
             <p>Esta seção permite consultar a IA sobre tendências de mercado ou otimização de estratégias.</p>
             <input type="text" id="iaQuery" placeholder="Pergunte à IA (Ex: Qual a tendência do R_100?)">
             <button onclick="sendIAQuery()">Consultar IA</button>
-            <p id="iaResponse" style="margin-top: 15px; border: 1px dashed #ccc; padding: 10px; min-height: 50px;">Resposta da IA...</p>
+            <p id="iaResponse" style="margin-top: 15px; border: 1px dashed #4a4a7a; padding: 10px; min-height: 50px;">Resposta da IA...</p>
         </div>
 
     </div>
@@ -195,7 +262,7 @@
         }
 
         // ----------------------------------------
-        // 2. Conexão e Status (CORREÇÕES IMPORTANTES AQUI)
+        // 2. Conexão e Status (CORREÇÃO CRÍTICA DO ERRO 422)
         // ----------------------------------------
 
         async function connectToken() {
@@ -207,7 +274,7 @@
                 return;
             }
             
-            // CORREÇÃO CRÍTICA PARA O ERRO 422: Envia o token como query parameter
+            // CORREÇÃO: Envia o token como query parameter (resolve o 422)
             const url = `/set_token?token=${token}`;
 
             document.getElementById('connectionStatus').textContent = "Conectando...";
@@ -223,7 +290,7 @@
                     document.getElementById('connectionStatus').textContent = "Token Aceito! Verificando conexão...";
                 } else {
                     const errorData = await response.json();
-                    document.getElementById('errorMessage').textContent = `ERRO 422: Token rejeitado. Verifique o valor.`;
+                    document.getElementById('errorMessage').textContent = `ERRO na API: Falha ao processar token.`;
                     document.getElementById('connectionStatus').textContent = "Falha!";
                     document.getElementById('connectionStatus').className = "status-indicator status-error";
                 }
@@ -292,7 +359,7 @@
                 } else if (response.status === 404) {
                     signalResult.textContent = "Aguardando 20 Ticks para calcular...";
                     signalResult.style.backgroundColor = 'transparent';
-                    signalResult.style.color = '#333';
+                    signalResult.style.color = '#f0f0f0';
                     indicatorInfo.innerHTML = "<li>RSI: N/A</li><li>EMA (10): N/A</li>";
                 } else {
                     signalResult.textContent = `ERRO: Não foi possível obter o sinal (${response.status})`;
@@ -333,4 +400,87 @@
             const symbol = document.getElementById('botSymbol').value.trim() || "R_100";
             const tf = parseInt(document.getElementById('botTimeframe').value) || 5;
             const sl = parseFloat(document.getElementById('botSL').value) || 10;
-            const tp = parseFloat(document.getElementById('botTP').
+            const tp = parseFloat(document.getElementById('botTP').value) || 20;
+
+            if (!name) {
+                alert("O nome do bot é obrigatório.");
+                return;
+            }
+
+            try {
+                const response = await fetch(`/bots/create?name=${name}&symbol=${symbol}&timeframe=${tf}&sl=${sl}&tp=${tp}`, {
+                    method: 'POST',
+                });
+                if (response.ok) {
+                    alert("Bot criado com sucesso! Atualizando lista...");
+                    updateStatus(); // Atualiza a lista de bots
+                } else {
+                    alert("Falha ao criar bot.");
+                }
+            } catch (error) {
+                alert("Erro de rede ao criar bot.");
+            }
+        }
+
+        async function activateBot(botId) {
+            try {
+                const response = await fetch(`/bots/activate/${botId}`, { method: 'POST' });
+                if (response.ok) {
+                    console.log(`Bot ${botId} ativado.`);
+                    updateStatus();
+                } else {
+                    alert("Falha ao ativar bot.");
+                }
+            } catch (error) {
+                alert("Erro de rede ao ativar bot.");
+            }
+        }
+
+        async function deactivateBot(botId) {
+            try {
+                const response = await fetch(`/bots/deactivate/${botId}`, { method: 'POST' });
+                if (response.ok) {
+                    console.log(`Bot ${botId} desativado.`);
+                    updateStatus();
+                } else {
+                    alert("Falha ao desativar bot.");
+                }
+            } catch (error) {
+                alert("Erro de rede ao desativar bot.");
+            }
+        }
+
+        function sendIAQuery() {
+            const query = document.getElementById('iaQuery').value;
+            const responseElement = document.getElementById('iaResponse');
+            responseElement.textContent = `A sua consulta: "${query}" está a ser processada pela IA...`;
+            setTimeout(() => {
+                responseElement.textContent = "A funcionalidade de IA está a ser integrada. Por favor, aguarde.";
+            }, 3000);
+        }
+
+        // ----------------------------------------
+        // 5. Loop Principal
+        // ----------------------------------------
+        
+        function startUpdateLoops() {
+            // Loop de Status (Atualiza a cada 5 segundos)
+            setInterval(updateStatus, STATUS_POLL_INTERVAL);
+            
+            // Loop de Sinal (Atualiza a cada 3 segundos)
+            setInterval(getSignal, SIGNAL_POLL_INTERVAL);
+        }
+
+        // Inicialização
+        document.addEventListener('DOMContentLoaded', () => {
+            // Define a primeira tab como ativa
+            document.getElementById('analysis').style.display = 'block';
+            
+            // Primeira chamada de status e inicia os loops
+            updateStatus();
+            startUpdateLoops();
+        });
+        
+    </script>
+</body>
+</html>
