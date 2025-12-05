@@ -2,14 +2,15 @@ import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
+import os
 
 from deriv_client import DerivClient
 
-
 app = FastAPI(title="Bot Trader Deriv")
 
-# Permitir comunicação do frontend com o backend
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -17,62 +18,67 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Servir arquivos HTML diretamente da raiz
-app.mount("/", StaticFiles(directory=".", html=True), name="static")
+# Servir arquivos estáticos
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Cliente global (inicia vazio)
+# Cliente global
 deriv_client = None
 
 
-# Modelo para POST /set_token
+# -----------------------------
+# Servir a interface corretamente
+# -----------------------------
+@app.get("/")
+async def serve_index():
+    return FileResponse("index.html")
+
+
+# Modelo do token
 class TokenModel(BaseModel):
     token: str
 
 
+# -----------------------------
+# Rota para receber o token
+# -----------------------------
 @app.post("/set_token")
 async def set_token(data: TokenModel):
-    """
-    Recebe o token da Deriv enviado pelo frontend,
-    reinicia o cliente e conecta novamente.
-    """
     global deriv_client
 
     token = data.token.strip()
-
     if not token:
         return {"ok": False, "message": "Token vazio!"}
 
-    # Se já existe cliente, parar antes de reiniciar
+    # Parar cliente antigo
     if deriv_client is not None:
         try:
             await deriv_client.stop()
         except:
             pass
 
-    # Criar novo cliente com o token enviado
+    # Criar novo cliente
     deriv_client = DerivClient(token)
 
-    # Iniciar conexão em background
+    # Iniciar conexão
     asyncio.create_task(deriv_client.start())
 
-    return {"ok": True, "message": "Conectado à Deriv!"}
+    return {"ok": True, "message": "Token recebido! Tentando conectar..."}
 
 
+# -----------------------------
+# Status da conexão
+# -----------------------------
 @app.get("/status")
 async def status():
-    """
-    Retorna o status atual da conexão com a Deriv.
-    """
     online = deriv_client is not None and deriv_client.connected
     return {"deriv_connected": online}
 
 
-# 🔥 Servidor uvicorn para funcionar no Render
+# -----------------------------
+# Iniciar servidor no Render
+# -----------------------------
 if __name__ == "__main__":
     import uvicorn
-    import os
 
-    # Render informa a porta via variável de ambiente PORT
     port = int(os.environ.get("PORT", 10000))
-
     uvicorn.run("main:app", host="0.0.0.0", port=port)
