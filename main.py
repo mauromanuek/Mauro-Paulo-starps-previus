@@ -1,110 +1,142 @@
-# main.py
+# bots_manager.py
 
-from fastapi import FastAPI, HTTPException
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
 import asyncio
-from typing import Optional, Dict, Any
+import uuid
+import httpx 
+from typing import Dict, Any, Optional
 
-# Importações
-from bots_manager import manager as bots_manager, BotState, BotsManager 
-from deriv_client import DerivClient
-from strategy import generate_signal
+# URL base do servidor (usamos localhost porque é uma chamada interna)
+SIGNAL_URL = "http://127.0.0.1:10000/signal" 
 
-# Variável global para o cliente Deriv
-deriv_client: Optional[DerivClient] = None
 
-# Inicialização do FastAPI
-app = FastAPI()
-
-# ----------------------------------------
-# 1. Rotas do Frontend (HTML, CSS)
-# ----------------------------------------
-
-# Monta o diretório 'static' (CSS)
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-@app.get("/", response_class=HTMLResponse)
-async def read_root():
-    """Serve o arquivo index.html principal."""
-    try:
-        with open("index.html", "r", encoding="utf-8") as f:
-            return f.read()
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="index.html não encontrado")
-
-# ----------------------------------------
-# 2. Rotas de Conexão e Sinal
-# ----------------------------------------
-
-@app.post("/set_token")
-async def set_token(token: str):
-    """Recebe o token e inicia a conexão com a Deriv."""
-    global deriv_client
-    
-    if deriv_client and deriv_client.connected:
-        await deriv_client.stop()
-
-    deriv_client = DerivClient(token=token)
-    
-    # Inicia a conexão em uma tarefa de background
-    asyncio.create_task(deriv_client.start())
-
-    return {"message": "Token recebido e conexão iniciada."}
-
-@app.get("/status")
-async def get_status():
-    """Retorna o status atual do cliente Deriv e dos bots."""
-    global deriv_client
-
-    if deriv_client and deriv_client.authorized:
-        # CORREÇÃO PARA O AttributeError: usa o novo método get_all_bots()
-        active_bots = bots_manager.get_all_bots() if bots_manager else []
+class BotState:
+    def __init__(self, name: str, symbol: str, timeframe: int, sl: float, tp: float):
+        self.id = str(uuid.uuid4())
+        self.name = name
+        self.symbol = symbol
+        self.timeframe = timeframe
+        self.sl = sl
+        self.tp = tp
+        self.is_active = False
+        self.task: Optional[asyncio.Task] = None
         
+    def to_dict(self):
+        """Método para serializar o estado do bot para o frontend."""
         return {
-            "is_authorized": deriv_client.authorized,
-            "balance": deriv_client.account_info['balance'],
-            "account_type": deriv_client.account_info['account_type'],
-            "active_bots": [bot.to_dict() for bot in active_bots],
-        }
-    else:
-        return {
-            "is_authorized": False,
-            "balance": 0.0,
-            "account_type": "N/A",
-            "active_bots": []
+            "id": self.id,
+            "name": self.name,
+            "symbol": self.symbol,
+            "timeframe": self.timeframe,
+            "sl": self.sl,
+            "tp": self.tp,
+            "is_active": self.is_active,
         }
 
-@app.get("/signal", response_model=Optional[Dict[str, Any]])
-async def get_signal(symbol: str, tf: int):
-    """Gera um sinal de trading com base nos ticks."""
-    signal = generate_signal(symbol, tf)
-    if signal is None:
-        # 404 é retornado se a estratégia não tiver dados suficientes (menos de 20 ticks)
-        raise HTTPException(status_code=404, detail="Não há dados suficientes para gerar o sinal (requer 20 ticks).")
-    
-    return signal
 
-# ----------------------------------------
-# 3. Rotas de Gestão de Bots
-# ----------------------------------------
+class BotsManager:
+    def __init__(self):
+        self.bots: Dict[str, BotState] = {}
+        # Inicializa o cliente HTTP para chamadas assíncronas
+        self.http_client = httpx.AsyncClient()
 
-@app.post("/bots/create")
-async def create_bot(name: str, symbol: str, timeframe: int, sl: float, tp: float):
-    """Cria um novo bot e o adiciona à lista."""
-    new_bot = bots_manager.create_bot(name, symbol, timeframe, sl, tp)
-    return {"message": "Bot criado com sucesso", "bot_id": new_bot.id}
 
-@app.post("/bots/activate/{bot_id}")
-async def activate_bot_route(bot_id: str):
-    """Ativa o loop de execução de um bot existente."""
-    if bots_manager.activate_bot(bot_id):
-        return {"message": f"Bot {bot_id} ativado com sucesso."}
-    raise HTTPException(status_code=404, detail="Bot não encontrado ou já está ativo.")
+    def create_bot(self, name: str, symbol: str, timeframe: int, sl: float, tp: float) -> BotState:
+        new_bot = BotState(name, symbol, timeframe, sl, tp)
+        self.bots[new_bot.id] = new_bot
+        print(f"[BotsManager] Bot Criado: {new_bot.name} ({new_bot.id[:4]})")
+        return new_bot
 
-@app.post("/bots/deactivate/{bot_id}")
-async def deactivate_bot_route(bot_id: str):
-    """Desativa o loop de execução de um bot existente."""
-    if bots_manager.deactivate_bot(bot_id):
-        return {"message": f"Bot {bot_id} desativado com sucesso."}
-    raise HTTPException(status_code=404, detail="Bot não encontrado ou já está inativo.")
+    def get_all_bots(self):
+        """
+        CORREÇÃO: Este método estava em falta e causava o AttributeError.
+        Retorna uma lista de todos os BotState.
+        """
+        return list(self.bots.values())
+
+    def activate_bot(self, bot_id: str):
+        if bot_id not in self.bots:
+            return False
+
+        bot = self.bots[bot_id]
+
+        if not bot.is_active:
+            bot.is_active = True
+            
+            # Cria a tarefa de loop do bot em segundo plano
+            bot.task = asyncio.create_task(self.run_bot_loop(bot))
+            print(f"[BotsManager] Bot ATIVADO: {bot.name}")
+            return True
+        return False
+
+    def deactivate_bot(self, bot_id: str):
+        if bot_id not in self.bots:
+            return False
+
+        bot = self.bots[bot_id]
+
+        if bot.is_active:
+            bot.is_active = False
+            if bot.task:
+                bot.task.cancel() # Cancela a tarefa de loop
+            print(f"[BotsManager] Bot DESATIVADO: {bot.name}")
+            return True
+        return False
+
+    async def get_signal_from_api(self, bot: BotState) -> Optional[Dict[str, Any]]:
+        """Chama a rota /signal do próprio servidor para obter o sinal."""
+        try:
+            params = {"symbol": bot.symbol, "tf": bot.timeframe}
+            
+            response = await self.http_client.get(
+                SIGNAL_URL,
+                params=params,
+                timeout=5
+            )
+
+            if response.status_code == 200:
+                return response.json()
+            
+            elif response.status_code == 404:
+                return None 
+            
+            else:
+                print(f"[Bot {bot.id[:4]}] ERRO HTTP! Status: {response.status_code}, Resposta: {response.text}")
+                return None
+
+        except httpx.ConnectError:
+            print(f"[Bot {bot.id[:4]}] ERRO HTTP: Falha ao conectar a {SIGNAL_URL}. Verifique se o servidor está na porta 10000.")
+            return None
+        
+        except Exception as e:
+            print(f"[Bot {bot.id[:4]}] ERRO INESPERADO ao obter sinal: {e}")
+            return None
+
+    async def run_bot_loop(self, bot: BotState):
+        """Loop principal de execução do bot."""
+        while bot.is_active:
+            try:
+                # 1. Obter sinal da API
+                signal = await self.get_signal_from_api(bot)
+
+                if signal:
+                    print(f"[Bot {bot.id[:4]}] Sinal encontrado: {signal['action']} em {bot.symbol}")
+                    
+                    # 2. Simulação de execução de ordem (substituir por API real)
+                    action = signal['action'].split(' ')[0]
+                    
+                    print(f"[Bot {bot.id[:4]}] -> EXECUTANDO ORDEM: {action}...")
+                    
+                    # 3. Atrasar o loop para esperar pelo próximo sinal
+                    await asyncio.sleep(60)
+                else:
+                    await asyncio.sleep(5) 
+
+            except asyncio.CancelledError:
+                print(f"[Bot {bot.id[:4]}] Loop cancelado.")
+                break
+            except Exception as e:
+                print(f"[Bot {bot.id[:4]}] Erro fatal no loop: {e}")
+                await asyncio.sleep(10)
+
+
+manager = BotsManager()
