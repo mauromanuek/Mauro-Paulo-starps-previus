@@ -294,6 +294,7 @@
             document.getElementById('signal-display').classList.add('hidden');
         }
 
+        // FUNÇÃO DE BUSCA DE SINAL (CORRIGIDA PARA TRATAR O ERRO 404 E REPETIR O LOOP)
         async function fetchSignal() {
             if (!isAnalysisRunning || !isConnected) return;
 
@@ -307,10 +308,21 @@
                     SERVER + "/signal?symbol=" + sym + "&tf=" + tf
                 );
 
+                // --- CORREÇÃO PRINCIPAL: Tratar 404 (Sem dados suficientes) ---
+                if (r.status === 404) {
+                    document.getElementById('processing-text').innerText = 'Analisando Gráfico (Aguardando dados...)...';
+                    // Garante que o loop continue no final
+                    if (isAnalysisRunning) {
+                        analysisTimeout = setTimeout(fetchSignal, 5000); 
+                    }
+                    return; 
+                }
+                
+                // Se não for 404, processamos a resposta (deve ser 200 OK)
                 const j = await r.json();
 
                 if (j && j.action) {
-                    stopAnalysis();
+                    stopAnalysis(); // Parar o loop de busca, pois o sinal chegou!
                     
                     document.getElementById('signal-display').classList.remove('hidden');
                     document.getElementById('chart-placeholder').classList.add('hidden');
@@ -336,12 +348,14 @@
                     h.innerText = new Date(j.generated_at).toLocaleTimeString() +
                         " — " + j.symbol + " " + j.action + ` (${prob}%)` + "\n" + h.innerText;
                 }
-
+                
             } catch (e) {
+                // Aqui só entra se houver falha de rede (ex: servidor caiu)
                 log("Erro signal: " + e.message);
-                analysisTimeout = setTimeout(fetchSignal, 5000); 
+                
             }
             
+            // Continua buscando a cada 6 segundos, a menos que o stopAnalysis() tenha parado o loop.
             if (isAnalysisRunning) {
                 analysisTimeout = setTimeout(fetchSignal, 6000); 
             }
