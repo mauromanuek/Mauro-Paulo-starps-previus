@@ -1,129 +1,277 @@
-<!DOCTYPE html>
-<html lang="pt">
+<!doctype html>
+<html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bot Deriv • Conexão</title>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>RobotMagic Pro — Conexão Deriv</title>
 
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            font-family: Arial, sans-serif;
-            background: #0d0d0d;
-            color: white;
-        }
+<style>
+:root{
+  --bg:#0a0f17;
+  --card:#111821;
+  --accent:#2ecc71;
+  --accent2:#3498db;
+  --muted:#9aa6b2;
+}
+body{margin:0;font-family:Inter,system-ui;background:var(--bg);color:#e9f7ef}
+header{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;border-bottom:1px solid rgba(255,255,255,0.03)}
+.logo{display:flex;align-items:center;gap:12px}
+.logo .dot{
+  width:40px;height:40px;border-radius:8px;
+  background:linear-gradient(45deg,var(--accent),var(--accent2));
+  display:flex;align-items:center;justify-content:center;
+  font-weight:700;color:#001;
+}
+.container{
+  padding:16px;display:grid;
+  grid-template-columns:300px 1fr 360px;
+  gap:14px;
+}
+.panel{
+  background:var(--card);padding:12px;border-radius:10px;
+  border:1px solid rgba(255,255,255,0.03)
+}
+.chart{
+  height:420px;border-radius:8px;
+  background:rgba(255,255,255,0.02);
+  display:flex;align-items:center;justify-content:center;
+  color:var(--muted)
+}
+.btn{
+  padding:10px 14px;border-radius:8px;
+  border:none;background:var(--accent);
+  color:#001;cursor:pointer;font-weight:600
+}
+.btn:hover{opacity:.85}
+.muted{color:var(--muted);font-size:13px}
 
-        header {
-            padding: 15px;
-            text-align: center;
-            font-size: 22px;
-            background: #111;
-            border-bottom: 1px solid #333;
-        }
+#modalToken{
+  position:fixed;left:0;top:0;width:100%;height:100%;
+  background:rgba(0,0,0,0.65);display:none;
+  align-items:center;justify-content:center;
+}
+.modal{
+  width:420px;background:var(--card);padding:18px;
+  border-radius:10px;border:1px solid rgba(255,255,255,0.04)
+}
+.input{
+  width:100%;padding:10px;border-radius:8px;
+  border:1px solid rgba(255,255,255,0.05);
+  background:rgba(255,255,255,0.02);color:#e9f7ef
+}
+</style>
 
-        .container {
-            padding: 20px;
-        }
-
-        .card {
-            background: #1a1a1a;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            border: 1px solid #333;
-        }
-
-        #status-box {
-            padding: 8px;
-            border-radius: 5px;
-            background: #300;
-        }
-
-        /* MODAL */
-        .modal-bg {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.65);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-
-        .modal {
-            background: #1a1a1a;
-            padding: 25px;
-            width: 90%;
-            max-width: 350px;
-            border-radius: 10px;
-            border: 1px solid #333;
-            text-align: center;
-        }
-
-        .input {
-            width: 100%;
-            padding: 12px;
-            margin-top: 10px;
-            border-radius: 6px;
-            border: none;
-            background: #222;
-            color: white;
-            font-size: 14px;
-        }
-
-        .btn {
-            width: 100%;
-            background: #0f62fe;
-            padding: 12px;
-            margin-top: 15px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 16px;
-            color: white;
-        }
-    </style>
 </head>
-
 <body>
 
-<header>Bot Deriv • Painel</header>
+<header>
+  <div class="logo">
+    <div class="dot">RM</div>
+    <div>
+      <div style="font-weight:700;font-size:18px">RobotMagic Pro</div>
+      <div class="muted small">Conecte-se à Deriv para iniciar</div>
+    </div>
+  </div>
+  <button class="btn" id="openTokenBtn">Conectar Deriv</button>
+</header>
+
 
 <div class="container">
 
-    <div class="card">
-        <h2>Status da Conexão</h2>
-        <div id="status-box">Desconectado ❌</div>
+  <!-- CONFIG LATERAL ESQUERDA -->
+  <aside class="panel">
+    <h3>Configuração</h3>
+
+    <div class="muted">Ativo</div>
+    <select id="symbolSel" class="input" style="margin-top:6px">
+      <option value="R_100">R_100</option>
+      <option value="R_50">R_50</option>
+      <option value="FRXEURUSD">EURUSD</option>
+    </select>
+
+    <div style="margin-top:10px" class="muted">Timeframe</div>
+    <select id="tfSel" class="input" style="margin-top:6px">
+      <option value="60">1 Minuto</option>
+      <option value="300">5 Minutos</option>
+    </select>
+
+    <hr style="margin:12px 0;border-color:rgba(255,255,255,0.06)">
+
+    <h4>Conexão</h4>
+    <div id="connStatus" class="small muted">Desconectado</div>
+    <button class="btn" style="margin-top:8px" id="openTokenBtn2">Inserir Token</button>
+
+    <hr style="margin:12px 0;border-color:rgba(255,255,255,0.06)">
+
+    <h4>Histórico</h4>
+    <div id="history" class="muted" style="max-height:160px;overflow:auto">
+      Nenhum histórico...
     </div>
+  </aside>
+
+
+  <!-- PAINEL CENTRAL -->
+  <main class="panel">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <h3>Gráfico</h3>
+      <div class="muted">Último sinal: <span id="lastSignal">—</span></div>
+    </div>
+
+    <div class="chart" id="chart">
+      Aguarde… carregando dados...
+    </div>
+
+    <h4 style="margin-top:12px">Sinais</h4>
+    <div id="signals" class="muted">
+      Nenhum sinal ainda...
+    </div>
+  </main>
+
+
+  <!-- PAINEL DIREITO -->
+  <aside class="panel">
+    <h4>Análise</h4>
+    <div id="analysis" class="muted">
+      Aguarde...
+    </div>
+
+    <hr style="margin:12px 0;border-color:rgba(255,255,255,0.06)">
+
+    <h4>Logs</h4>
+    <div id="logs" class="muted" style="height:240px;overflow:auto">
+      Sem logs ainda...
+    </div>
+  </aside>
 
 </div>
 
-<!-- MODAL DE TOKEN -->
-<div class="modal-bg" id="modal">
-    <div class="modal">
-        <h3>Conectar à Deriv</h3>
-        <p>Insira seu token para iniciar a conexão</p>
 
-        <input id="token" class="input" type="password" placeholder="Cole o token da Deriv">
 
-        <button class="btn" onclick="sendToken()">Conectar</button>
+<!-- MODAL TOKEN -->
+<div id="modalToken">
+  <div class="modal">
+    <h3>Conectar à Deriv</h3>
+
+    <input id="tokenInput" class="input" placeholder="Cole seu token Deriv">
+
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px">
+      <button class="btn" id="btnSendToken">Conectar</button>
+      <button class="btn" id="btnCancelToken" style="background:#333;color:#ccc">Cancelar</button>
     </div>
+
+    <div class="muted" style="margin-top:6px;font-size:12px">
+      O token não é salvo, fica só em memória.
+    </div>
+  </div>
 </div>
+
+
 
 <script>
-    // modal aparece automaticamente
-    const modal = document.getElementById("modal");
+const SERVER = location.origin;
 
-    async function sendToken() {
-        const token = document.getElementById("token").value.trim();
+/* helpers */
+function log(t){
+  document.getElementById("logs").innerText =
+    new Date().toLocaleTimeString()+" — "+t+"\n"+
+    document.getElementById("logs").innerText;
+}
 
-        if (!token) {
-            alert("Insira um token!");
-            return;
-        }
+/* modal */
+const modal=document.getElementById("modalToken");
+document.getElementById("openTokenBtn").onclick=()=>modal.style.display="flex";
+document.getElementById("openTokenBtn2").onclick=()=>modal.style.display="flex";
+document.getElementById("btnCancelToken").onclick=()=>modal.style.display="none";
 
-        try {
-            const res
+
+/* enviar token */
+document.getElementById("btnSendToken").onclick=async()=>{
+  const token=document.getElementById("tokenInput").value.trim();
+  if(!token){ alert("Insira o token."); return; }
+
+  log("Enviando token ao servidor...");
+
+  try{
+    const r=await fetch(SERVER+"/set_token",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({token})
+    });
+    const j=await r.json();
+
+    if(j.ok){
+      log("Token recebido. Tentando conectar...");
+      document.getElementById("connStatus").innerText="Conectando...";
+      modal.style.display="none";
+      setTimeout(checkStatus,1500);
+    }else{
+      alert("Erro: "+j.message);
+      log("Erro: "+j.message);
+    }
+  } catch(e){
+    alert("Falha: "+e.message);
+    log("Falha: "+e.message);
+  }
+};
+
+
+/* checar status */
+async function checkStatus(){
+  try{
+    const r=await fetch(SERVER+"/status");
+    const j=await r.json();
+    if(j.deriv_connected){
+      document.getElementById("connStatus").innerText="Conectado ✔";
+      log("Conexão estabelecida.");
+    }else{
+      document.getElementById("connStatus").innerText="Desconectado";
+      log("Ainda desconectado.");
+    }
+  }catch(e){
+    log("Erro status: "+e.message);
+  }
+}
+
+
+/* buscar sinais */
+async function fetchSignal(){
+  try{
+    const sym=document.getElementById("symbolSel").value;
+    const tf=document.getElementById("tfSel").value;
+
+    const r=await fetch(
+      SERVER+"/signal?symbol="+sym+"&tf="+tf
+    );
+
+    const j=await r.json();
+
+    if(j && j.action){
+      document.getElementById("signals").innerHTML=
+        `<div style="padding:8px;background:rgba(255,255,255,0.04);border-radius:8px">
+          <strong>${j.action} (${(j.probability*100).toFixed(0)}%)</strong>
+          <div>${j.symbol} | TF ${j.tf}</div>
+          <div class="muted">${j.reason}</div>
+        </div>`;
+
+      document.getElementById("lastSignal").innerText=
+        j.action+" "+(j.probability*100).toFixed(0)+"%";
+
+      document.getElementById("analysis").innerText=j.explanation;
+      
+      let h=document.getElementById("history");
+      h.innerText=new Date(j.generated_at).toLocaleTimeString()+
+        " — "+j.symbol+" "+j.action+"\n"+h.innerText;
+    }
+
+  }catch(e){
+    log("Erro signal: "+e.message);
+  }
+}
+
+setInterval(checkStatus,5000);
+setInterval(fetchSignal,6000);
+checkStatus();
+</script>
+
+</body>
+        </html>
