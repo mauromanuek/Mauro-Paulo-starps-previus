@@ -3,11 +3,11 @@
 import asyncio
 import uuid
 from enum import Enum
-from typing import Dict, Optional, Any
+# --- 🚨 CORREÇÃO AQUI: ADICIONADO 'List' ao import de typing 🚨 ---
+from typing import Dict, Optional, Any, List 
 import time
 from strategy import generate_signal # Requer que strategy.py esteja correto
 
-# --- 🚨 A CLASSE BOTSTATE QUE FALTAVA 🚨 ---
 class BotState(Enum):
     """Estados possíveis para um bot."""
     ACTIVE = "ACTIVE"
@@ -117,4 +117,3 @@ class BotsManager:
     def get_all_bots(self) -> List[TradingBot]:
         """Retorna a lista de todos os bots ativos e inativos."""
         return list(self.active_bots.values())
-
