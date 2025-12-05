@@ -4,20 +4,22 @@ import asyncio
 import websockets
 import json
 from datetime import datetime
-from strategy import TradingStrategy 
+# --- 🚨 CORREÇÃO AQUI 🚨 ---
+# Mudamos para importar a função update_ticks em vez da classe TradingStrategy
+from strategy import update_ticks 
+
 
 class DerivClient:
     
     # SEU APP ID INSERIDO AQUI
     APP_ID = "114910" 
 
-    def __init__(self, token: str, strategy_instance: TradingStrategy = None):
+    def __init__(self, token: str):
         self.token = token
         self.ws = None
         self.connected = False
         self.authorized = False
         self.account_info = {"balance": 0.0, "account_type": "demo"} 
-        self.strategy = strategy_instance 
 
     async def start(self):
         """Inicia a conexão completa com a Deriv."""
@@ -32,6 +34,10 @@ class DerivClient:
             if self.authorized:
                 print("[Deriv] Token autorizado com sucesso. O bot está ONLINE.")
                 await self.get_account_info() 
+                
+                # Submete subscrição para um ativo padrão
+                await self.subscribe_to_ticks("V100") 
+                
                 asyncio.create_task(self.listen())
             else:
                 print("[Deriv] Erro: token NÃO autorizado. Verifique se o token está correto e ativo.")
@@ -39,6 +45,17 @@ class DerivClient:
         except Exception as e:
             print("[ERRO] Falha ao conectar WebSocket (URL/Rede):", e)
             self.connected = False
+            
+    async def subscribe_to_ticks(self, symbol: str):
+        """Subscreve explicitamente aos ticks de um ativo."""
+        if not self.authorized or not self.connected: return
+        try:
+            # Enviando a mensagem de subscrição para o V100
+            await self.ws.send(json.dumps({"ticks": symbol, "subscribe": 1}))
+            print(f"[Deriv] Subscrição enviada para {symbol}.")
+        except Exception as e:
+            print(f"[ERRO] Falha ao subscrever ticks: {e}")
+
 
     async def authorize(self):
         """Envia token e aguarda resposta."""
@@ -81,29 +98,39 @@ class DerivClient:
         print("[Deriv] Iniciando listener de ticks…")
         while self.connected:
             try:
-                msg = await self.ws.recv()
+                # O timeout ajuda a prevenir travamento do listener
+                msg = await asyncio.wait_for(self.ws.recv(), timeout=10) 
                 data = json.loads(msg)
 
                 if data.get("error"):
                     print("[ERRO FATAL DERIV]:", data["error"])
-                    self.connected = False
-                    break
+                    continue
                 
                 # Processamento de Ticks
-                if data.get("msg_type") == "tick" and self.strategy:
+                if data.get("msg_type") == "tick":
                     tick = data["tick"]
                     price = float(tick["quote"])
-                    self.strategy.add_tick(price, volume=1.0) 
+                    # Chama a função de atualização global da estratégia
+                    update_ticks(price) 
+                    
+                # Processamento de Saldos (para atualização em tempo real, se necessário)
+                if data.get("msg_type") == "balance":
+                     if data.get('balance'):
+                        self.account_info['balance'] = data['balance'].get('balance', 0.0)
+                        # A remoção do print aqui torna o log mais limpo
+                        # print(f"[Deriv] Saldo Atualizado em tempo real: {self.account_info['balance']}")
 
             except websockets.ConnectionClosed as e:
                 print(f"[Deriv] Conexão fechada. Motivo: {e}. Desligando cliente.")
                 self.connected = False
                 break
-
+            except asyncio.TimeoutError:
+                # Se não houver dados por 10s, envia um 'ping' para manter a conexão
+                await self.ws.send(json.dumps({"ping": 1}))
+                continue
             except Exception as e:
                 print(f"[ERRO GERAL] no listener: {e}")
-                self.connected = False
-                break
+                continue
 
     async def stop(self):
         """Fecha a conexão."""
