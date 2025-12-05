@@ -31,12 +31,20 @@ class DerivClient:
 
             if self.authorized:
                 print("[Deriv] Token autorizado com sucesso. O bot está ONLINE.")
+                
                 await self.get_account_info() 
+                # --- 🟢 DEBUG 1 🟢 ---
+                print("[Deriv] DEBUG: Informações da conta processadas.") 
                 
                 # Submete subscrição para um ativo padrão
                 await self.subscribe_to_ticks("V100") 
                 
+                # --- 🟢 DEBUG 2 🟢 ---
+                print("[Deriv] DEBUG: Tentando iniciar o listener de ticks...")
                 asyncio.create_task(self.listen())
+                # --- 🟢 DEBUG 3 🟢 ---
+                print("[Deriv] DEBUG: Tarefa de listener iniciada. Aguardando ticks...")
+
             else:
                 print("[Deriv] Erro: token NÃO autorizado. Verifique se o token está correto e ativo.")
                 self.connected = False
@@ -94,6 +102,7 @@ class DerivClient:
         print("[Deriv] Iniciando listener de ticks…")
         while self.connected:
             try:
+                # O timeout ajuda a prevenir travamento do listener
                 msg = await asyncio.wait_for(self.ws.recv(), timeout=10) 
                 data = json.loads(msg)
 
@@ -107,7 +116,7 @@ class DerivClient:
                     price = float(tick["quote"])
                     update_ticks(price) 
                     
-                    # --- 🟢 LINHA DE DEBUG ADICIONADA 🟢 ---
+                    # --- ✅ LINHA DE DEBUG DE TICK (FINAL) ✅ ---
                     print(f"[Deriv] ✅ Tick recebido: {price}") 
                     # --- --------------------------------- ---
                     
@@ -121,7 +130,9 @@ class DerivClient:
                 self.connected = False
                 break
             except asyncio.TimeoutError:
+                # Envia um 'ping' para manter a conexão viva
                 await self.ws.send(json.dumps({"ping": 1}))
+                print("[Deriv] Ping enviado para manter conexão...") # Adicionando print aqui
                 continue
             except Exception as e:
                 print(f"[ERRO GERAL] no listener: {e}")
@@ -138,3 +149,4 @@ class DerivClient:
             pass
 
         print("[Deriv] Cliente parado.")
+        
