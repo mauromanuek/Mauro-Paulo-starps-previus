@@ -1,100 +1,100 @@
-# strategy.py
-import pandas as pd
 import numpy as np
-from datetime import datetime
+import pandas as pd
+from typing import Dict, Any, Optional
 
-class TradingStrategy:
+# A lista para armazenar os ticks de preço (últimos 20 ticks)
+ticks_history = []
+MAX_TICKS = 20  # Mínimo de ticks para calcular os indicadores
+
+def update_ticks(new_tick: float):
+    """Adiciona um novo tick à história e mantém o tamanho em MAX_TICKS."""
+    global ticks_history
+    ticks_history.append(new_tick)
+    # Garante que a lista não exceda o limite, mantendo apenas os mais recentes
+    if len(ticks_history) > MAX_TICKS:
+        ticks_history = ticks_history[-MAX_TICKS:]
+
+def calculate_indicators() -> Dict[str, Any]:
+    """
+    Calcula o RSI e EMA usando os últimos ticks de preço.
+    Retorna None se não houver dados suficientes.
+    """
+    if len(ticks_history) < MAX_TICKS:
+        return {} # Retorna dicionário vazio se não há dados suficientes
+
+    # Converte a lista para uma Série Pandas para cálculo de indicadores
+    prices = pd.Series(ticks_history)
     
-    def __init__(self, buffer_size=100):
-        self.history = pd.DataFrame(columns=['close', 'volume'])
-        self.buffer_size = buffer_size
+    # 1. RSI (Relative Strength Index)
+    # Período comum para RSI é 14, mas ajustamos para o nosso pequeno volume de ticks (MAX_TICKS)
+    delta = prices.diff()
+    gain = delta.where(delta > 0, 0)
+    loss = -delta.where(delta < 0, 0)
 
-    def add_tick(self, price: float, volume: float = 0.0):
-        """Adiciona um novo preço (tick) e volume ao histórico."""
+    avg_gain = gain.ewm(com=MAX_TICKS - 1, min_periods=MAX_TICKS).mean()
+    avg_loss = loss.ewm(com=MAX_TICKS - 1, min_periods=MAX_TICKS).mean()
+
+    rs = avg_gain / avg_loss
+    # O valor final é o último calculado (o mais recente)
+    rsi = 100 - (100 / (1 + rs.iloc[-1])) if not pd.isna(rs.iloc[-1]) else None
+
+    # 2. EMA (Exponential Moving Average)
+    # Período de 10 ticks para uma EMA rápida
+    ema = prices.ewm(span=10, adjust=False).mean().iloc[-1]
+
+    return {
+        "rsi": rsi,
+        "ema": ema,
+        "last_price": prices.iloc[-1]
+    }
+
+def generate_signal(symbol: str, tf: str) -> Optional[Dict[str, Any]]:
+    """
+    Gera um sinal de trading com base nos indicadores calculados.
+    """
+    indicators = calculate_indicators()
+    
+    # Se o dicionário de indicadores estiver vazio, a estratégia não pode rodar.
+    if not indicators or indicators['rsi'] is None or indicators['ema'] is None:
+        # Retorna None. Isso fará com que o main.py retorne 404 (erro) ao frontend.
+        return None 
+    
+    rsi = indicators['rsi']
+    ema = indicators['ema']
+    price = indicators['last_price']
+    
+    action = None
+    reason = f"RSI: {rsi:.2f}, Preço: {price:.4f}, EMA (10): {ema:.4f}"
+    explanation = (
+        "O RSI (Índice de Força Relativa) é um indicador de Momentum. "
+        "Ele mede a velocidade e a mudança dos movimentos de preço. "
+    )
+    
+    # Regra da Estratégia
+    if rsi > 70 and price > ema:
+        # RSI acima de 70 (sobrecompra) E preço acima da EMA (tendência de alta forte)
+        # Sinais de reversão podem estar próximos. 
+        action = "PUT (VENDA)"
+        reason += ". RSI está em zona de sobrecompra e o preço está acima da EMA."
+        explanation += "Atingiu uma zona extrema e pode reverter para baixo."
         
-        new_row = pd.DataFrame([{'close': price, 'volume': volume}])
-        self.history = pd.concat([self.history, new_row], ignore_index=True)
-
-        if len(self.history) > self.buffer_size:
-            self.history = self.history.iloc[-self.buffer_size:]
-            
-        self.history.reset_index(drop=True, inplace=True)
-
-    def calculate_indicators(self):
-        """Calcula Indicadores Técnicos: RSI, MAs (EMA) e Volatilidade (Bandas de Bollinger)."""
+    elif rsi < 30 and price < ema:
+        # RSI abaixo de 30 (sobrevenda) E preço abaixo da EMA (tendência de baixa forte)
+        # Sinais de reversão podem estar próximos.
+        action = "CALL (COMPRA)"
+        reason += ". RSI está em zona de sobrevenda e o preço está abaixo da EMA."
+        explanation += "Atingiu uma zona extrema e pode reverter para cima."
         
-        if len(self.history) < 20: 
-            return {}
+    # Se nenhuma regra de extremo for acionada, não retorna sinal.
+    if action is None:
+        return None 
 
-        # 1. Médias Móveis (EMA)
-        self.history['EMA20'] = self.history['close'].ewm(span=20, adjust=False).mean()
-        self.history['EMA50'] = self.history['close'].ewm(span=50, adjust=False).mean()
-
-        # 2. RSI (Índice de Força Relativa)
-        delta = self.history['close'].diff()
-        gain = delta.where(delta > 0, 0)
-        loss = -delta.where(delta < 0, 0)
-        avg_gain = gain.ewm(com=13, adjust=False).mean()
-        avg_loss = loss.ewm(com=13, adjust=False).mean()
-        rs = avg_gain / avg_loss
-        self.history['RSI'] = 100 - (100 / (1 + rs))
-
-        # 3. Volatilidade (Bandas de Bollinger - BB)
-        self.history['MA20'] = self.history['close'].rolling(window=20).mean()
-        self.history['STD20'] = self.history['close'].rolling(window=20).std()
-        self.history['UpperBB'] = self.history['MA20'] + (self.history['STD20'] * 2)
-        self.history['LowerBB'] = self.history['MA20'] - (self.history['STD20'] * 2)
-
-    def generate_signal(self, symbol: str, tf: str):
-        """Gera o sinal de trading baseado nas regras dos e-books."""
-        self.calculate_indicators()
-        
-        if self.history.empty or pd.isna(self.history['EMA20'].iloc[-1]) or pd.isna(self.history['RSI'].iloc[-1]):
-            return {"action": None, "probability": 0.50, "reason": "Aguardando mais dados históricos para análise (Buffer Vazio).", "explanation": "Não há dados suficientes (pelo menos 20 pontos) para calcular indicadores confiáveis.", "generated_at": datetime.utcnow().isoformat()}
-
-        # Últimos dados
-        last = self.history.iloc[-1]
-        
-        signal = "HOLD"
-        prob = 0.50
-        reason = "Aguardando setup de alta convicção."
-
-        # Regras
-        trend_up = last['EMA20'] > last['EMA50']
-        trend_down = last['EMA20'] < last['EMA50']
-        oversold = last['RSI'] < 30
-        overbought = last['RSI'] > 70
-        
-        # 3. Confirmação Final (Lógica Central)
-        if trend_up and oversold:
-            # Tendência de alta E sobrevendido: Reversão/Pullback. Sinal de CALL.
-            signal = "CALL"
-            prob = 0.85 
-            reason = "Cruzamento de EMAs confirma tendência de Alta e RSI indica Sobrevenda no curto prazo (Pullback)."
-            
-        elif trend_down and overbought:
-            # Tendência de baixa E sobrecomprado: Reversão/Pullback. Sinal de PUT.
-            signal = "PUT"
-            prob = 0.85
-            reason = "Cruzamento de EMAs confirma tendência de Baixa e RSI indica Sobrecompra no curto prazo (Pullback)."
-        
-        elif trend_up:
-            signal = "HOLD"
-            prob = 0.60
-            reason = "Mercado em forte tendência de alta (EMA20>EMA50). Aguardando correção ou consolidação para CALL."
-            
-        elif trend_down:
-            signal = "HOLD"
-            prob = 0.60
-            reason = "Mercado em forte tendência de baixa (EMA20<EMA50). Aguardando correção ou consolidação para PUT."
-
-        # Retorna o resultado
-        return {
-            "symbol": symbol,
-            "tf": tf,
-            "action": signal,
-            "probability": prob,
-            "reason": reason,
-            "explanation": f"O último preço ({last['close']:.4f}) foi analisado. RSI: {last['RSI']:.2f}. EMA20: {last['EMA20']:.4f}. EMA50: {last['EMA50']:.4f}.",
-            "generated_at": datetime.utcnow().isoformat()
-        }
+    return {
+        "action": action,
+        "probability": 0.85, # Valor fixo, mas poderia ser dinâmico
+        "symbol": symbol,
+        "tf": tf,
+        "reason": reason,
+        "explanation": explanation,
+        "generated_at": pd.Timestamp.now().isoformat()
+    }
