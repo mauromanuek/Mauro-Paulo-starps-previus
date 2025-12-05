@@ -4,7 +4,6 @@ import asyncio
 import websockets
 import json
 from datetime import datetime
-# --- ✅ IMPORTAÇÃO CORRETA ✅ ---
 from strategy import update_ticks 
 
 
@@ -74,12 +73,10 @@ class DerivClient:
         if not self.authorized or not self.connected: return
 
         try:
-            # 1. Solicita o saldo
             await self.ws.send(json.dumps({"balance": 1}))
             resp_balance = await self.ws.recv()
             balance_data = json.loads(resp_balance)
 
-            # 2. Determina o tipo de conta e saldo
             if balance_data.get('balance'):
                 balance_info = balance_data['balance']
                 self.account_info['balance'] = balance_info.get('balance', 0.0)
@@ -97,7 +94,6 @@ class DerivClient:
         print("[Deriv] Iniciando listener de ticks…")
         while self.connected:
             try:
-                # O timeout ajuda a prevenir travamento do listener
                 msg = await asyncio.wait_for(self.ws.recv(), timeout=10) 
                 data = json.loads(msg)
 
@@ -109,8 +105,11 @@ class DerivClient:
                 if data.get("msg_type") == "tick":
                     tick = data["tick"]
                     price = float(tick["quote"])
-                    # Chama a função de atualização global da estratégia
                     update_ticks(price) 
+                    
+                    # --- 🟢 LINHA DE DEBUG ADICIONADA 🟢 ---
+                    print(f"[Deriv] ✅ Tick recebido: {price}") 
+                    # --- --------------------------------- ---
                     
                 # Processamento de Saldos (para atualização em tempo real, se necessário)
                 if data.get("msg_type") == "balance":
@@ -122,7 +121,6 @@ class DerivClient:
                 self.connected = False
                 break
             except asyncio.TimeoutError:
-                # Se não houver dados por 10s, envia um 'ping' para manter a conexão
                 await self.ws.send(json.dumps({"ping": 1}))
                 continue
             except Exception as e:
