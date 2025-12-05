@@ -33,16 +33,13 @@ class DerivClient:
                 print("[Deriv] Token autorizado com sucesso. O bot está ONLINE.")
                 
                 await self.get_account_info() 
-                # --- 🟢 DEBUG 1 🟢 ---
                 print("[Deriv] DEBUG: Informações da conta processadas.") 
                 
-                # Submete subscrição para um ativo padrão
-                await self.subscribe_to_ticks("V100") 
+                # --- 🟢 CORREÇÃO CRÍTICA AQUI: MUDANÇA DE V100 PARA R_100 🟢 ---
+                await self.subscribe_to_ticks("R_100") 
                 
-                # --- 🟢 DEBUG 2 🟢 ---
                 print("[Deriv] DEBUG: Tentando iniciar o listener de ticks...")
                 asyncio.create_task(self.listen())
-                # --- 🟢 DEBUG 3 🟢 ---
                 print("[Deriv] DEBUG: Tarefa de listener iniciada. Aguardando ticks...")
 
             else:
@@ -56,7 +53,7 @@ class DerivClient:
         """Subscreve explicitamente aos ticks de um ativo."""
         if not self.authorized or not self.connected: return
         try:
-            # Enviando a mensagem de subscrição para o V100
+            # Enviando a mensagem de subscrição para o ativo corrigido
             await self.ws.send(json.dumps({"ticks": symbol, "subscribe": 1}))
             print(f"[Deriv] Subscrição enviada para {symbol}.")
         except Exception as e:
@@ -107,8 +104,10 @@ class DerivClient:
                 data = json.loads(msg)
 
                 if data.get("error"):
+                    # O erro de InvalidSymbol que você viu antes
                     print("[ERRO FATAL DERIV]:", data["error"])
-                    continue
+                    # Se receber um erro, tenta continuar o loop (para evitar queda total)
+                    continue 
                 
                 # Processamento de Ticks
                 if data.get("msg_type") == "tick":
@@ -116,9 +115,7 @@ class DerivClient:
                     price = float(tick["quote"])
                     update_ticks(price) 
                     
-                    # --- ✅ LINHA DE DEBUG DE TICK (FINAL) ✅ ---
                     print(f"[Deriv] ✅ Tick recebido: {price}") 
-                    # --- --------------------------------- ---
                     
                 # Processamento de Saldos (para atualização em tempo real, se necessário)
                 if data.get("msg_type") == "balance":
@@ -132,7 +129,7 @@ class DerivClient:
             except asyncio.TimeoutError:
                 # Envia um 'ping' para manter a conexão viva
                 await self.ws.send(json.dumps({"ping": 1}))
-                print("[Deriv] Ping enviado para manter conexão...") # Adicionando print aqui
+                print("[Deriv] Ping enviado para manter conexão...") 
                 continue
             except Exception as e:
                 print(f"[ERRO GERAL] no listener: {e}")
