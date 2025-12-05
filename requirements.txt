@@ -2,5 +2,7 @@ fastapi
 uvicorn[standard]
 websockets
 pydantic
-numpy
 pandas
+numpy
+jinja2
+python-multipart
