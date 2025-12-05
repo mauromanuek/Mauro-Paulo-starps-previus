@@ -6,8 +6,10 @@ from pydantic import BaseModel
 
 from deriv_client import DerivClient
 
+
 app = FastAPI(title="Bot Trader Deriv")
 
+# Permitir comunicação do frontend com o backend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -15,18 +17,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Servir interface
+# Servir arquivos HTML diretamente da raiz
 app.mount("/", StaticFiles(directory=".", html=True), name="static")
 
-deriv_client = None  # será inicializado após receber token
+# Cliente global (inicia vazio)
+deriv_client = None
 
 
+# Modelo para POST /set_token
 class TokenModel(BaseModel):
     token: str
 
 
 @app.post("/set_token")
 async def set_token(data: TokenModel):
+    """
+    Recebe o token da Deriv enviado pelo frontend,
+    reinicia o cliente e conecta novamente.
+    """
     global deriv_client
 
     token = data.token.strip()
@@ -34,22 +42,7 @@ async def set_token(data: TokenModel):
     if not token:
         return {"ok": False, "message": "Token vazio!"}
 
-    # Se já existir cliente, parar e reiniciar
+    # Se já existe cliente, parar antes de reiniciar
     if deriv_client is not None:
         try:
-            await deriv_client.stop()
-        except:
-            pass
-
-    # Criar novo cliente com o token recebido
-    deriv_client = DerivClient(token)
-
-    # Iniciar conexão em background
-    asyncio.create_task(deriv_client.start())
-
-    return {"ok": True, "message": "Conectado à Deriv com sucesso!"}
-
-
-@app.get("/status")
-async def status():
-    return {"status": "Servidor ativo!"}
+            await
