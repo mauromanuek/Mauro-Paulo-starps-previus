@@ -146,4 +146,3 @@ class DerivClient:
             pass
 
         print("[Deriv] Cliente parado.")
-        
