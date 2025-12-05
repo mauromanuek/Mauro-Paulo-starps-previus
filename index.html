@@ -1,486 +1,520 @@
 <!DOCTYPE html>
-<html lang="pt">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🤖 IA Trader Bot</title>
-    
-    <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: #1a1a2e; /* Fundo escuro */
-            color: #f0f0f0; /* Texto claro */
-        }
-
-        header {
-            background-color: #007bff;
-            color: white;
-            padding: 20px;
-            text-align: center;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-        }
-
-        .container {
-            padding: 20px;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        /* Estilo para todas as caixas de seção */
-        .section-box {
-            background-color: #2c2c54; /* Fundo mais escuro para as caixas */
-            padding: 25px;
-            border-radius: 10px;
-            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
-            margin-bottom: 30px;
-            border-left: 5px solid #007bff; /* Detalhe da cor primária */
-        }
-
-        h2 {
-            color: #007bff;
-            border-bottom: 1px solid #4a4a7a;
-            padding-bottom: 10px;
-            margin-top: 0;
-            margin-bottom: 20px;
-        }
-
-        /* Barra de Status e Conexão */
-        .status-bar {
-            background-color: #1a1a2e;
-            padding: 15px;
-            margin-bottom: 20px;
-            border-radius: 8px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border: 1px solid #4a4a7a;
-        }
-
-        input[type="text"], input[type="number"] {
-            padding: 10px;
-            margin-right: 10px;
-            border: 1px solid #4a4a7a;
-            border-radius: 5px;
-            background-color: #1a1a2e;
-            color: #f0f0f0;
-            width: 200px;
-        }
-
-        button {
-            padding: 10px 15px;
-            background-color: #007bff;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            transition: background-color 0.3s;
-        }
-
-        button:hover {
-            background-color: #0056b3;
-        }
-
-        /* Indicadores de Status */
-        .status-indicator {
-            padding: 8px 15px;
-            border-radius: 5px;
-            font-weight: bold;
-            text-transform: uppercase;
-        }
-        .status-ok { background-color: #28a745; color: white; }
-        .status-error { background-color: #dc3545; color: white; }
-        .status-pending { background-color: #ffc107; color: #333; }
-
-        #accountInfo {
-            margin-top: 10px;
-            color: #b0b0b0;
-        }
-
-        /* Estilos das Tabs */
-        .tabs {
-            display: flex;
-            margin-bottom: 0;
-            border-bottom: 2px solid #4a4a7a;
-        }
-
-        .tab-button {
-            padding: 12px 25px;
-            cursor: pointer;
-            border: none;
-            background-color: #1a1a2e;
-            color: #b0b0b0;
-            border-radius: 5px 5px 0 0;
-            transition: background-color 0.3s, color 0.3s;
-        }
-
-        .tab-button:hover {
-            background-color: #2c2c54;
-            color: white;
-        }
-
-        .tab-button.active {
-            background-color: #2c2c54;
-            color: #007bff;
-            border-bottom: 2px solid #007bff;
-        }
-
-        /* Análise de Sinal */
-        #signalResult {
-            padding: 15px;
-            margin-top: 15px;
-            border-radius: 8px;
-            text-align: center;
-        }
-        #indicatorInfo {
-            list-style: none;
-            padding: 0;
-            margin-top: 15px;
-            display: flex;
-            gap: 30px;
-            color: #b0b0b0;
-        }
-
-        /* Gestão de Bots (Tabela) */
-        table {
-            border: 1px solid #4a4a7a;
-        }
-        th, td {
-            border: 1px solid #4a4a7a;
-            color: #f0f0f0;
-        }
-        th {
-            background-color: #1a1a2e;
-        }
-        tbody tr:nth-child(even) {
-            background-color: #232342;
-        }
-    </style>
+    <title>RobotMagic Pro - Trading Bot</title>
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    <header>
-        <h1>🤖 IA Trader Bot</h1>
-    </header>
 
-    <div class="container">
-        <div class="section-box">
-            <h2>🔑 Status de Conexão</h2>
-            <div class="status-bar">
-                <div>
-                    <input type="text" id="tokenInput" placeholder="Insira o seu Token da Deriv (Ex: VRTC...)">
-                    <button onclick="connectToken()">Conectar</button>
-                    <button onclick="window.location.reload()">Atualizar Status</button>
+    <div id="app-container">
+
+        <div id="login-view" class="view active">
+            <div class="login-box">
+                <h1>RobotMagic Pro</h1>
+                <p>Análise Profissional (Deriv, Binary, Binance Style)</p>
+                <div class="input-group">
+                    <input type="password" id="tokenInput" placeholder="Insira seu Token API da Deriv">
+                    <button id="connectBtn" onclick="setTokenAndConnect()">CONECTAR</button>
                 </div>
-                <div id="connectionStatus" class="status-pending">Aguardando...</div>
+                <p id="auth-status" class="status-message"></p>
             </div>
-            <div id="accountInfo">
-                Saldo: N/A | Tipo: N/A
-            </div>
-            <div id="errorMessage" style="color: red; font-weight: bold;"></div>
         </div>
 
-        <div class="tabs">
-            <button class="tab-button active" onclick="openTab(event, 'analysis')">Análise Técnica em Tempo Real</button>
-            <button class="tab-button" onclick="openTab(event, 'bots')">Gestão de Bots Automáticos</button>
-            <button class="tab-button" onclick="openTab(event, 'ia-consult')">IA Trader (Consulta)</button>
-        </div>
-
-        <div id="analysis" class="tab-content active section-box">
-            <h2>📈 Sinal de Trading</h2>
-            <p>Ativo: <span id="signalSymbol">V100</span> | Timeframe: <span id="signalTimeframe">5m</span></p>
-            <div id="signalResult" style="font-size: 24px; font-weight: bold; padding: 15px; margin-top: 15px; border-radius: 8px; text-align: center;">
-                Aguardando 20 Ticks...
-            </div>
-            <p>Últimos Indicadores Calculados:</p>
-            <ul id="indicatorInfo">
-                <li>RSI: N/A</li>
-                <li>EMA (10): N/A</li>
-            </ul>
-        </div>
-
-        <div id="bots" class="tab-content section-box">
-            <h2>⚙️ Criar Novo Bot</h2>
-            <div style="margin-bottom: 15px;">
-                <input type="text" id="botName" placeholder="Nome do Bot (Ex: Mauro)">
-                <input type="text" id="botSymbol" placeholder="Símbolo (R_100)">
-                <input type="number" id="botTimeframe" placeholder="TF (5, 15)">
-                <input type="number" id="botSL" placeholder="Stop Loss (SL)">
-                <input type="number" id="botTP" placeholder="Take Profit (TP)">
-                <button onclick="createBot()">Criar Bot</button>
-            </div>
+        <div id="dashboard-view" class="view">
             
-            <h2>Lista de Bots Ativos/Inativos</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Nome</th>
-                        <th>ID</th>
-                        <th>SL/TP</th>
-                        <th>Status</th>
-                        <th>Ação</th>
-                    </tr>
-                </thead>
-                <tbody id="botsList">
-                    </tbody>
-            </table>
+            <header>
+                <div class="logo">RM Pro</div>
+                <nav>
+                    <span id="account-type" class="badge demo">DEMO</span>
+                    <span id="account-balance" class="badge">Saldo: $0.00</span>
+                    <span id="current-asset" class="badge asset">Ativo: V100 Index</span>
+                    <button id="menu-btn" onclick="toggleMenu()">☰ Menu</button>
+                </nav>
+            </header>
+
+            <main>
+                <div id="side-menu" class="side-menu">
+                    <a href="#" onclick="showView('analysis-view')">⚙️ Página Inicial (Análise)</a>
+                    <a href="#" onclick="showView('bots-view')">🤖 Bots Automáticos</a>
+                    <a href="#" onclick="showView('ia-view')">💡 IA Trader</a>
+                    <a href="#" onclick="logout()">🔓 Sair</a>
+                </div>
+
+                <section id="analysis-view" class="page-content active">
+                    <h2>Análise Técnica em Tempo Real</h2>
+                    
+                    <div class="controls-bar">
+                        <select id="symbolSel">
+                            <option value="V100">Volatility 100 Index</option>
+                            <option value="EURUSD">EUR/USD</option>
+                        </select>
+                        <select id="tfSel">
+                            <option value="5">TF 5 Minutos</option>
+                            <option value="15">TF 15 Minutos</option>
+                        </select>
+                        
+                        <button id="startAnalysisBtn" onclick="initiateAnalysis()">INICIAR ANÁLISE</button>
+                        <button id="stopAnalysisBtn" class="hidden" onclick="stopAnalysis()">PARAR ANÁLISE</button>
+                        
+                        <div id="processing-status" class="processing-bar hidden">
+                            <span id="processing-text">Analisando Gráfico...</span>
+                            <div class="progress"></div>
+                        </div>
+                    </div>
+
+                    <div id="results-container">
+                        <div id="chart-placeholder" class="chart-box">
+                            <p>Visualização do Gráfico (Placeholder para dados de ticks)</p>
+                            <p class="muted">Aguardando Iniciar Análise...</p>
+                        </div>
+                        
+                        <div id="signal-display" class="signal-box hidden">
+                            <h3 id="lastSignal">...</h3>
+                            <div id="signals" class="signal-details"></div>
+                            <div class="analysis-explanation">
+                                <strong>Porquê da Decisão:</strong>
+                                <p id="analysis"></p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="bots-view" class="page-content hidden">
+                    <h2>🤖 Bots Automáticos (Gestão)</h2>
+                    
+                    <div class="controls-bar bot-controls">
+                        <input type="text" id="botName" placeholder="Nome do Bot (Ex: Scalper V100)">
+                        <input type="number" id="stopLoss" placeholder="Stop Loss ($)" step="0.01">
+                        <input type="number" id="takeProfit" placeholder="Take Profit ($)" step="0.01">
+                        <button onclick="createBot()">Criar e Iniciar Bot</button>
+                    </div>
+                    
+                    <div class="bots-list">
+                        <h3>Bots Ativos/Inativos</h3>
+                        <table id="activeBotsTable">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Nome</th>
+                                    <th>SL/TP</th>
+                                    <th>Status</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td colspan="5" class="muted">Nenhum bot ativo no momento.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div id="bot-log-display" class="log-display">
+                    </div>
+                </section>
+
+                <section id="ia-view" class="page-content hidden">
+                    <h2>💡 IA Trader (Consulta)</h2>
+                    <p class="muted">Pergunte sobre Análise Técnica, regras dos livros ou o mercado. (Ex: O que é um triângulo ascendente?)</p>
+                    
+                    <div class="ia-input-group">
+                        <input type="text" id="iaQuery" placeholder="Digite sua pergunta sobre Trading...">
+                        <button onclick="sendQuery()">Perguntar à IA</button>
+                    </div>
+                    
+                    <div id="iaResponse" class="ia-response-box">
+                        <strong>Resposta da IA:</strong>
+                        <p class="muted">Aguardando sua pergunta...</p>
+                    </div>
+                </section>
+                
+            </main>
+            
+            <aside>
+                <h3>Histórico de Sinais</h3>
+                <pre id="history"></pre>
+            </aside>
         </div>
 
-        <div id="ia-consult" class="tab-content section-box">
-            <h2>🧠 Consulta à IA</h2>
-            <p>Esta seção permite consultar a IA sobre tendências de mercado ou otimização de estratégias.</p>
-            <input type="text" id="iaQuery" placeholder="Pergunte à IA (Ex: Qual a tendência do R_100?)">
-            <button onclick="sendIAQuery()">Consultar IA</button>
-            <p id="iaResponse" style="margin-top: 15px; border: 1px dashed #4a4a7a; padding: 10px; min-height: 50px;">Resposta da IA...</p>
-        </div>
-
-    </div>
-
-    <script>
-        // Variáveis globais para rastrear o status
-        let isAuthorized = false;
-        const SIGNAL_URL = '/signal?symbol=R_100&tf=5'; // URL padrão para análise
-        const SIGNAL_POLL_INTERVAL = 3000; // 3 segundos
-        const STATUS_POLL_INTERVAL = 5000; // 5 segundos
-
-        // ----------------------------------------
-        // 1. Funções de Utilidade e Tabs
-        // ----------------------------------------
+    </div> <script>
+        // O BLOCO JAVASCRIPT COMPLETO E FINAL COMEÇA AQUI
         
-        function openTab(evt, tabName) {
-            var i, tabcontent, tablinks;
-            tabcontent = document.getElementsByClassName("tab-content");
-            for (i = 0; i < tabcontent.length; i++) {
-                tabcontent[i].style.display = "none";
-            }
-            tablinks = document.getElementsByClassName("tab-button");
-            for (i = 0; i < tablinks.length; i++) {
-                tablinks[i].className = tablinks[i].className.replace(" active", "");
-            }
-            document.getElementById(tabName).style.display = "block";
-            evt.currentTarget.className += " active";
-        }
+        // VARIÁVEIS DE ESTADO
+        const SERVER = "";
+        let isConnected = false;
+        let isAnalysisRunning = false;
+        let analysisTimeout = null;
+        
+        // --------------------------------------
+        // GESTÃO DE VIEWS
+        // --------------------------------------
 
-        // ----------------------------------------
-        // 2. Conexão e Status (CORREÇÃO CRÍTICA DO ERRO 422)
-        // ----------------------------------------
-
-        async function connectToken() {
-            const tokenInput = document.getElementById('tokenInput');
-            const token = tokenInput.value.trim();
-
-            if (!token) {
-                document.getElementById('errorMessage').textContent = "ERRO: Por favor, insira o seu token da Deriv.";
-                return;
-            }
-            
-            // CORREÇÃO: Envia o token como query parameter (resolve o 422)
-            const url = `/set_token?token=${token}`;
-
-            document.getElementById('connectionStatus').textContent = "Conectando...";
-            document.getElementById('connectionStatus').className = "status-indicator status-pending";
-            document.getElementById('errorMessage').textContent = "";
-
-            try {
-                const response = await fetch(url, {
-                    method: 'POST',
-                });
-
-                if (response.ok) {
-                    document.getElementById('connectionStatus').textContent = "Token Aceito! Verificando conexão...";
-                } else {
-                    const errorData = await response.json();
-                    document.getElementById('errorMessage').textContent = `ERRO na API: Falha ao processar token.`;
-                    document.getElementById('connectionStatus').textContent = "Falha!";
-                    document.getElementById('connectionStatus').className = "status-indicator status-error";
+        function showView(viewId) {
+            document.querySelectorAll('.page-content').forEach(view => {
+                view.classList.add('hidden');
+                if (view.id === viewId) {
+                    view.classList.remove('hidden');
                 }
-            } catch (error) {
-                document.getElementById('errorMessage').textContent = "Erro de rede ao conectar. Servidor inacessível.";
-                document.getElementById('connectionStatus').textContent = "Erro!";
-                document.getElementById('connectionStatus').className = "status-indicator status-error";
-            }
-        }
-
-        async function updateStatus() {
-            try {
-                const response = await fetch('/status');
-                const data = await response.json();
-
-                if (data.is_authorized) {
-                    isAuthorized = true;
-                    document.getElementById('connectionStatus').textContent = "ONLINE (Autorizado)";
-                    document.getElementById('connectionStatus').className = "status-indicator status-ok";
-                    document.getElementById('accountInfo').textContent = `Saldo: ${data.balance} | Tipo: ${data.account_type}`;
-                    document.getElementById('errorMessage').textContent = "";
-                    
-                    // Atualiza a lista de bots
-                    renderBots(data.active_bots);
-
-                } else {
-                    isAuthorized = false;
-                    document.getElementById('connectionStatus').textContent = "OFFLINE (Insira Token)";
-                    document.getElementById('connectionStatus').className = "status-indicator status-error";
-                    document.getElementById('accountInfo').textContent = "Saldo: N/A | Tipo: N/A";
-                }
-            } catch (error) {
-                isAuthorized = false;
-                document.getElementById('connectionStatus').textContent = "ERRO DE SERVIDOR";
-                document.getElementById('connectionStatus').className = "status-indicator status-error";
-                document.getElementById('errorMessage').textContent = "Não foi possível conectar ao servidor Python.";
-            }
-        }
-
-        // ----------------------------------------
-        // 3. Análise de Sinal
-        // ----------------------------------------
-
-        async function getSignal() {
-            if (!isAuthorized) {
-                document.getElementById('signalResult').textContent = "Conecte-se com o Token primeiro.";
-                return;
-            }
-
-            try {
-                const response = await fetch(SIGNAL_URL);
-                const signalResult = document.getElementById('signalResult');
-                const indicatorInfo = document.getElementById('indicatorInfo');
-
-                if (response.status === 200) {
-                    const data = await response.json();
-                    signalResult.textContent = `SINAL: ${data.action}`;
-                    signalResult.style.backgroundColor = data.action.includes('COMPRA') ? '#28a745' : '#dc3545';
-                    signalResult.style.color = 'white';
-                    
-                    indicatorInfo.innerHTML = `
-                        <li>RSI: ${data.indicators.rsi ? data.indicators.rsi.toFixed(2) : 'N/A'}</li>
-                        <li>EMA (10): ${data.indicators.ema ? data.indicators.ema.toFixed(4) : 'N/A'}</li>
-                    `;
-
-                } else if (response.status === 404) {
-                    signalResult.textContent = "Aguardando 20 Ticks para calcular...";
-                    signalResult.style.backgroundColor = 'transparent';
-                    signalResult.style.color = '#f0f0f0';
-                    indicatorInfo.innerHTML = "<li>RSI: N/A</li><li>EMA (10): N/A</li>";
-                } else {
-                    signalResult.textContent = `ERRO: Não foi possível obter o sinal (${response.status})`;
-                }
-
-            } catch (error) {
-                console.error("Erro ao obter sinal:", error);
-            }
-        }
-
-        // ----------------------------------------
-        // 4. Funções de Bot
-        // ----------------------------------------
-
-        function renderBots(bots) {
-            const botsList = document.getElementById('botsList');
-            botsList.innerHTML = '';
-            
-            bots.forEach(bot => {
-                const row = botsList.insertRow();
-                const statusClass = bot.is_active ? 'status-ok' : 'status-error';
-                const actionButton = bot.is_active 
-                    ? `<button onclick="deactivateBot('${bot.id}')" style="background-color: #dc3545; color: white;">Desativar</button>`
-                    : `<button onclick="activateBot('${bot.id}')" style="background-color: #28a745; color: white;">Ativar</button>`;
-
-                row.innerHTML = `
-                    <td>${bot.name}</td>
-                    <td>${bot.id.substring(0, 4)}...</td>
-                    <td>SL: ${bot.sl} / TP: ${bot.tp}</td>
-                    <td><span class="${statusClass}">${bot.is_active ? 'ATIVO' : 'INATIVO'}</span></td>
-                    <td>${actionButton}</td>
-                `;
             });
+            if (window.innerWidth <= 768) {
+                document.getElementById('side-menu').classList.remove('open');
+            }
+            if (viewId === 'bots-view') {
+                fetchBotsList();
+            }
         }
+
+        function toggleMenu() {
+            document.getElementById('side-menu').classList.toggle('open');
+        }
+
+        function log(message) {
+            console.log(message);
+        }
+        
+        // --------------------------------------
+        // AUTENTICAÇÃO E STATUS
+        // --------------------------------------
+
+        async function setTokenAndConnect() {
+            const token = document.getElementById("tokenInput").value.trim();
+            if (!token) {
+                document.getElementById("auth-status").innerText = "ERRO: O Token API não pode estar vazio.";
+                document.getElementById("auth-status").style.color = "var(--accent-red)";
+                return;
+            }
+
+            document.getElementById("auth-status").innerText = "Conectando com a Deriv...";
+            document.getElementById("auth-status").style.color = "yellow";
+
+            try {
+                const r = await fetch(SERVER + "/set_token", {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token: token })
+                });
+                const j = await r.json();
+
+                if (j.ok) {
+                    document.getElementById("auth-status").innerText = "Token Aceito! Verificando conexão...";
+                    setTimeout(checkStatus, 2000); 
+                } else {
+                    document.getElementById("auth-status").innerText = "ERRO: " + (j.message || "Falha na conexão.");
+                    document.getElementById("auth-status").style.color = "var(--accent-red)";
+                }
+
+            } catch (e) {
+                document.getElementById("auth-status").innerText = "ERRO de Rede. O servidor está offline?";
+                document.getElementById("auth-status").style.color = "var(--accent-red)";
+                log("Erro ao conectar: " + e.message);
+            }
+        }
+
+        async function checkStatus() {
+            try {
+                const r = await fetch(SERVER + "/status");
+                const j = await r.json();
+
+                if (j.deriv_connected) {
+                    // SUCESSO DE CONEXÃO
+                    document.getElementById('login-view').classList.remove('active');
+                    document.getElementById('dashboard-view').classList.add('active');
+                    isConnected = true;
+                    
+                    const successMsg = document.createElement('div');
+                    successMsg.className = 'status-message badge real';
+                    successMsg.innerText = '✅ CONECTADO com a Deriv!';
+                    document.querySelector('header').appendChild(successMsg);
+                    setTimeout(() => {
+                        successMsg.style.transition = 'opacity 2s';
+                        successMsg.style.opacity = '0';
+                        setTimeout(() => successMsg.remove(), 2000);
+                    }, 3000);
+
+                    // Atualizar Saldo e Tipo de Conta
+                    document.getElementById('account-balance').innerText = `Saldo: $${j.balance.toFixed(2)}`;
+                    const typeBadge = document.getElementById('account-type');
+                    typeBadge.innerText = j.account_type.toUpperCase();
+                    typeBadge.className = `badge ${j.account_type.toLowerCase()}`;
+                    
+                    fetchBotsList();
+
+                } else if (!isConnected) {
+                    document.getElementById("auth-status").innerText = "Ainda não conectado. Verifique o Token ou tente novamente.";
+                    document.getElementById("auth-status").style.color = "yellow";
+                    setTimeout(checkStatus, 5000);
+                }
+
+            } catch (e) {
+                log("Erro status: " + e.message);
+                if (!isConnected) {
+                    document.getElementById("auth-status").innerText = "ERRO: O servidor não está respondendo.";
+                    document.getElementById("auth-status").style.color = "var(--accent-red)";
+                }
+            }
+        }
+
+        function logout() {
+            isConnected = false;
+            document.getElementById("tokenInput").value = '';
+            document.getElementById('dashboard-view').classList.remove('active');
+            document.getElementById('login-view').classList.add('active');
+            document.getElementById("auth-status").innerText = '';
+        }
+
+        // --------------------------------------
+        // LÓGICA DE ANÁLISE MANUAL
+        // --------------------------------------
+
+        function initiateAnalysis() {
+            if (isAnalysisRunning) return;
+
+            isAnalysisRunning = true;
+            document.getElementById('startAnalysisBtn').classList.add('hidden');
+            document.getElementById('stopAnalysisBtn').classList.remove('hidden');
+            
+            document.getElementById('processing-status').classList.remove('hidden');
+            document.getElementById('chart-placeholder').classList.add('hidden');
+            document.getElementById('signal-display').classList.add('hidden');
+            
+            fetchSignal();
+        }
+
+        function stopAnalysis() {
+            isAnalysisRunning = false;
+            if (analysisTimeout) {
+                clearTimeout(analysisTimeout);
+            }
+            
+            document.getElementById('startAnalysisBtn').classList.remove('hidden');
+            document.getElementById('stopAnalysisBtn').classList.add('hidden');
+            document.getElementById('processing-status').classList.add('hidden');
+            
+            document.getElementById('chart-placeholder').classList.remove('hidden');
+            document.getElementById('signal-display').classList.add('hidden');
+        }
+
+        // FUNÇÃO DE BUSCA DE SINAL (CORRIGIDA PARA TRATAR O ERRO 404 E REPETIR O LOOP)
+        async function fetchSignal() {
+            if (!isAnalysisRunning || !isConnected) return;
+
+            const sym = document.getElementById("symbolSel").value;
+            const tf = document.getElementById("tfSel").value;
+            
+            document.getElementById('current-asset').innerText = `Ativo: ${sym}`;
+
+            try {
+                const r = await fetch(
+                    SERVER + "/signal?symbol=" + sym + "&tf=" + tf
+                );
+
+                // --- CORREÇÃO PRINCIPAL: Tratar 404 (Sem dados suficientes) ---
+                if (r.status === 404) {
+                    document.getElementById('processing-text').innerText = 'Analisando Gráfico (Aguardando dados...)...';
+                    // Garante que o loop continue no final
+                    if (isAnalysisRunning) {
+                        analysisTimeout = setTimeout(fetchSignal, 5000); 
+                    }
+                    return; 
+                }
+                
+                // Se não for 404, processamos a resposta (deve ser 200 OK)
+                const j = await r.json();
+
+                if (j && j.action) {
+                    stopAnalysis(); // Parar o loop de busca, pois o sinal chegou!
+                    
+                    document.getElementById('signal-display').classList.remove('hidden');
+                    document.getElementById('chart-placeholder').classList.add('hidden');
+                    
+                    const prob = (j.probability * 100).toFixed(0);
+                    const isCall = j.action.includes("CALL") || j.action.includes("BUY") || j.action.includes("UP");
+                    const signalClass = isCall ? 'signal-up' : 'signal-down';
+                    const arrow = isCall ? '↗️' : '↘️';
+
+                    document.getElementById("signals").innerHTML =
+                        `<div style="padding:15px;" class="${signalClass}">
+                            <strong style="font-size:1.5em">${arrow} ${j.action} (${prob}%)</strong>
+                            <div>${j.symbol} | TF ${j.tf}</div>
+                            <div class="muted">${j.reason}</div>
+                        </div>`;
+
+                    document.getElementById("lastSignal").innerHTML =
+                        `<span class="${signalClass}">${arrow} Sinal de ${j.action}</span>`;
+
+                    document.getElementById("analysis").innerText = j.explanation;
+
+                    let h = document.getElementById("history");
+                    h.innerText = new Date(j.generated_at).toLocaleTimeString() +
+                        " — " + j.symbol + " " + j.action + ` (${prob}%)` + "\n" + h.innerText;
+                }
+                
+            } catch (e) {
+                // Aqui só entra se houver falha de rede (ex: servidor caiu)
+                log("Erro signal: " + e.message);
+                
+            }
+            
+            // Continua buscando a cada 6 segundos, a menos que o stopAnalysis() tenha parado o loop.
+            if (isAnalysisRunning) {
+                analysisTimeout = setTimeout(fetchSignal, 6000); 
+            }
+        }
+
+
+        // --------------------------------------
+        // GESTÃO DE BOTS AUTOMÁTICOS (PONTO 8)
+        // --------------------------------------
 
         async function createBot() {
             const name = document.getElementById('botName').value.trim();
-            const symbol = document.getElementById('botSymbol').value.trim() || "R_100";
-            const tf = parseInt(document.getElementById('botTimeframe').value) || 5;
-            const sl = parseFloat(document.getElementById('botSL').value) || 10;
-            const tp = parseFloat(document.getElementById('botTP').value) || 20;
+            const sl = parseFloat(document.getElementById('stopLoss').value);
+            const tp = parseFloat(document.getElementById('takeProfit').value);
+            const symbol = document.getElementById('symbolSel').value;
+            const tf = document.getElementById('tfSel').value;
 
-            if (!name) {
-                alert("O nome do bot é obrigatório.");
+            if (!name || isNaN(sl) || isNaN(tp) || sl <= 0 || tp <= 0) {
+                alert("Por favor, preencha o Nome, Stop Loss e Take Profit com valores válidos (> 0).");
                 return;
             }
 
             try {
-                const response = await fetch(`/bots/create?name=${name}&symbol=${symbol}&timeframe=${tf}&sl=${sl}&tp=${tp}`, {
+                const r = await fetch(SERVER + "/bots/create", {
                     method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: name,
+                        symbol: symbol,
+                        tf: tf,
+                        stop_loss: sl,
+                        take_profit: tp
+                    })
                 });
-                if (response.ok) {
-                    alert("Bot criado com sucesso! Atualizando lista...");
-                    updateStatus(); // Atualiza a lista de bots
+
+                const j = await r.json();
+                if (j.ok) {
+                    alert(`Bot '${name}' criado com sucesso! ID: ${j.id}`);
+                    fetchBotsList();
                 } else {
-                    alert("Falha ao criar bot.");
+                    alert("Erro ao criar bot: " + j.message);
                 }
-            } catch (error) {
-                alert("Erro de rede ao criar bot.");
+            } catch (e) {
+                log("Erro ao criar bot: " + e.message);
+                alert("Erro de rede ao comunicar com o servidor.");
+            }
+        }
+
+        async function fetchBotsList() {
+            const tableBody = document.querySelector('#activeBotsTable tbody');
+            tableBody.innerHTML = '<tr><td colspan="5">Carregando bots...</td></tr>';
+            
+            try {
+                const r = await fetch(SERVER + "/status");
+                const j = await r.json();
+                const bots = j.active_bots || [];
+
+                tableBody.innerHTML = '';
+                if (bots.length === 0) {
+                    tableBody.innerHTML = '<tr><td colspan="5" class="muted">Nenhum bot ativo no momento.</td></tr>';
+                    return;
+                }
+
+                bots.forEach(bot => {
+                    const statusClass = bot.is_active ? 'signal-up' : 'signal-down';
+                    const row = tableBody.insertRow();
+                    row.innerHTML = `
+                        <td>${bot.id.substring(0, 4)}...</td>
+                        <td>${bot.name} (${bot.symbol}/${bot.tf}min)</td>
+                        <td>SL $${bot.stop_loss.toFixed(2)} / TP $${bot.take_profit.toFixed(2)}</td>
+                        <td class="${statusClass}">${bot.is_active ? 'ATIVO' : 'INATIVO'}</td>
+                        <td>
+                            <button onclick="${bot.is_active ? 'deactivateBot' : 'activateBot'}('${bot.id}')">
+                                ${bot.is_active ? 'Parar' : 'Ativar'}
+                            </button>
+                        </td>
+                    `;
+                });
+
+            } catch (e) {
+                log("Erro ao buscar lista de bots: " + e.message);
+                tableBody.innerHTML = '<tr><td colspan="5" class="muted" style="color: var(--accent-red);">Erro ao carregar lista de bots.</td></tr>';
             }
         }
 
         async function activateBot(botId) {
             try {
-                const response = await fetch(`/bots/activate/${botId}`, { method: 'POST' });
-                if (response.ok) {
-                    console.log(`Bot ${botId} ativado.`);
-                    updateStatus();
+                const r = await fetch(SERVER + `/bots/activate/${botId}`, { method: 'POST' });
+                const j = await r.json();
+                if (j.ok) {
+                    alert(`Bot ID ${botId.substring(0, 4)}... ATIVADO!`);
+                    fetchBotsList();
                 } else {
-                    alert("Falha ao ativar bot.");
+                    alert(`Erro ao ativar: ${j.message}`);
                 }
-            } catch (error) {
-                alert("Erro de rede ao ativar bot.");
+            } catch (e) {
+                log("Erro ao ativar bot: " + e.message);
             }
         }
 
         async function deactivateBot(botId) {
             try {
-                const response = await fetch(`/bots/deactivate/${botId}`, { method: 'POST' });
-                if (response.ok) {
-                    console.log(`Bot ${botId} desativado.`);
-                    updateStatus();
+                const r = await fetch(SERVER + `/bots/deactivate/${botId}`, { method: 'POST' });
+                const j = await r.json();
+                if (j.ok) {
+                    alert(`Bot ID ${botId.substring(0, 4)}... DESATIVADO!`);
+                    fetchBotsList();
                 } else {
-                    alert("Falha ao desativar bot.");
+                    alert(`Erro ao desativar: ${j.message}`);
                 }
-            } catch (error) {
-                alert("Erro de rede ao desativar bot.");
+            } catch (e) {
+                log("Erro ao desativar bot: " + e.message);
             }
         }
 
-        function sendIAQuery() {
-            const query = document.getElementById('iaQuery').value;
-            const responseElement = document.getElementById('iaResponse');
-            responseElement.textContent = `A sua consulta: "${query}" está a ser processada pela IA...`;
-            setTimeout(() => {
-                responseElement.textContent = "A funcionalidade de IA está a ser integrada. Por favor, aguarde.";
-            }, 3000);
+
+        // --------------------------------------
+        // IA TRADER (PONTO 9)
+        // --------------------------------------
+
+        async function sendQuery() {
+            const query = document.getElementById('iaQuery').value.trim();
+            const responseBox = document.getElementById('iaResponse');
+            
+            if (!query) return;
+
+            responseBox.innerHTML = '<strong>Resposta da IA:</strong><p class="muted">Analisando a sua pergunta...</p>';
+            document.getElementById('iaQuery').value = '';
+
+            try {
+                const r = await fetch(SERVER + "/ia/query", {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: query })
+                });
+
+                const j = await r.json();
+                
+                if (j.response) {
+                    responseBox.innerHTML = `<strong>Resposta da IA:</strong><p>${j.response}</p>`;
+                } else {
+                    responseBox.innerHTML = `<strong>Resposta da IA:</strong><p class="muted" style="color:var(--accent-red)">Erro: ${j.message || 'Resposta inválida do servidor.'}</p>`;
+                }
+
+            } catch (e) {
+                responseBox.innerHTML = '<strong>Resposta da IA:</strong><p class="muted" style="color:var(--accent-red)">Erro de rede ao consultar a IA.</p>';
+                log("Erro IA: " + e.message);
+            }
         }
 
-        // ----------------------------------------
-        // 5. Loop Principal
-        // ----------------------------------------
-        
-        function startUpdateLoops() {
-            // Loop de Status (Atualiza a cada 5 segundos)
-            setInterval(updateStatus, STATUS_POLL_INTERVAL);
-            
-            // Loop de Sinal (Atualiza a cada 3 segundos)
-            setInterval(getSignal, SIGNAL_POLL_INTERVAL);
-        }
+        // --------------------------------------
+        // INICIALIZAÇÃO
+        // --------------------------------------
 
-        // Inicialização
-        document.addEventListener('DOMContentLoaded', () => {
-            // Define a primeira tab como ativa
-            document.getElementById('analysis').style.display = 'block';
-            
-            // Primeira chamada de status e inicia os loops
-            updateStatus();
-            startUpdateLoops();
-        });
-        
+        window.onload = function() {
+            checkStatus();
+            showView('analysis-view');
+        };
+
     </script>
 </body>
 </html>
