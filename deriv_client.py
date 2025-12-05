@@ -12,10 +12,14 @@ class DerivClient:
 
     async def start(self):
         """Inicia a conexão completa com a Deriv."""
+        
+        # O SEU APP ID FOI INSERIDO AQUI: 114910
+        APP_ID = "114910" 
+        
         try:
-            # ENDPOINT CORRETO
+            # ENDPOINT CORRETO (AGORA COM O APP ID)
             self.ws = await websockets.connect(
-                "wss://ws.derivws.com/websockets/v3"
+                f"wss://ws.derivws.com/websockets/v3?app_id={APP_ID}"
             )
 
             print("[Deriv] Conexão WebSocket aberta.")
@@ -25,14 +29,14 @@ class DerivClient:
             await self.authorize()
 
             if self.authorized:
-                print("[Deriv] Token autorizado com sucesso.")
+                print("[Deriv] Token autorizado com sucesso. O bot está ONLINE.")
                 asyncio.create_task(self.listen())
             else:
-                print("[Deriv] Erro: token NÃO autorizado.")
+                print("[Deriv] Erro: token NÃO autorizado. Verifique se o token está correto e ativo.")
                 self.connected = False
 
         except Exception as e:
-            print("[ERRO] Falha ao conectar WebSocket:", e)
+            print("[ERRO] Falha ao conectar WebSocket (URL/Rede):", e)
             self.connected = False
 
     async def authorize(self):
@@ -41,38 +45,43 @@ class DerivClient:
             await self.ws.send(json.dumps({"authorize": self.token}))
             resp = await self.ws.recv()
             data = json.loads(resp)
-
-            if data.get("msg_type") == "authorize":
+            
+            # Verificação de sucesso na autorização
+            if data.get("msg_type") == "authorize" and not data.get("error"):
                 self.authorized = True
+            elif data.get("error"):
+                print("[Deriv] Falha na autorização:", data["error"])
             else:
-                print("[Deriv] Falha na autorização:", data)
+                print("[Deriv] Resposta de autorização inesperada:", data)
 
         except Exception as e:
             print("[ERRO] authorize:", e)
 
     async def listen(self):
         """Loop de mensagens."""
-        print("[Deriv] Iniciando listener…")
+        print("[Deriv] Iniciando listener de ticks…")
         while self.connected:
             try:
                 msg = await self.ws.recv()
                 data = json.loads(msg)
 
-                print("[TICK]", data)
-
-                # se conexão cair
+                # Se a Deriv enviar uma mensagem de erro em um tick, logamos e paramos
                 if data.get("error"):
-                    print("[Deriv] erro:", data["error"])
+                    print("[ERRO FATAL DERIV]:", data["error"])
                     self.connected = False
                     break
 
-            except websockets.ConnectionClosed:
-                print("[Deriv] Conexão fechada. Reconectando…")
+                # Caso contrário, processamos os dados (ticks, propostas, etc.)
+                print("[TICK]", data)
+
+
+            except websockets.ConnectionClosed as e:
+                print(f"[Deriv] Conexão fechada. Motivo: {e}. Desligando cliente.")
                 self.connected = False
                 break
 
             except Exception as e:
-                print("[ERRO] no listener:", e)
+                print(f"[ERRO GERAL] no listener: {e}")
                 self.connected = False
                 break
 
@@ -87,3 +96,4 @@ class DerivClient:
             pass
 
         print("[Deriv] Cliente parado.")
+    
