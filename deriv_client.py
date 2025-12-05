@@ -4,8 +4,7 @@ import asyncio
 import websockets
 import json
 from datetime import datetime
-# --- 🚨 CORREÇÃO AQUI 🚨 ---
-# Mudamos para importar a função update_ticks em vez da classe TradingStrategy
+# --- ✅ IMPORTAÇÃO CORRETA ✅ ---
 from strategy import update_ticks 
 
 
@@ -117,8 +116,6 @@ class DerivClient:
                 if data.get("msg_type") == "balance":
                      if data.get('balance'):
                         self.account_info['balance'] = data['balance'].get('balance', 0.0)
-                        # A remoção do print aqui torna o log mais limpo
-                        # print(f"[Deriv] Saldo Atualizado em tempo real: {self.account_info['balance']}")
 
             except websockets.ConnectionClosed as e:
                 print(f"[Deriv] Conexão fechada. Motivo: {e}. Desligando cliente.")
