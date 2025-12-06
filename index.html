@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RobotMagic Pro - Trading Bot</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/style.css"> 
 </head>
 <body>
 
@@ -136,7 +136,9 @@
             </aside>
         </div>
 
-    </div> <script>
+    </div> 
+    
+    <script>
         // O BLOCO JAVASCRIPT COMPLETO E FINAL COMEÇA AQUI
         
         // VARIÁVEIS DE ESTADO
@@ -188,18 +190,22 @@
             document.getElementById("auth-status").style.color = "yellow";
 
             try {
-                const r = await fetch(SERVER + "/set_token", {
+                // CORREÇÃO CRÍTICA 1: Usar /api/connect
+                const r = await fetch(SERVER + "/api/connect", {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ token: token })
                 });
+                
                 const j = await r.json();
 
                 if (j.ok) {
-                    document.getElementById("auth-status").innerText = "Token Aceito! Verificando conexão...";
-                    setTimeout(checkStatus, 2000); 
+                    document.getElementById("auth-status").innerText = j.message;
+                    document.getElementById("auth-status").style.color = "var(--accent-green)";
+                    // Tenta obter o status após a conexão
+                    setTimeout(checkStatus, 1000); 
                 } else {
-                    document.getElementById("auth-status").innerText = "ERRO: " + (j.message || "Falha na conexão.");
+                    document.getElementById("auth-status").innerText = "ERRO: " + (j.detail || j.message || "Falha na conexão.");
                     document.getElementById("auth-status").style.color = "var(--accent-red)";
                 }
 
@@ -212,43 +218,43 @@
 
         async function checkStatus() {
             try {
-                const r = await fetch(SERVER + "/status");
+                // CORREÇÃO CRÍTICA 2: Usar /api/status
+                const r = await fetch(SERVER + "/api/status");
+                
+                if (!r.ok) {
+                    log("Servidor respondeu, mas a rota /api/status falhou. Mantendo-se desconectado.");
+                    return;
+                }
+
                 const j = await r.json();
 
-                if (j.deriv_connected) {
-                    // SUCESSO DE CONEXÃO
+                if (j.connected && j.authorized) { 
+                    // SUCESSO DE CONEXÃO E AUTORIZAÇÃO
                     document.getElementById('login-view').classList.remove('active');
                     document.getElementById('dashboard-view').classList.add('active');
                     isConnected = true;
                     
-                    const successMsg = document.createElement('div');
-                    successMsg.className = 'status-message badge real';
-                    successMsg.innerText = '✅ CONECTADO com a Deriv!';
-                    document.querySelector('header').appendChild(successMsg);
-                    setTimeout(() => {
-                        successMsg.style.transition = 'opacity 2s';
-                        successMsg.style.opacity = '0';
-                        setTimeout(() => successMsg.remove(), 2000);
-                    }, 3000);
-
+                    // Ocultar a mensagem de status da view de login após sucesso
+                    document.getElementById("auth-status").innerText = ''; 
+                    
                     // Atualizar Saldo e Tipo de Conta
-                    document.getElementById('account-balance').innerText = `Saldo: $${j.balance.toFixed(2)}`;
+                    document.getElementById('account-balance').innerText = `Saldo: $${j.account_info.balance.toFixed(2)}`;
                     const typeBadge = document.getElementById('account-type');
-                    typeBadge.innerText = j.account_type.toUpperCase();
-                    typeBadge.className = `badge ${j.account_type.toLowerCase()}`;
+                    typeBadge.innerText = j.account_info.account_type.toUpperCase();
+                    typeBadge.className = `badge ${j.account_info.account_type.toLowerCase()}`;
                     
                     fetchBotsList();
 
                 } else if (!isConnected) {
-                    document.getElementById("auth-status").innerText = "Ainda não conectado. Verifique o Token ou tente novamente.";
-                    document.getElementById("auth-status").style.color = "yellow";
-                    setTimeout(checkStatus, 5000);
+                    document.getElementById("auth-status").innerText = "Insira o Token API para conectar.";
+                    document.getElementById("auth-status").style.color = "var(--text-color)";
+                    setTimeout(checkStatus, 5000); 
                 }
 
             } catch (e) {
                 log("Erro status: " + e.message);
                 if (!isConnected) {
-                    document.getElementById("auth-status").innerText = "ERRO: O servidor não está respondendo.";
+                    document.getElementById("auth-status").innerText = "ERRO: O servidor não está respondendo. Verifique o Render.";
                     document.getElementById("auth-status").style.color = "var(--accent-red)";
                 }
             }
@@ -294,7 +300,7 @@
             document.getElementById('signal-display').classList.add('hidden');
         }
 
-        // FUNÇÃO DE BUSCA DE SINAL (CORRIGIDA PARA TRATAR O ERRO 404 E REPETIR O LOOP)
+        // FUNÇÃO DE BUSCA DE SINAL
         async function fetchSignal() {
             if (!isAnalysisRunning || !isConnected) return;
 
@@ -304,21 +310,19 @@
             document.getElementById('current-asset').innerText = `Ativo: ${sym}`;
 
             try {
+                // Rota /signal (Assumindo que está correta no main.py)
                 const r = await fetch(
                     SERVER + "/signal?symbol=" + sym + "&tf=" + tf
                 );
 
-                // --- CORREÇÃO PRINCIPAL: Tratar 404 (Sem dados suficientes) ---
                 if (r.status === 404) {
                     document.getElementById('processing-text').innerText = 'Analisando Gráfico (Aguardando dados...)...';
-                    // Garante que o loop continue no final
                     if (isAnalysisRunning) {
                         analysisTimeout = setTimeout(fetchSignal, 5000); 
                     }
                     return; 
                 }
                 
-                // Se não for 404, processamos a resposta (deve ser 200 OK)
                 const j = await r.json();
 
                 if (j && j.action) {
@@ -350,12 +354,10 @@
                 }
                 
             } catch (e) {
-                // Aqui só entra se houver falha de rede (ex: servidor caiu)
                 log("Erro signal: " + e.message);
                 
             }
             
-            // Continua buscando a cada 6 segundos, a menos que o stopAnalysis() tenha parado o loop.
             if (isAnalysisRunning) {
                 analysisTimeout = setTimeout(fetchSignal, 6000); 
             }
@@ -363,13 +365,14 @@
 
 
         // --------------------------------------
-        // GESTÃO DE BOTS AUTOMÁTICOS (PONTO 8)
+        // GESTÃO DE BOTS AUTOMÁTICOS
         // --------------------------------------
 
         async function createBot() {
             const name = document.getElementById('botName').value.trim();
             const sl = parseFloat(document.getElementById('stopLoss').value);
             const tp = parseFloat(document.getElementById('takeProfit').value);
+            // Pega o symbol e tf da view de análise
             const symbol = document.getElementById('symbolSel').value;
             const tf = document.getElementById('tfSel').value;
 
@@ -379,7 +382,8 @@
             }
 
             try {
-                const r = await fetch(SERVER + "/bots/create", {
+                // Rota /api/bots (Corrigida para usar /api)
+                const r = await fetch(SERVER + "/api/bots", { 
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -393,10 +397,10 @@
 
                 const j = await r.json();
                 if (j.ok) {
-                    alert(`Bot '${name}' criado com sucesso! ID: ${j.id}`);
+                    alert(`Bot '${name}' criado com sucesso! ID: ${j.bot_id.substring(0, 4)}...`);
                     fetchBotsList();
                 } else {
-                    alert("Erro ao criar bot: " + j.message);
+                    alert("Erro ao criar bot: " + (j.detail || j.message));
                 }
             } catch (e) {
                 log("Erro ao criar bot: " + e.message);
@@ -409,9 +413,12 @@
             tableBody.innerHTML = '<tr><td colspan="5">Carregando bots...</td></tr>';
             
             try {
-                const r = await fetch(SERVER + "/status");
+                // Rota /api/status (Corrigida para usar /api)
+                const r = await fetch(SERVER + "/api/status");
                 const j = await r.json();
-                const bots = j.active_bots || [];
+                
+                // Os bots estão dentro da lista 'bots' no JSON de status
+                const bots = j.bots || [];
 
                 tableBody.innerHTML = '';
                 if (bots.length === 0) {
@@ -420,16 +427,16 @@
                 }
 
                 bots.forEach(bot => {
-                    const statusClass = bot.is_active ? 'signal-up' : 'signal-down';
+                    const statusClass = bot.state === 'ACTIVE' ? 'signal-up' : 'signal-down';
                     const row = tableBody.insertRow();
                     row.innerHTML = `
                         <td>${bot.id.substring(0, 4)}...</td>
                         <td>${bot.name} (${bot.symbol}/${bot.tf}min)</td>
                         <td>SL $${bot.stop_loss.toFixed(2)} / TP $${bot.take_profit.toFixed(2)}</td>
-                        <td class="${statusClass}">${bot.is_active ? 'ATIVO' : 'INATIVO'}</td>
+                        <td class="${statusClass}">${bot.state}</td>
                         <td>
-                            <button onclick="${bot.is_active ? 'deactivateBot' : 'activateBot'}('${bot.id}')">
-                                ${bot.is_active ? 'Parar' : 'Ativar'}
+                            <button onclick="${bot.state === 'ACTIVE' ? 'deactivateBot' : 'activateBot'}('${bot.id}')">
+                                ${bot.state === 'ACTIVE' ? 'Parar' : 'Ativar'}
                             </button>
                         </td>
                     `;
@@ -442,8 +449,9 @@
         }
 
         async function activateBot(botId) {
+            // Rotas /api/bots/... (Assumindo que estão corretas no main.py)
             try {
-                const r = await fetch(SERVER + `/bots/activate/${botId}`, { method: 'POST' });
+                const r = await fetch(SERVER + `/api/bots/activate/${botId}`, { method: 'POST' });
                 const j = await r.json();
                 if (j.ok) {
                     alert(`Bot ID ${botId.substring(0, 4)}... ATIVADO!`);
@@ -457,8 +465,9 @@
         }
 
         async function deactivateBot(botId) {
+            // Rotas /api/bots/... (Assumindo que estão corretas no main.py)
             try {
-                const r = await fetch(SERVER + `/bots/deactivate/${botId}`, { method: 'POST' });
+                const r = await fetch(SERVER + `/api/bots/deactivate/${botId}`, { method: 'POST' });
                 const j = await r.json();
                 if (j.ok) {
                     alert(`Bot ID ${botId.substring(0, 4)}... DESATIVADO!`);
@@ -473,7 +482,7 @@
 
 
         // --------------------------------------
-        // IA TRADER (PONTO 9)
+        // IA TRADER
         // --------------------------------------
 
         async function sendQuery() {
@@ -486,6 +495,7 @@
             document.getElementById('iaQuery').value = '';
 
             try {
+                // Rota /ia/query (Corrigida para usar /ia, como no main.py)
                 const r = await fetch(SERVER + "/ia/query", {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -511,8 +521,9 @@
         // --------------------------------------
 
         window.onload = function() {
-            checkStatus();
-            showView('analysis-view');
+            // IMPORTANTE: checkStatus() decide se mostra login-view ou dashboard-view
+            checkStatus(); 
+            showView('analysis-view'); // Garante que analysis-view esteja ativa no dashboard
         };
 
     </script>
