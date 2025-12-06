@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>RobotMagic Pro — Conexão Deriv</title>
+
+<link rel="stylesheet" href="/static/style.css">
+
+<style>
+:root{--bg:#0a0f17;--card:#111821;--accent:#2ecc71;--muted:#9aa6b2;}
+body{margin:0;font-family:Inter,system-ui;background:var(--bg);color:#e9f7ef}
+header{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;border-bottom:1px solid rgba(255,255,255,0.03)}
+.logo{display:flex;align-items:center;gap:12px}
+.logo .dot{width:40px;height:40px;border-radius:8px;background:linear-gradient(45deg,var(--accent),#3498db);display:flex;align-items:center;justify-content:center;font-weight:700;color:#001}
+.container{padding:16px;display:grid;grid-template-columns:300px 1fr 360px;gap:14px}
+.panel{background:var(--card);padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.03)}
+.chart{height:420px;border-radius:8px;background:rgba(255,255,255,0.02);display:flex;align-items:center;justify-content:center;color:var(--muted)}
+.btn{padding:8px 12px;border-radius:8px;border:none;background:var(--accent);color:#001;cursor:pointer;font-weight:600}
+.muted{color:var(--muted);font-size:13px}
+#modalToken{position:fixed;left:0;top:0;width:100%;height:100%;background:rgba(0,0,0,0.65);display:none;align-items:center;justify-content:center}
+.modal{width:420px;background:var(--card);padding:18px;border-radius:10px;border:1px solid rgba(255,255,255,0.04)}
+.input{width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:rgba(255,255,255,0.02);color:#e9f7ef}
+.small{font-size:12px;color:var(--muted)}
+.bot-card {
+    background: rgba(255,255,255,0.03);
+    padding: 10px;
+    margin-bottom: 10px;
+    border-radius: 8px;
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  <div class="logo">
+    <div class="dot">RM</div>
+    <div>
+      <div style="font-weight:700">RobotMagic Pro</div>
+      <div class="small">Painel — insira token para conectar à Deriv</div>
+    </div>
+  </div>
+  <div>
+    <button class="btn" id="openTokenBtn">Conectar Deriv</button>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- LEFT PANEL -->
+  <aside class="panel">
+    <h3>Status</h3>
+
+    <p><b>Conexão:</b> <span id="status">—</span></p>
+    <p><b>Saldo:</b> <span id="balance">—</span></p>
+
+    <button class="btn" id="openTokenBtn2">Inserir token</button>
+
+    <hr style="margin:12px 0; border-top:1px solid rgba(255,255,255,0.03)">
+
+    <h3>Ativo</h3>
+    <select id="symbolSel" class="input">
+      <option value="R_100">R_100</option>
+      <option value="R_50">R_50</option>
+      <option value="FRXEURUSD">EURUSD</option>
+    </select>
+
+    <h3 style="margin-top:10px">Timeframe</h3>
+    <select id="tfSel" class="input">
+      <option value="60">1m</option>
+      <option value="300">5m</option>
+    </select>
+  </aside>
+
+  <!-- CENTER PANEL -->
+  <main class="panel">
+    <h3>Sinais</h3>
+
+    <div id="signals" class="muted">Nenhum sinal ainda</div>
+
+    <div class="chart" id="chart">
+      Gráfico (placeholder)
+    </div>
+  </main>
+
+  <!-- RIGHT PANEL -->
+  <aside class="panel">
+    <h3>Bots Automáticos</h3>
+
+    <div style="margin-bottom:10px">
+      <label class="muted">Símbolo</label>
+      <select id="bot_symbol" class="input">
+        <option value="R_100">R_100</option>
+        <option value="R_50">R_50</option>
+        <option value="FRXEURUSD">EURUSD</option>
+      </select>
+
+      <label class="muted" style="margin-top:6px">TF (segundos)</label>
+      <input id="bot_tf" type="number" class="input" value="60"/>
+
+      <label class="muted" style="margin-top:6px">Estratégia</label>
+      <select id="bot_policy" class="input">
+        <option value="conservative">Conservador</option>
+        <option value="aggressive">Agressivo</option>
+      </select>
+
+      <button class="btn" style="margin-top:10px" onclick="createBot()">
+        Criar Bot
+      </button>
+    </div>
+
+    <h4>Lista de Bots</h4>
+    <div id="bots_list" class="muted">Nenhum bot criado</div>
+  </aside>
+
+</div>
+
+<!-- TOKEN MODAL -->
+<div id="modalToken">
+  <div class="modal">
+    <h3>Conectar à Deriv</h3>
+
+    <input id="token" class="input" placeholder="Cole seu token aqui">
+
+    <br><br>
+    <button class="btn" onclick="sendToken()">Conectar</button>
+
+    <div id="token-status" class="small" style="margin-top:10px">—</div>
+  </div>
+</div>
+
+<script>
+document.getElementById("openTokenBtn").onclick = () => {
+  document.getElementById("modalToken").style.display = "flex";
+};
+document.getElementById("openTokenBtn2").onclick = () => {
+  document.getElementById("modalToken").style.display = "flex";
+};
+</script>
+
+<script src="/static/script.js"></script>
+</body>
+</html>
