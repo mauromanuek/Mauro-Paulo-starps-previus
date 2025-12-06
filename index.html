@@ -47,7 +47,8 @@
                     
                     <div class="controls-bar">
                         <select id="symbolSel">
-                            <option value="V100">Volatility 100 Index</option>
+                            <option value="R_100">R_100 Index</option>
+                            <option value="V100">Volatility 100 Index</option> 
                             <option value="EURUSD">EUR/USD</option>
                         </select>
                         <select id="tfSel">
@@ -173,7 +174,7 @@
         }
         
         // --------------------------------------
-        // AUTENTICAÇÃO E STATUS
+        // AUTENTICAÇÃO E STATUS (FUNÇÃO CRÍTICA CORRIGIDA)
         // --------------------------------------
 
         async function setTokenAndConnect() {
@@ -187,19 +188,20 @@
             document.getElementById("auth-status").innerText = "Conectando com a Deriv...";
             document.getElementById("auth-status").style.color = "yellow";
 
+            // 🟢 CORREÇÃO CRÍTICA: Envia o token como query parameter (na URL)
+            const url = SERVER + `/set_token?token=${token}`; 
+
             try {
-                const r = await fetch(SERVER + "/set_token", {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ token: token })
-                });
+                // A requisição agora é um simples POST sem corpo JSON, usando a URL corrigida
+                const r = await fetch(url, { method: 'POST' }); 
                 const j = await r.json();
 
-                if (j.ok) {
+                if (r.ok) {
                     document.getElementById("auth-status").innerText = "Token Aceito! Verificando conexão...";
                     setTimeout(checkStatus, 2000); 
                 } else {
-                    document.getElementById("auth-status").innerText = "ERRO: " + (j.message || "Falha na conexão.");
+                    // A resposta de erro deve ter a chave 'detail' ou 'message'
+                    document.getElementById("auth-status").innerText = "ERRO: " + (j.detail || j.message || "Falha na conexão.");
                     document.getElementById("auth-status").style.color = "var(--accent-red)";
                 }
 
@@ -215,7 +217,7 @@
                 const r = await fetch(SERVER + "/status");
                 const j = await r.json();
 
-                if (j.deriv_connected) {
+                if (j.is_authorized) { // Usa is_authorized da resposta final do main.py
                     // SUCESSO DE CONEXÃO
                     document.getElementById('login-view').classList.remove('active');
                     document.getElementById('dashboard-view').classList.add('active');
@@ -232,7 +234,7 @@
                     }, 3000);
 
                     // Atualizar Saldo e Tipo de Conta
-                    document.getElementById('account-balance').innerText = `Saldo: $${j.balance.toFixed(2)}`;
+                    document.getElementById('account-balance').innerText = `Saldo: $${parseFloat(j.balance).toFixed(2)}`;
                     const typeBadge = document.getElementById('account-type');
                     typeBadge.innerText = j.account_type.toUpperCase();
                     typeBadge.className = `badge ${j.account_type.toLowerCase()}`;
@@ -240,6 +242,7 @@
                     fetchBotsList();
 
                 } else if (!isConnected) {
+                    // Se o servidor respondeu, mas não autorizado
                     document.getElementById("auth-status").innerText = "Ainda não conectado. Verifique o Token ou tente novamente.";
                     document.getElementById("auth-status").style.color = "yellow";
                     setTimeout(checkStatus, 5000);
@@ -250,6 +253,13 @@
                 if (!isConnected) {
                     document.getElementById("auth-status").innerText = "ERRO: O servidor não está respondendo.";
                     document.getElementById("auth-status").style.color = "var(--accent-red)";
+                }
+            } finally {
+                // Loop de atualização do status (mesmo após a conexão)
+                if (isConnected) {
+                    setTimeout(checkStatus, 10000); // Verifica a cada 10s se estiver conectado
+                } else {
+                    setTimeout(checkStatus, 5000); // Tenta de 5s em 5s se não estiver conectado
                 }
             }
         }
@@ -294,7 +304,7 @@
             document.getElementById('signal-display').classList.add('hidden');
         }
 
-        // FUNÇÃO DE BUSCA DE SINAL (CORRIGIDA PARA TRATAR O ERRO 404 E REPETIR O LOOP)
+        // FUNÇÃO DE BUSCA DE SINAL
         async function fetchSignal() {
             if (!isAnalysisRunning || !isConnected) return;
 
@@ -308,10 +318,9 @@
                     SERVER + "/signal?symbol=" + sym + "&tf=" + tf
                 );
 
-                // --- CORREÇÃO PRINCIPAL: Tratar 404 (Sem dados suficientes) ---
+                // --- CRÍTICO: Tratar 404 (Sem dados suficientes) ---
                 if (r.status === 404) {
                     document.getElementById('processing-text').innerText = 'Analisando Gráfico (Aguardando dados...)...';
-                    // Garante que o loop continue no final
                     if (isAnalysisRunning) {
                         analysisTimeout = setTimeout(fetchSignal, 5000); 
                     }
@@ -322,13 +331,14 @@
                 const j = await r.json();
 
                 if (j && j.action) {
-                    stopAnalysis(); // Parar o loop de busca, pois o sinal chegou!
+                    // Não parar, apenas atualizar
                     
                     document.getElementById('signal-display').classList.remove('hidden');
                     document.getElementById('chart-placeholder').classList.add('hidden');
+                    document.getElementById('processing-status').classList.add('hidden');
                     
                     const prob = (j.probability * 100).toFixed(0);
-                    const isCall = j.action.includes("CALL") || j.action.includes("BUY") || j.action.includes("UP");
+                    const isCall = j.action.includes("CALL") || j.action.includes("COMPRA");
                     const signalClass = isCall ? 'signal-up' : 'signal-down';
                     const arrow = isCall ? '↗️' : '↘️';
 
@@ -345,176 +355,7 @@
                     document.getElementById("analysis").innerText = j.explanation;
 
                     let h = document.getElementById("history");
-                    h.innerText = new Date(j.generated_at).toLocaleTimeString() +
-                        " — " + j.symbol + " " + j.action + ` (${prob}%)` + "\n" + h.innerText;
-                }
-                
-            } catch (e) {
-                // Aqui só entra se houver falha de rede (ex: servidor caiu)
-                log("Erro signal: " + e.message);
-                
-            }
-            
-            // Continua buscando a cada 6 segundos, a menos que o stopAnalysis() tenha parado o loop.
-            if (isAnalysisRunning) {
-                analysisTimeout = setTimeout(fetchSignal, 6000); 
-            }
-        }
-
-
-        // --------------------------------------
-        // GESTÃO DE BOTS AUTOMÁTICOS (PONTO 8)
-        // --------------------------------------
-
-        async function createBot() {
-            const name = document.getElementById('botName').value.trim();
-            const sl = parseFloat(document.getElementById('stopLoss').value);
-            const tp = parseFloat(document.getElementById('takeProfit').value);
-            const symbol = document.getElementById('symbolSel').value;
-            const tf = document.getElementById('tfSel').value;
-
-            if (!name || isNaN(sl) || isNaN(tp) || sl <= 0 || tp <= 0) {
-                alert("Por favor, preencha o Nome, Stop Loss e Take Profit com valores válidos (> 0).");
-                return;
-            }
-
-            try {
-                const r = await fetch(SERVER + "/bots/create", {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        name: name,
-                        symbol: symbol,
-                        tf: tf,
-                        stop_loss: sl,
-                        take_profit: tp
-                    })
-                });
-
-                const j = await r.json();
-                if (j.ok) {
-                    alert(`Bot '${name}' criado com sucesso! ID: ${j.id}`);
-                    fetchBotsList();
-                } else {
-                    alert("Erro ao criar bot: " + j.message);
-                }
-            } catch (e) {
-                log("Erro ao criar bot: " + e.message);
-                alert("Erro de rede ao comunicar com o servidor.");
-            }
-        }
-
-        async function fetchBotsList() {
-            const tableBody = document.querySelector('#activeBotsTable tbody');
-            tableBody.innerHTML = '<tr><td colspan="5">Carregando bots...</td></tr>';
-            
-            try {
-                const r = await fetch(SERVER + "/status");
-                const j = await r.json();
-                const bots = j.active_bots || [];
-
-                tableBody.innerHTML = '';
-                if (bots.length === 0) {
-                    tableBody.innerHTML = '<tr><td colspan="5" class="muted">Nenhum bot ativo no momento.</td></tr>';
-                    return;
-                }
-
-                bots.forEach(bot => {
-                    const statusClass = bot.is_active ? 'signal-up' : 'signal-down';
-                    const row = tableBody.insertRow();
-                    row.innerHTML = `
-                        <td>${bot.id.substring(0, 4)}...</td>
-                        <td>${bot.name} (${bot.symbol}/${bot.tf}min)</td>
-                        <td>SL $${bot.stop_loss.toFixed(2)} / TP $${bot.take_profit.toFixed(2)}</td>
-                        <td class="${statusClass}">${bot.is_active ? 'ATIVO' : 'INATIVO'}</td>
-                        <td>
-                            <button onclick="${bot.is_active ? 'deactivateBot' : 'activateBot'}('${bot.id}')">
-                                ${bot.is_active ? 'Parar' : 'Ativar'}
-                            </button>
-                        </td>
-                    `;
-                });
-
-            } catch (e) {
-                log("Erro ao buscar lista de bots: " + e.message);
-                tableBody.innerHTML = '<tr><td colspan="5" class="muted" style="color: var(--accent-red);">Erro ao carregar lista de bots.</td></tr>';
-            }
-        }
-
-        async function activateBot(botId) {
-            try {
-                const r = await fetch(SERVER + `/bots/activate/${botId}`, { method: 'POST' });
-                const j = await r.json();
-                if (j.ok) {
-                    alert(`Bot ID ${botId.substring(0, 4)}... ATIVADO!`);
-                    fetchBotsList();
-                } else {
-                    alert(`Erro ao ativar: ${j.message}`);
-                }
-            } catch (e) {
-                log("Erro ao ativar bot: " + e.message);
-            }
-        }
-
-        async function deactivateBot(botId) {
-            try {
-                const r = await fetch(SERVER + `/bots/deactivate/${botId}`, { method: 'POST' });
-                const j = await r.json();
-                if (j.ok) {
-                    alert(`Bot ID ${botId.substring(0, 4)}... DESATIVADO!`);
-                    fetchBotsList();
-                } else {
-                    alert(`Erro ao desativar: ${j.message}`);
-                }
-            } catch (e) {
-                log("Erro ao desativar bot: " + e.message);
-            }
-        }
-
-
-        // --------------------------------------
-        // IA TRADER (PONTO 9)
-        // --------------------------------------
-
-        async function sendQuery() {
-            const query = document.getElementById('iaQuery').value.trim();
-            const responseBox = document.getElementById('iaResponse');
-            
-            if (!query) return;
-
-            responseBox.innerHTML = '<strong>Resposta da IA:</strong><p class="muted">Analisando a sua pergunta...</p>';
-            document.getElementById('iaQuery').value = '';
-
-            try {
-                const r = await fetch(SERVER + "/ia/query", {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query: query })
-                });
-
-                const j = await r.json();
-                
-                if (j.response) {
-                    responseBox.innerHTML = `<strong>Resposta da IA:</strong><p>${j.response}</p>`;
-                } else {
-                    responseBox.innerHTML = `<strong>Resposta da IA:</strong><p class="muted" style="color:var(--accent-red)">Erro: ${j.message || 'Resposta inválida do servidor.'}</p>`;
-                }
-
-            } catch (e) {
-                responseBox.innerHTML = '<strong>Resposta da IA:</strong><p class="muted" style="color:var(--accent-red)">Erro de rede ao consultar a IA.</p>';
-                log("Erro IA: " + e.message);
-            }
-        }
-
-        // --------------------------------------
-        // INICIALIZAÇÃO
-        // --------------------------------------
-
-        window.onload = function() {
-            checkStatus();
-            showView('analysis-view');
-        };
-
-    </script>
-</body>
-</html>
+                    // Adicionamos o indicador RSI/EMA aqui para referência
+                    const indicators = j.indicators || {};
+                    h.innerText = `${new Date().toLocaleTimeString()} — ${j.symbol} ${j.action} (${prob}%) | RSI: ${parseFloat(indicators.rsi || 0).
+        
