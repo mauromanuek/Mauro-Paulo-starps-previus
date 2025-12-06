@@ -1,3 +1,4 @@
+# bot.py
 import asyncio
 import random
 from collections import deque
@@ -25,8 +26,8 @@ class Bot:
             self.closes.append(float(tick["quote"]))
 
     async def loop(self):
-        # subscrever símbolo
-        await self.deriv.subscribe(self.symbol)
+        # Chamada CORRIGIDA para subscribe_symbol
+        await self.deriv.subscribe_symbol(self.symbol) 
 
         # capturar callback anterior
         self._original_tick_cb = self.deriv.on_tick
@@ -51,7 +52,7 @@ class Bot:
             else:
                 self.stats["losses"] += 1
 
-            print(f"[Bot {self.id}] {action} | prob={prob} | WIN={win} | {reason}")
+            print(f"[Bot {self.id}] {action} | prob={prob:.2f} | WIN={win} | {reason}")
 
         # restaurar callback original
         self.deriv.on_tick = self._original_tick_cb
@@ -66,7 +67,4 @@ class Bot:
         self.active = False
         if self._task:
             self._task.cancel()
-            try:
-                await self._task
-            except:
-                pass
+            self._task = None
