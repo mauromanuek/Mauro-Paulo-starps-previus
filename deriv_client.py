@@ -18,6 +18,7 @@ class DerivClient:
         self.ws: Optional[websockets.WebSocketClientProtocol] = None
         self.connected = False
         self.authorized = False
+        # Valores padrão
         self.account_info: Dict[str, Any] = {"balance": 0.0, "account_type": "demo", "currency": "USD", "account_name": "N/A"}
         
         # 🟢 CRÍTICO: Eventos para esperar respostas da API de forma não-bloqueante
@@ -35,7 +36,7 @@ class DerivClient:
             asyncio.create_task(self.listen())
             print("[Deriv] Tarefa de listener iniciada.")
 
-            # 2. Autorização (o código ESPERA o evento ser setado no listener)
+            # 2. Autorização (espera o evento ser setado no listener)
             await self.authorize()
             await asyncio.wait_for(self.auth_event.wait(), timeout=10) 
             
@@ -44,7 +45,7 @@ class DerivClient:
 
             print("[Deriv] Token autorizado com sucesso. O bot está ONLINE.")
             
-            # 3. Informações da Conta (o código ESPERA o evento ser setado no listener)
+            # 3. Informações da Conta (espera o evento ser setado no listener)
             await self.get_account_info() 
             await asyncio.wait_for(self.info_event.wait(), timeout=10) 
             print("[Deriv] DEBUG: Informações da conta processadas.") 
@@ -83,6 +84,7 @@ class DerivClient:
         print("[Deriv] Iniciando listener de ticks…")
         while self.connected and self.ws:
             try:
+                # Recebe a mensagem com um timeout para evitar que o listener bloqueie
                 message = await asyncio.wait_for(self.ws.recv(), timeout=30) 
                 data = json.loads(message)
 
@@ -109,9 +111,9 @@ class DerivClient:
                          self.account_info['currency'] = settings['currency']
                     if 'email' in settings:
                         self.account_info['account_name'] = settings['email'] 
-                    # Garante que o info_event é setado APENAS se os dados de conta e saldo chegarem
+                    # Set info_event se o saldo já tiver chegado (ou chegar agora)
                     if self.account_info.get('balance') is not None:
-                        self.info_event.set() 
+                        self.info_event.set()
                     
                 # 3. Saldos (balance)
                 if msg_type == "balance" and 'balance' in data:
@@ -119,7 +121,7 @@ class DerivClient:
                      if balance_data:
                         self.account_info['balance'] = balance_data.get('balance', 0.0)
                         self.account_info['currency'] = balance_data.get('currency', self.account_info.get('currency', 'USD'))
-                        # Garante que o info_event é setado para desbloquear o start()
+                        # Garante que o info_event é setado
                         if not self.info_event.is_set():
                             self.info_event.set()
                     
@@ -128,7 +130,7 @@ class DerivClient:
                     tick = data["tick"]
                     price = float(tick["quote"])
                     update_ticks(price) 
-                    print(f"[Deriv] ✅ Tick recebido: {price}") # ESTE LOG É O CRÍTICO
+                    print(f"[Deriv] ✅ Tick recebido: {price}") 
                     
                 
             except websockets.ConnectionClosed as e:
@@ -137,6 +139,7 @@ class DerivClient:
                 self.authorized = False
                 break
             except asyncio.TimeoutError:
+                # Envia um 'ping' para manter a conexão viva
                 await self.ws.send(json.dumps({"ping": 1}))
                 continue
             except Exception as e:
