@@ -5,7 +5,7 @@ import websockets
 import json
 from datetime import datetime
 from strategy import update_ticks 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Set
 
 class DerivClient:
     
@@ -18,12 +18,41 @@ class DerivClient:
         self.ws: Optional[websockets.WebSocketClientProtocol] = None
         self.connected = False
         self.authorized = False
-        # Valores padrão
         self.account_info: Dict[str, Any] = {"balance": 0.0, "account_type": "demo", "currency": "USD", "account_name": "N/A"}
         
         # 🟢 CRÍTICO: Eventos para esperar respostas da API de forma não-bloqueante
         self.auth_event = asyncio.Event() 
         self.info_event = asyncio.Event() 
+        
+        # 🚀 NOVO: Conjunto de Queues para transmitir ticks aos clientes de front-end (navegadores)
+        self.tick_listeners: Set[asyncio.Queue] = set() 
+
+    # -----------------------------------------------------------
+    # MÉTODOS DE GESTÃO DE LISTENERS DE FRONT-END
+    # -----------------------------------------------------------
+    async def subscribe_tick_listener(self, queue: asyncio.Queue):
+        """Adiciona uma queue para receber os novos ticks."""
+        self.tick_listeners.add(queue)
+
+    def unsubscribe_tick_listener(self, queue: asyncio.Queue):
+        """Remove uma queue."""
+        self.tick_listeners.discard(queue)
+
+    async def broadcast_tick(self, price: float):
+        """Envia o novo tick para todas as queues inscritas."""
+        # Envia a mensagem no formato JSON esperado pelo front-end
+        tick_message = json.dumps({"type": "tick", "price": price})
+        
+        # Cria uma cópia da lista de listeners para iterar com segurança
+        for queue in list(self.tick_listeners): 
+            try:
+                # put_nowait garante que não bloqueamos o loop principal da Deriv
+                queue.put_nowait(tick_message) 
+            except asyncio.QueueFull:
+                # Se a queue estiver cheia, o cliente está lento/desligado. Remove-o.
+                print("[Deriv] Aviso: Queue de tick cheia. Removendo listener lento.")
+                self.unsubscribe_tick_listener(queue)
+    # -----------------------------------------------------------
 
     async def start(self):
         """Inicia a conexão completa com a Deriv e espera pelos dados da conta."""
@@ -69,9 +98,7 @@ class DerivClient:
 
     async def get_account_info(self):
         """Subscreve para obter o saldo e informações da conta."""
-        # 1. Obter saldo (e subscrição de atualizações de saldo)
         await self.ws.send(json.dumps({"balance": 1, "subscribe": 1}))
-        # 2. Obter informações da conta (tipo de conta, moeda, email)
         await self.ws.send(json.dumps({"get_settings": 1}))
     
     async def subscribe_to_ticks(self, symbol: str):
@@ -84,7 +111,6 @@ class DerivClient:
         print("[Deriv] Iniciando listener de ticks…")
         while self.connected and self.ws:
             try:
-                # Recebe a mensagem com um timeout para evitar que o listener bloqueie
                 message = await asyncio.wait_for(self.ws.recv(), timeout=30) 
                 data = json.loads(message)
 
@@ -94,42 +120,43 @@ class DerivClient:
 
                 msg_type = data.get("msg_type")
                 
-                # --- PROCESSAMENTO DE DADOS CRÍTICOS (SETANDO EVENTOS) ---
+                # --- PROCESSAMENTO DE AUTORIZAÇÃO E INFORMAÇÕES DE CONTA ---
                 
-                # 1. Autorização
                 if msg_type == "authorize" and 'authorize' in data:
                     self.authorized = True
                     account_details = data.get('authorize', {})
                     if 'is_virtual' in account_details:
                          self.account_info['account_type'] = 'demo' if account_details['is_virtual'] == 1 else 'real'
-                    self.auth_event.set() # Sinaliza que a autorização foi processada
+                    self.auth_event.set()
 
-                # 2. Informações da Conta (get_settings)
                 if msg_type == "get_settings" and 'get_settings' in data:
                     settings = data.get('get_settings', {})
                     if 'currency' in settings:
                          self.account_info['currency'] = settings['currency']
                     if 'email' in settings:
                         self.account_info['account_name'] = settings['email'] 
-                    # Set info_event se o saldo já tiver chegado (ou chegar agora)
                     if self.account_info.get('balance') is not None:
                         self.info_event.set()
                     
-                # 3. Saldos (balance)
                 if msg_type == "balance" and 'balance' in data:
                      balance_data = data.get('balance')
                      if balance_data:
                         self.account_info['balance'] = balance_data.get('balance', 0.0)
                         self.account_info['currency'] = balance_data.get('currency', self.account_info.get('currency', 'USD'))
-                        # Garante que o info_event é setado
                         if not self.info_event.is_set():
                             self.info_event.set()
                     
-                # 4. Ticks (Atualização da Estratégia)
+                # 4. Ticks (Atualização da Estratégia E BROADCAST para o Front-end)
                 if msg_type == "tick":
                     tick = data["tick"]
                     price = float(tick["quote"])
+                    
+                    # 1. Atualiza a história de ticks da Estratégia
                     update_ticks(price) 
+                    
+                    # 2. 🚀 Transmite o tick para todos os navegadores conectados
+                    await self.broadcast_tick(price) 
+                    
                     print(f"[Deriv] ✅ Tick recebido: {price}") 
                     
                 
@@ -139,7 +166,6 @@ class DerivClient:
                 self.authorized = False
                 break
             except asyncio.TimeoutError:
-                # Envia um 'ping' para manter a conexão viva
                 await self.ws.send(json.dumps({"ping": 1}))
                 continue
             except Exception as e:
@@ -153,6 +179,8 @@ class DerivClient:
             self.authorized = False
             self.auth_event.clear()
             self.info_event.clear()
+            # 🛑 CRÍTICO: Limpa todos os listeners de front-end
+            self.tick_listeners.clear() 
             
             if self.ws:
                 await self.ws.close()
