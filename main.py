@@ -2,13 +2,15 @@
 
 import asyncio
 import uuid
-from fastapi import FastAPI, Request, HTTPException
+# 🚨 CRÍTICO: Adicionar 'WebSocket' ao import
+from fastapi import FastAPI, Request, HTTPException, WebSocket
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import json
+import websockets # Necessário para tratar a exceção websockets.exceptions.ConnectionClosedOK
 
 # --- IMPORTS CORRETOS ---
 from strategy import generate_signal 
@@ -56,7 +58,7 @@ async def read_root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 # ----------------------------------------------------------------------
-# --- 2. ROTA CRÍTICA DE CONEXÃO E AUTORIZAÇÃO (API) ---
+# --- 2. ROTA DE CONEXÃO E AUTORIZAÇÃO (API) ---
 # ----------------------------------------------------------------------
 @app.post("/api/connect")
 async def connect_client(data: TokenRequest):
@@ -69,32 +71,32 @@ async def connect_client(data: TokenRequest):
     try:
         # 2. Inicia a nova conexão e autorização
         client = DerivClient(token=data.token)
-        # O método client.start() irá tentar a conexão, autorização e recolher dados de conta.
         await client.start()
         
         # 3. VERIFICAÇÃO CRÍTICA DO ESTADO FINAL
-        # Só retorna sucesso se a Deriv confirmou a autorização do token.
         if client.authorized:
-            # Inicia os loops dos bots que estão marcados como ativos
             if bots_manager:
+                # O start_all_bots inicia os loops de trade (bots_manager.py)
                 bots_manager.start_all_bots() 
                 
-            return JSONResponse({
+            # NOVO: Inclui o último preço conhecido (se houver) na resposta inicial
+            last_price = client.account_info.get('last_price', 'N/A')
+            
+            response_data = {
                 "ok": True, 
                 "message": "Conectado com sucesso", 
-                "account_info": client.account_info
-            })
+                "account_info": client.account_info,
+                "last_price": last_price
+            }
+            return JSONResponse(response_data)
         else:
             # Token inválido ou falha de autorização
             await client.stop()
-            # Retorna 401 (Não Autorizado) para o frontend
             raise HTTPException(status_code=401, detail="Falha na autorização. Verifique o token ou a conexão.")
 
     except HTTPException as e:
-        # Propaga o erro de autorização/conexão
         raise e
     except Exception as e:
-        # Captura erros inesperados (como timeout)
         if client: await client.stop()
         print(f"[ERRO] Erro grave na conexão: {e}")
         raise HTTPException(status_code=500, detail="Erro interno ou timeout ao tentar conectar ao Deriv.")
@@ -111,8 +113,6 @@ async def create_bot(data: BotCreationRequest):
     if bots_manager is None:
         raise HTTPException(status_code=500, detail="Bots Manager não inicializado.")
 
-    # Verifica se o símbolo existe no client.account_info antes de criar.
-    # Por enquanto, assumimos que R_100 é o único ativo
     if data.symbol != "R_100":
          raise HTTPException(status_code=400, detail="Apenas o ativo R_100 é suportado nesta versão.")
 
@@ -125,7 +125,6 @@ async def create_bot(data: BotCreationRequest):
         client=client
     )
     
-    # Inicia o loop imediatamente
     new_bot.start_loop()
 
     return JSONResponse({
@@ -182,7 +181,7 @@ async def bot_action(bot_id: str, action: Dict[str, str]):
         return JSONResponse({"ok": True, "message": f"Bot {bot.id[:4]} pausado."})
         
     elif action_type == "DELETE":
-        bot.state = BotState.INACTIVE # Marca como inativo
+        bot.state = BotState.INACTIVE 
         if bot.current_run_task:
             bot.current_run_task.cancel()
         del bots_manager.active_bots[bot_id]
@@ -193,12 +192,53 @@ async def bot_action(bot_id: str, action: Dict[str, str]):
 
 
 # ----------------------------------------------------------------------
-# --- 4. ROTA DA IA TRADER (Simulação) ---
+# --- 4. ROTA WEBSOCKET PARA ATUALIZAÇÃO DE TICKS (FRONT-END) ---
+# ----------------------------------------------------------------------
+
+@app.websocket("/ws/ticks")
+async def websocket_endpoint(websocket: WebSocket):
+    global client
+    
+    if not client or not client.authorized:
+        # Se não estiver autorizado, fecha a conexão WebSocket imediatamente
+        await websocket.close(code=1008, reason="Cliente Deriv não autorizado.")
+        return
+
+    # Cria uma queue exclusiva para este cliente WebSocket
+    queue = asyncio.Queue()
+    
+    # Adiciona a queue à lista de listeners do DerivClient
+    await client.subscribe_tick_listener(queue)
+    
+    await websocket.accept()
+    print(f"[WS] Novo cliente de ticks conectado: {websocket.client}")
+
+    try:
+        # Loop para enviar ticks do DerivClient para o Front-end
+        while True:
+            # Espera por uma mensagem na queue (tick)
+            message = await queue.get()
+            
+            # Envia o tick para o cliente WebSocket
+            await websocket.send_text(message) 
+            
+    except websockets.exceptions.ConnectionClosedOK:
+        # Conexão fechada pelo cliente (navegador)
+        print(f"[WS] Cliente de ticks desconectado normalmente: {websocket.client}")
+    except Exception as e:
+        print(f"[WS] Erro na conexão WebSocket do cliente: {e}")
+    finally:
+        # CRÍTICO: Remove a queue da lista de listeners ao desconectar
+        client.unsubscribe_tick_listener(queue)
+        print(f"[WS] Cliente de ticks desconectado. Listener removido.")
+
+
+# ----------------------------------------------------------------------
+# --- 5. ROTA DA IA TRADER (Simulação) ---
 # ----------------------------------------------------------------------
 
 @app.post("/ia/query")
 async def ia_query(data: IAQueryRequest):
-    """Simulação de resposta de IA para análise técnica."""
     query = data.query.lower()
 
     if "triângulo ascendente" in query:
