@@ -1,3 +1,5 @@
+# strategy.py
+
 import numpy as np
 import pandas as pd
 from typing import Dict, Any, Optional
@@ -17,7 +19,7 @@ def update_ticks(new_tick: float):
 def calculate_indicators() -> Dict[str, Any]:
     """
     Calcula o RSI e EMA usando os últimos ticks de preço.
-    Retorna None se não houver dados suficientes.
+    Retorna um dicionário vazio se não houver dados suficientes.
     """
     if len(ticks_history) < MAX_TICKS:
         return {} # Retorna dicionário vazio se não há dados suficientes
@@ -31,12 +33,13 @@ def calculate_indicators() -> Dict[str, Any]:
     gain = delta.where(delta > 0, 0)
     loss = -delta.where(delta < 0, 0)
 
+    # Cálculo da Média Exponencial Móvel para RSI (EWMA)
     avg_gain = gain.ewm(com=MAX_TICKS - 1, min_periods=MAX_TICKS).mean()
     avg_loss = loss.ewm(com=MAX_TICKS - 1, min_periods=MAX_TICKS).mean()
 
+    # Previne divisão por zero (ocorre em raras ocasiões)
     rs = avg_gain / avg_loss
-    # O valor final é o último calculado (o mais recente)
-    rsi = 100 - (100 / (1 + rs.iloc[-1])) if not pd.isna(rs.iloc[-1]) else None
+    rsi = 100 - (100 / (1 + rs.iloc[-1])) if not pd.isna(rs.iloc[-1]) and avg_loss.iloc[-1] != 0 else None
 
     # 2. EMA (Exponential Moving Average)
     # Período de 10 ticks para uma EMA rápida
@@ -50,13 +53,13 @@ def calculate_indicators() -> Dict[str, Any]:
 
 def generate_signal(symbol: str, tf: str) -> Optional[Dict[str, Any]]:
     """
-    Gera um sinal de trading com base nos indicadores calculados.
+    Gera um sinal de trading com base nos indicadores calculados (versão simplificada para teste).
     """
     indicators = calculate_indicators()
     
-    # Se o dicionário de indicadores estiver vazio, a estratégia não pode rodar.
-    if not indicators or indicators['rsi'] is None or indicators['ema'] is None:
-        # Retorna None. Isso fará com que o main.py retorne 404 (erro) ao frontend.
+    # Se o dicionário de indicadores estiver vazio ou incompleto, a estratégia não pode rodar.
+    if not indicators or indicators.get('rsi') is None or indicators.get('ema') is None:
+        # Retorna None.
         return None 
     
     rsi = indicators['rsi']
@@ -64,26 +67,26 @@ def generate_signal(symbol: str, tf: str) -> Optional[Dict[str, Any]]:
     price = indicators['last_price']
     
     action = None
+    probability = 0.85
     reason = f"RSI: {rsi:.2f}, Preço: {price:.4f}, EMA (10): {ema:.4f}"
     explanation = (
-        "O RSI (Índice de Força Relativa) é um indicador de Momentum. "
-        "Ele mede a velocidade e a mudança dos movimentos de preço. "
+        "Estratégia de Reversão Simplificada: Procura zonas extremas de Sobrecompra (>70) ou Sobrevenda (<30) no RSI."
     )
+
+    # 🚨 REGRA SIMPLIFICADA PARA TESTE DE EXECUÇÃO 🚨
+    # Apenas exige que o RSI atinja uma zona extrema para gerar um sinal de reversão.
     
-    # Regra da Estratégia
-    if rsi > 70 and price > ema:
-        # RSI acima de 70 (sobrecompra) E preço acima da EMA (tendência de alta forte)
-        # Sinais de reversão podem estar próximos. 
+    # 1. Sinal de VENDA (PUT)
+    if rsi > 70:
+        # RSI em sobrecompra (>70): Assinala potencial de reversão para baixo.
         action = "PUT (VENDA)"
-        reason += ". RSI está em zona de sobrecompra e o preço está acima da EMA."
-        explanation += "Atingiu uma zona extrema e pode reverter para baixo."
+        reason += ". RSI em sobrecompra (>70)."
         
-    elif rsi < 30 and price < ema:
-        # RSI abaixo de 30 (sobrevenda) E preço abaixo da EMA (tendência de baixa forte)
-        # Sinais de reversão podem estar próximos.
+    # 2. Sinal de COMPRA (CALL)
+    elif rsi < 30:
+        # RSI em sobrevenda (<30): Assinala potencial de reversão para cima.
         action = "CALL (COMPRA)"
-        reason += ". RSI está em zona de sobrevenda e o preço está abaixo da EMA."
-        explanation += "Atingiu uma zona extrema e pode reverter para cima."
+        reason += ". RSI em sobrevenda (<30)."
         
     # Se nenhuma regra de extremo for acionada, não retorna sinal.
     if action is None:
@@ -91,7 +94,7 @@ def generate_signal(symbol: str, tf: str) -> Optional[Dict[str, Any]]:
 
     return {
         "action": action,
-        "probability": 0.85, # Valor fixo, mas poderia ser dinâmico
+        "probability": probability,
         "symbol": symbol,
         "tf": tf,
         "reason": reason,
