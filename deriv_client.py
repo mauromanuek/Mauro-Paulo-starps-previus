@@ -4,132 +4,139 @@ import asyncio
 import websockets
 import json
 from datetime import datetime
-from strategy import update_ticks 
+# Importa as funções de cálculo da estratégia
+from strategy import update_ticks, calculate_indicators, generate_signal 
 
 
 class DerivClient:
     
-    # SEU APP ID INSERIDO AQUI
-    APP_ID = "114910" 
-
-    def __init__(self, token: str):
-        self.token = token
+    # APP_ID agora é passado no construtor
+    def __init__(self, app_id: str):
+        self.app_id = app_id
         self.ws = None
         self.connected = False
         self.authorized = False
-        self.account_info = {"balance": 0.0, "account_type": "demo"} 
+        self.account_info = {"balance": "N/A", "account_type": "N/A"} 
+        self.listener_task = None 
+        self.token = None # Não inicializa com o token
 
-    async def start(self):
-        """Inicia a conexão completa com a Deriv."""
+    async def connect(self, token: str):
+        """
+        Conecta e autoriza. Chamado quando o token é submetido.
+        """
+        self.token = token
+        
+        if self.ws and self.connected:
+            await self.stop()
+
         try:
             self.ws = await websockets.connect(
-                f"wss://ws.derivws.com/websockets/v3?app_id={self.APP_ID}"
+                f"wss://ws.derivws.com/websockets/v3?app_id={self.app_id}"
             )
             print("[Deriv] Conexão WebSocket aberta.")
             self.connected = True
+            
             await self.authorize()
-
+            
             if self.authorized:
                 print("[Deriv] Token autorizado com sucesso. O bot está ONLINE.")
                 
-                await self.get_account_info() 
-                print("[Deriv] DEBUG: Informações da conta processadas.") 
+                await self.get_account_info()
                 
-                # --- 🟢 CORREÇÃO CRÍTICA AQUI: MUDANÇA DE V100 PARA R_100 🟢 ---
-                await self.subscribe_to_ticks("R_100") 
+                # Assinaturas essenciais
+                await self.subscribe_to_ticks("R_100") # ✅ Mantido o R_100
+                await self.subscribe_to_balance()
                 
-                print("[Deriv] DEBUG: Tentando iniciar o listener de ticks...")
-                asyncio.create_task(self.listen())
-                print("[Deriv] DEBUG: Tarefa de listener iniciada. Aguardando ticks...")
-
-            else:
-                print("[Deriv] Erro: token NÃO autorizado. Verifique se o token está correto e ativo.")
-                self.connected = False
-        except Exception as e:
-            print("[ERRO] Falha ao conectar WebSocket (URL/Rede):", e)
-            self.connected = False
+                # Inicia o listener de forma assíncrona
+                self.listener_task = asyncio.create_task(self.listen())
             
-    async def subscribe_to_ticks(self, symbol: str):
-        """Subscreve explicitamente aos ticks de um ativo."""
-        if not self.authorized or not self.connected: return
-        try:
-            # Enviando a mensagem de subscrição para o ativo corrigido
-            await self.ws.send(json.dumps({"ticks": symbol, "subscribe": 1}))
-            print(f"[Deriv] Subscrição enviada para {symbol}.")
         except Exception as e:
-            print(f"[ERRO] Falha ao subscrever ticks: {e}")
+            print(f"[ERRO DerivClient] Falha na conexão ou autorização: {e}")
+            self.connected = False
+            self.authorized = False
+            raise e # Lança o erro para o main.py
 
 
     async def authorize(self):
-        """Envia token e aguarda resposta."""
-        try:
-            await self.ws.send(json.dumps({"authorize": self.token}))
-            resp = await self.ws.recv()
-            data = json.loads(resp)
-            if data.get("msg_type") == "authorize" and not data.get("error"):
-                self.authorized = True
-            elif data.get("error"):
-                print("[Deriv] Falha na autorização:", data["error"])
-        except Exception as e:
-            print("[ERRO] authorize:", e)
+        """Envia o token para autorização."""
+        auth_request = json.dumps({"authorize": self.token})
+        await self.ws.send(auth_request)
+        
+        response = await asyncio.wait_for(self.ws.recv(), timeout=5)
+        data = json.loads(response)
+        
+        if data.get("msg_type") == "authorize" and data["authorize"].get("loginid"):
+            self.authorized = True
+            self.account_info = {
+                "balance": data["authorize"].get("balance"),
+                "account_type": data["authorize"].get("account_type"),
+            }
+        else:
+            self.authorized = False
+            print(f"[Deriv] Falha na autorização: {data.get('error')}")
+
+
+    async def subscribe_to_ticks(self, symbol: str):
+        """Inicia a subscrição de ticks."""
+        print(f"[Deriv] Subscrevendo ticks para: {symbol}")
+        await self.ws.send(json.dumps({"ticks": symbol, "subscribe": 1}))
+
+    async def subscribe_to_balance(self):
+        """Inicia a subscrição do saldo."""
+        print("[Deriv] Subscrevendo saldo.")
+        await self.ws.send(json.dumps({"balance": 1, "subscribe": 1}))
 
     async def get_account_info(self):
-        """Busca o saldo e tipo de conta."""
-        if not self.authorized or not self.connected: return
+        """Obtém as informações da conta (após autorização)."""
+        # A informação da conta já é obtida na autorização.
+        pass
 
-        try:
-            await self.ws.send(json.dumps({"balance": 1}))
-            resp_balance = await self.ws.recv()
-            balance_data = json.loads(resp_balance)
+    def calculate_signal(self, symbol: str, tf: int):
+        """
+        Calcula o sinal usando a estratégia. 
+        Chamado pela rota /signal no main.py.
+        """
+        indicators = calculate_indicators()
+        
+        if not indicators:
+            return {"action": "AGUARDANDO", "indicators": {}}
 
-            if balance_data.get('balance'):
-                balance_info = balance_data['balance']
-                self.account_info['balance'] = balance_info.get('balance', 0.0)
-                
-                login_id = balance_info.get('loginid', '')
-                self.account_info['account_type'] = "demo" if "VRTC" in login_id else "real"
-                
-                print(f"[Deriv] Saldo Atualizado: {self.account_info['balance']} ({self.account_info['account_type']})")
-
-        except Exception as e:
-            print(f"[ERRO] Falha ao buscar informações da conta: {e}")
-
+        signal_data = generate_signal(indicators)
+        
+        if signal_data is None:
+            return {"action": "AGUARDANDO", "indicators": indicators}
+            
+        signal_data["indicators"] = indicators
+        return signal_data
+        
+        
     async def listen(self):
-        """Loop de mensagens e envio de ticks para a estratégia."""
-        print("[Deriv] Iniciando listener de ticks…")
+        """Loop de escuta para receber dados do WebSocket."""
         while self.connected:
             try:
-                # O timeout ajuda a prevenir travamento do listener
-                msg = await asyncio.wait_for(self.ws.recv(), timeout=10) 
-                data = json.loads(msg)
+                response = await asyncio.wait_for(self.ws.recv(), timeout=25) 
+                data = json.loads(response)
 
                 if data.get("error"):
-                    # O erro de InvalidSymbol que você viu antes
-                    print("[ERRO FATAL DERIV]:", data["error"])
-                    # Se receber um erro, tenta continuar o loop (para evitar queda total)
+                    print(f"[Deriv ERRO] {data['error'].get('message')}")
                     continue 
                 
-                # Processamento de Ticks
                 if data.get("msg_type") == "tick":
                     tick = data["tick"]
                     price = float(tick["quote"])
                     update_ticks(price) 
                     
-                    print(f"[Deriv] ✅ Tick recebido: {price}") 
-                    
-                # Processamento de Saldos (para atualização em tempo real, se necessário)
-                if data.get("msg_type") == "balance":
-                     if data.get('balance'):
-                        self.account_info['balance'] = data['balance'].get('balance', 0.0)
+                if data.get("msg_type") == "balance" and data.get('balance'):
+                    self.account_info['balance'] = data['balance'].get('balance')
 
             except websockets.ConnectionClosed as e:
-                print(f"[Deriv] Conexão fechada. Motivo: {e}. Desligando cliente.")
+                print(f"[Deriv] Conexão fechada. Motivo: {e}.")
                 self.connected = False
+                self.authorized = False
                 break
             except asyncio.TimeoutError:
-                # Envia um 'ping' para manter a conexão viva
-                await self.ws.send(json.dumps({"ping": 1}))
-                print("[Deriv] Ping enviado para manter conexão...") 
+                if self.connected:
+                    await self.ws.send(json.dumps({"ping": 1}))
                 continue
             except Exception as e:
                 print(f"[ERRO GERAL] no listener: {e}")
@@ -137,12 +144,15 @@ class DerivClient:
 
     async def stop(self):
         """Fecha a conexão."""
+        # Lógica para parar a tarefa de listen
         try:
+            if self.listener_task:
+                self.listener_task.cancel()
             self.connected = False
             self.authorized = False
             if self.ws:
                 await self.ws.close()
-        except:
-            pass
-
+        except Exception as e:
+            print(f"[ERRO ao parar DerivClient]: {e}")
         print("[Deriv] Cliente parado.")
+                
