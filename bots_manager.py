@@ -3,7 +3,6 @@
 import asyncio
 import uuid
 from enum import Enum
-# --- 🚨 CORREÇÃO AQUI: ADICIONADO 'List' ao import de typing 🚨 ---
 from typing import Dict, Optional, Any, List 
 import time
 from strategy import generate_signal # Requer que strategy.py esteja correto
@@ -25,8 +24,8 @@ class TradingBot:
         self.stop_loss = stop_loss
         self.take_profit = take_profit
         self.client = client
-        self._state = BotState.ACTIVE
-        self.current_run_task = None
+        self._state = BotState.INACTIVE # Inicia INACTIVE, ativado após a conexão
+        self.current_run_task: Optional[asyncio.Task] = None
 
     @property
     def is_active(self) -> bool:
@@ -44,52 +43,74 @@ class TradingBot:
         self._state = new_state
         print(f"[Bot {self.id[:4]}] Estado alterado para {new_state.value}")
 
-    def to_dict(self) -> Dict[str, Any]:
-        """Retorna um dicionário com informações básicas do bot."""
-        return {
-            "id": self.id,
-            "name": self.name,
-            "symbol": self.symbol,
-            "tf": self.tf,
-            "stop_loss": self.stop_loss,
-            "take_profit": self.take_profit,
-            "is_active": self.is_active,
-            "status": self.state.value
-        }
+    # --- 🟢 MÉTODO CRÍTICO: INICIAR EXECUÇÃO 🟢 ---
+    def start_loop(self):
+        """Inicia a tarefa assíncrona principal do bot (run_bot_loop)."""
+        # Verifica se já existe uma task a correr
+        if self.current_run_task is None or self.current_run_task.done():
+            self._state = BotState.ACTIVE
+            # CRÍTICO: Cria a task e a coloca para rodar no loop de eventos
+            self.current_run_task = asyncio.create_task(self.run_bot_loop())
+            print(f"[Bot {self.id[:4]}] 🟢 Loop de execução iniciado.")
+            return True
+        else:
+            print(f"[Bot {self.id[:4]}] O loop já está ativo.")
+            return False
 
-    async def run_bot_loop(self):
-        """Loop principal de execução do bot (simulação)."""
+    # --- 🟢 MÉTODO CRÍTICO: PARAR EXECUÇÃO 🟢 ---
+    def stop_loop(self):
+        """Cancela a tarefa assíncrona do bot."""
         if self.current_run_task and not self.current_run_task.done():
-             print(f"[Bot {self.id[:4]}] Loop já está rodando.")
-             return
-
-        print(f"[Bot {self.id[:4]}] Loop iniciado para {self.symbol}.")
+            self.current_run_task.cancel()
+            self._state = BotState.INACTIVE
+            print(f"[Bot {self.id[:4]}] 🔴 Loop de execução parado.")
+            return True
+        return False
         
-        # Cria a tarefa e armazena
-        self.current_run_task = asyncio.current_task()
-
-        while self.is_active:
+    async def run_bot_loop(self):
+        """O loop principal de trading que consulta a estratégia e executa ordens."""
+        
+        # O loop deve rodar enquanto o cliente Deriv estiver conectado e o bot ativo
+        while self.is_active and self.client and self.client.connected:
             try:
-                # 1. Obter sinal da estratégia (a mesma lógica do /signal)
-                signal = generate_signal(self.symbol, self.tf)
+                # 1. Obter os indicadores mais recentes (estão em memória no deriv_client)
+                indicators = self.client.get_current_indicators() 
+                
+                # Só processa se houver dados suficientes
+                if not indicators:
+                    await asyncio.sleep(1)
+                    continue
+
+                # 2. Gerar o sinal (CALL, PUT ou None)
+                signal = generate_signal(indicators)
+                
+                # Parâmetros de trading (ajuste-os conforme sua estratégia)
+                duration = 5 # Duração da ordem em ticks
+                amount = 1.0 # Valor da aposta em USD
 
                 if signal:
-                    print(f"[Bot {self.id[:4]}] Sinal encontrado: {signal['action']} em {self.symbol}")
+                    action = signal['action'] # Ex: 'CALL (COMPRA)' ou 'PUT (VENDA)'
                     
-                    # 2. Simulação de execução de ordem (substituir por API real)
-                    action = signal['action'].split(' ')[0] # CALL ou PUT
-                    
-                    print(f"[Bot {self.id[:4]}] -> EXECUTANDO ORDEM: {action}...")
-                    
-                    # Aqui você chamaria a API da Deriv para executar a ordem real
-                    # Ex: await self.client.buy(symbol, duration, amount, action)
-                    
-                    # Atrasar o loop para esperar pelo próximo sinal
-                    await asyncio.sleep(60) # Espera 1 minuto após um sinal (simulação)
+                    # 3. EXECUTAR AÇÃO:
+                    if action.startswith("CALL"):
+                        print(f"[{self.name}] 🟢 SINAL: COMPRA. Executando ordem...")
+                        # ⚠️ ATIVE A LINHA ABAIXO APÓS TESTAR COM DEMO ⚠️
+                        # await self.client.buy(self.symbol, duration, amount, "BUY") 
+                        
+                    elif action.startswith("PUT"):
+                        print(f"[{self.name}] 🔴 SINAL: VENDA. Executando ordem...")
+                        # ⚠️ ATIVE A LINHA ABAIXO APÓS TESTAR COM DEMO ⚠️
+                        # await self.client.buy(self.symbol, duration, amount, "SELL") 
+                        
+                    # Atrasar o loop para esperar pelo próximo sinal (evita ordens duplicadas imediatas)
+                    await asyncio.sleep(60) 
                 else:
                     # Se não houver sinal, espera um pouco e tenta novamente
                     await asyncio.sleep(5) 
 
+            except asyncio.CancelledError:
+                # A tarefa foi cancelada via stop_loop()
+                break
             except Exception as e:
                 print(f"[ERRO Bot {self.id[:4]}] Erro no loop: {e}")
                 await asyncio.sleep(10) # Espera mais em caso de erro
@@ -115,6 +136,10 @@ class BotsManager:
         return self.active_bots.get(bot_id)
 
     def get_all_bots(self) -> List[TradingBot]:
-        """Retorna a lista de todos os bots ativos e inativos."""
+        """Retorna todos os bots ativos."""
         return list(self.active_bots.values())
-              
+
+    def stop_all_bots(self):
+        """Para o loop de execução de todos os bots."""
+        for bot in self.active_bots.values():
+            bot.stop_loop()
