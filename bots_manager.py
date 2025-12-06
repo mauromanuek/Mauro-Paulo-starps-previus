@@ -6,7 +6,7 @@ from enum import Enum
 from typing import Dict, Optional, Any, List 
 import time
 from strategy import generate_signal, calculate_indicators # Requer que strategy.py esteja correto
-
+from deriv_client import DerivClient
 class BotState(Enum):
     """Estados possíveis para um bot."""
     ACTIVE = "ACTIVE"
