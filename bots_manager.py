@@ -1,75 +1,89 @@
-# bots_manager.py
+# bots_manager.py - VERSÃO FINAL ESTÁVEL E ROBUSTA
 
 import asyncio
 import uuid
-import httpx 
-import time
-from typing import Dict, Any, Optional, List
+import httpx # 🟢 ESSENCIAL PARA COMUNICAÇÃO INTERNA
+from enum import Enum
+from typing import Dict, Optional, Any, List 
 from deriv_client import DerivClient # Importa para tipagem
 
-# URL base do servidor (usamos localhost na porta do Uvicorn para chamada interna no Render)
+# 🟢 CORREÇÃO CRÍTICA: URL para ligar para a rota /signal do próprio servidor
 SIGNAL_URL = "http://localhost:10000/signal" 
 
-# --- Estrutura de Bot ---
-class BotState:
+class BotState(Enum):
+    ACTIVE = "ACTIVE"
+    INACTIVE = "INACTIVE"
+    PAUSED = "PAUSED"
+
+class TradingBot:
     
-    def __init__(self, name: str, symbol: str, timeframe: str, sl: float, tp: float, client: DerivClient):
+    def __init__(self, name: str, symbol: str, tf: str, stop_loss: float, take_profit: float, client: DerivClient):
         self.id = str(uuid.uuid4())
         self.name = name
         self.symbol = symbol
-        self.timeframe = timeframe
-        self.sl = sl
-        self.tp = tp
-        self.is_active = False
-        self.task: Optional[asyncio.Task] = None
-        self.client = client 
+        self.tf = tf
+        self.stop_loss = stop_loss
+        self.take_profit = take_profit
+        self.client = client
+        self._state = BotState.ACTIVE
+        self.current_run_task: Optional[asyncio.Task] = None
 
-    def to_dict(self):
-        """Serializa o estado do bot para o frontend."""
+    @property
+    def is_active(self) -> bool:
+        return self._state == BotState.ACTIVE
+
+    @property
+    def state(self) -> BotState:
+        return self._state
+
+    @state.setter
+    def state(self, new_state: BotState):
+        self._state = new_state
+        print(f"[Bot {self.id[:4]}] Estado alterado para {new_state.value}")
+        if new_state == BotState.INACTIVE and self.current_run_task:
+            self.current_run_task.cancel()
+            self.current_run_task = None
+
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "id": self.id,
             "name": self.name,
             "symbol": self.symbol,
-            "timeframe": self.timeframe,
-            "sl": self.sl,
-            "tp": self.tp,
+            "tf": self.tf,
+            "stop_loss": self.stop_loss,
+            "take_profit": self.take_profit,
             "is_active": self.is_active,
+            "status": self.state.value
         }
 
     async def get_signal_from_api(self) -> Optional[Dict[str, Any]]:
-        """CORREÇÃO: Chama a rota /signal do próprio servidor via HTTP (httpx)."""
-        async with httpx.AsyncClient() as client:
+        """Chama a rota /signal do próprio servidor via HTTP."""
+        async with httpx.AsyncClient(timeout=10) as client:
             try:
                 # Remove 'm' se estiver no timeframe para usar como int
-                tf_int = self.timeframe.replace('m', '')
+                tf_int = self.tf.replace('m', '')
                 params = {"symbol": self.symbol, "tf": tf_int}
                 
-                response = await client.get(
-                    SIGNAL_URL,
-                    params=params,
-                    timeout=10
-                )
+                response = await client.get(SIGNAL_URL, params=params)
 
                 if response.status_code == 200:
                     return response.json()
                 
                 elif response.status_code == 404:
-                    return None # Sinal não pronto
+                    return None # Sinal não pronto (dados insuficientes)
                 
                 else:
                     print(f"[Bot {self.id[:4]}] ERRO HTTP! Status: {response.status_code}. Mensagem: {response.text}")
                     return None
 
-            except httpx.ConnectError:
-                print(f"[Bot {self.id[:4]}] ERRO HTTP: Falha de conexão a {SIGNAL_URL}")
-                return None
-            
             except Exception as e:
-                print(f"[Bot {self.id[:4]}] ERRO INESPERADO: {e}")
+                print(f"[Bot {self.id[:4]}] ERRO INESPERADO ao ligar para /signal: {e}")
                 return None
 
     async def run_bot_loop(self):
-        """Loop principal de execução do bot."""
+        
+        self.current_run_task = asyncio.current_task()
+
         while self.is_active:
             try:
                 # 1. Obter sinal da API (via HTTP)
@@ -78,61 +92,61 @@ class BotState:
                 if signal and signal.get('action') and signal['action'] != 'AGUARDANDO':
                     action = signal['action'].split(' ')[0]
                     
-                    print(f"[Bot {self.id[:4]}] -> SINAL {action} em {self.symbol}!")
+                    print(f"[Bot {self.id[:4]}] -> SINAL RECEBIDO: {action} em {self.symbol}!")
                     
-                    # ⚠️ Aqui você deve colocar a lógica real de execução de ordem da Deriv
+                    # 2. Simulação de execução de ordem (substituir por API real da Deriv)
+                    print(f"[Bot {self.id[:4]}] -> EXECUTANDO ORDEM: {action}")
                     
-                    # Espera 1 minuto após a execução
                     await asyncio.sleep(60) 
                 else:
-                    # Espera 5 segundos para o próximo cálculo
                     await asyncio.sleep(5) 
 
             except asyncio.CancelledError:
                 print(f"[Bot {self.id[:4]}] Loop cancelado.")
                 break
             except Exception as e:
-                print(f"[Bot {self.id[:4]}] Erro fatal no loop: {e}")
+                print(f"[ERRO Bot {self.id[:4]}] Erro fatal no loop: {e}")
                 await asyncio.sleep(10)
 
 
 class BotsManager:
     """Gerencia todas as instâncias de bots de trading."""
-    
-    def __init__(self):
-        self.bots: Dict[str, BotState] = {}
 
-    def create_bot(self, name: str, symbol: str, timeframe: str, sl: float, tp: float, client: DerivClient) -> BotState:
+    def __init__(self):
+        self.active_bots: Dict[str, TradingBot] = {}
+
+    def create_bot(self, name: str, symbol: str, tf: str, stop_loss: float, take_profit: float, client: DerivClient) -> TradingBot:
         """Cria e registra um novo bot."""
-        bot = BotState(name, symbol, timeframe, sl, tp, client)
-        self.bots[bot.id] = bot
+        bot = TradingBot(name, symbol, tf, stop_loss, take_profit, client)
+        self.active_bots[bot.id] = bot
         print(f"[Manager] Novo bot criado: {bot.id}")
         return bot
 
-    def get_all_bots(self) -> List[BotState]:
-        """Retorna uma lista de todos os BotState."""
-        return list(self.bots.values())
+    def get_bot(self, bot_id: str) -> Optional[TradingBot]:
+        return self.active_bots.get(bot_id)
+
+    def get_all_bots(self) -> List[TradingBot]:
+        return list(self.active_bots.values())
 
     def activate_bot(self, bot_id: str):
-        bot = self.bots.get(bot_id)
+        bot = self.active_bots.get(bot_id)
         if not bot or bot.is_active:
             return False
 
-        bot.is_active = True
-        bot.task = asyncio.create_task(bot.run_bot_loop())
+        bot.state = BotState.ACTIVE
+        bot.current_run_task = asyncio.create_task(bot.run_bot_loop())
         print(f"[Manager] Bot ATIVADO: {bot.name}")
         return True
 
     def deactivate_bot(self, bot_id: str):
-        bot = self.bots.get(bot_id)
+        bot = self.active_bots.get(bot_id)
         if not bot or not bot.is_active:
             return False
 
-        bot.is_active = False
-        if bot.task:
-            bot.task.cancel()
+        bot.state = BotState.INACTIVE
         print(f"[Manager] Bot DESATIVADO: {bot.name}")
         return True
 
+# Exporta a instância única do manager
 manager = BotsManager()
-        
+    
