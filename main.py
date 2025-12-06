@@ -2,7 +2,7 @@
 
 import asyncio
 import uuid
-from fastapi import FastAPI, Request, HTTPException, JSONResponse, Query # Query é essencial para o login funcionar
+from fastapi import FastAPI, Request, HTTPException, Query # Query é essencial para o login funcionar
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
