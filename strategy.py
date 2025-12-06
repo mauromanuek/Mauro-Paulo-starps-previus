@@ -37,7 +37,7 @@ def calculate_indicators() -> Dict[str, Any]:
     avg_gain = gain.ewm(com=MAX_TICKS - 1, min_periods=MAX_TICKS).mean()
     avg_loss = loss.ewm(com=MAX_TICKS - 1, min_periods=MAX_TICKS).mean()
 
-    # Previne divisão por zero (ocorre em raras ocasiões)
+    # Previne divisão por zero 
     rs = avg_gain / avg_loss
     rsi = 100 - (100 / (1 + rs.iloc[-1])) if not pd.isna(rs.iloc[-1]) and avg_loss.iloc[-1] != 0 else None
 
@@ -59,12 +59,11 @@ def generate_signal(symbol: str, tf: str) -> Optional[Dict[str, Any]]:
     
     # Se o dicionário de indicadores estiver vazio ou incompleto, a estratégia não pode rodar.
     if not indicators or indicators.get('rsi') is None or indicators.get('ema') is None:
-        # Retorna None.
         return None 
     
     rsi = indicators['rsi']
-    ema = indicators['ema']
     price = indicators['last_price']
+    ema = indicators['ema']
     
     action = None
     probability = 0.85
@@ -74,21 +73,17 @@ def generate_signal(symbol: str, tf: str) -> Optional[Dict[str, Any]]:
     )
 
     # 🚨 REGRA SIMPLIFICADA PARA TESTE DE EXECUÇÃO 🚨
-    # Apenas exige que o RSI atinja uma zona extrema para gerar um sinal de reversão.
     
     # 1. Sinal de VENDA (PUT)
     if rsi > 70:
-        # RSI em sobrecompra (>70): Assinala potencial de reversão para baixo.
         action = "PUT (VENDA)"
         reason += ". RSI em sobrecompra (>70)."
         
     # 2. Sinal de COMPRA (CALL)
     elif rsi < 30:
-        # RSI em sobrevenda (<30): Assinala potencial de reversão para cima.
         action = "CALL (COMPRA)"
         reason += ". RSI em sobrevenda (<30)."
         
-    # Se nenhuma regra de extremo for acionada, não retorna sinal.
     if action is None:
         return None 
 
