@@ -61,7 +61,8 @@ async def read_root(request: Request):
         "is_authorized": client is not None and client.authorized,
         "balance": client.account_info["balance"] if client else 0.0,
         "account_type": client.account_info["account_type"] if client else "demo",
-        "bots": bots_manager.get_all_bots() if bots_manager else []
+        # 🟢 CORREÇÃO DA LINHA 64: De get_all_bots() para get_all_bots_info()
+        "bots": bots_manager.get_all_bots_info() if bots_manager else [] 
     }
     
     return templates.TemplateResponse("index.html", context)
