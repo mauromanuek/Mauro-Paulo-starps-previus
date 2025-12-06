@@ -1,361 +1,132 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RobotMagic Pro - Trading Bot</title>
-    <link rel="stylesheet" href="/static/style.css">
-</head>
-<body>
+# main.py
 
-    <div id="app-container">
+import asyncio
+import uuid
+from fastapi import FastAPI, Request, HTTPException, JSONResponse, Query # <-- ADICIONADO 'Query' E 'JSONResponse'
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
+from typing import Optional, Dict, Any, List
+import json
 
-        <div id="login-view" class="view active">
-            <div class="login-box">
-                <h1>RobotMagic Pro</h1>
-                <p>Análise Profissional (Deriv, Binary, Binance Style)</p>
-                <div class="input-group">
-                    <input type="password" id="tokenInput" placeholder="Insira seu Token API da Deriv">
-                    <button id="connectBtn" onclick="setTokenAndConnect()">CONECTAR</button>
-                </div>
-                <p id="auth-status" class="status-message"></p>
-            </div>
-        </div>
+# --- IMPORTS CORRETOS ---
+from strategy import generate_signal 
+from deriv_client import DerivClient
+from bots_manager import BotsManager, BotState 
 
-        <div id="dashboard-view" class="view">
-            
-            <header>
-                <div class="logo">RM Pro</div>
-                <nav>
-                    <span id="account-type" class="badge demo">DEMO</span>
-                    <span id="account-balance" class="badge">Saldo: $0.00</span>
-                    <span id="current-asset" class="badge asset">Ativo: V100 Index</span>
-                    <button id="menu-btn" onclick="toggleMenu()">☰ Menu</button>
-                </nav>
-            </header>
+# Variáveis globais
+app = FastAPI()
+client: Optional[DerivClient] = None
+bots_manager: Optional[BotsManager] = None
 
-            <main>
-                <div id="side-menu" class="side-menu">
-                    <a href="#" onclick="showView('analysis-view')">⚙️ Página Inicial (Análise)</a>
-                    <a href="#" onclick="showView('bots-view')">🤖 Bots Automáticos</a>
-                    <a href="#" onclick="showView('ia-view')">💡 IA Trader</a>
-                    <a href="#" onclick="logout()">🔓 Sair</a>
-                </div>
+# Montar pasta static para CSS e JS
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
-                <section id="analysis-view" class="page-content active">
-                    <h2>Análise Técnica em Tempo Real</h2>
-                    
-                    <div class="controls-bar">
-                        <select id="symbolSel">
-                            <option value="R_100">R_100 Index</option>
-                            <option value="V100">Volatility 100 Index</option> 
-                            <option value="EURUSD">EUR/USD</option>
-                        </select>
-                        <select id="tfSel">
-                            <option value="5">TF 5 Minutos</option>
-                            <option value="15">TF 15 Minutos</option>
-                        </select>
-                        
-                        <button id="startAnalysisBtn" onclick="initiateAnalysis()">INICIAR ANÁLISE</button>
-                        <button id="stopAnalysisBtn" class="hidden" onclick="stopAnalysis()">PARAR ANÁLISE</button>
-                        
-                        <div id="processing-status" class="processing-bar hidden">
-                            <span id="processing-text">Analisando Gráfico...</span>
-                            <div class="progress"></div>
-                        </div>
-                    </div>
+# Configuração de templates
+templates = Jinja2Templates(directory=".")
 
-                    <div id="results-container">
-                        <div id="chart-placeholder" class="chart-box">
-                            <p>Visualização do Gráfico (Placeholder para dados de ticks)</p>
-                            <p class="muted">Aguardando Iniciar Análise...</p>
-                        </div>
-                        
-                        <div id="signal-display" class="signal-box hidden">
-                            <h3 id="lastSignal">...</h3>
-                            <div id="signals" class="signal-details"></div>
-                            <div class="analysis-explanation">
-                                <strong>Porquê da Decisão:</strong>
-                                <p id="analysis"></p>
-                            </div>
-                        </div>
-                    </div>
-                </section>
+# --- Models Pydantic (para validação de dados) ---
+# A classe TokenRequest já não é necessária, mas mantemos as outras.
+class BotCreationRequest(BaseModel):
+    name: str
+    symbol: str
+    tf: str
+    stop_loss: float
+    take_profit: float
 
-                <section id="bots-view" class="page-content hidden">
-                    <h2>🤖 Bots Automáticos (Gestão)</h2>
-                    
-                    <div class="controls-bar bot-controls">
-                        <input type="text" id="botName" placeholder="Nome do Bot (Ex: Scalper V100)">
-                        <input type="number" id="stopLoss" placeholder="Stop Loss ($)" step="0.01">
-                        <input type="number" id="takeProfit" placeholder="Take Profit ($)" step="0.01">
-                        <button onclick="createBot()">Criar e Iniciar Bot</button>
-                    </div>
-                    
-                    <div class="bots-list">
-                        <h3>Bots Ativos/Inativos</h3>
-                        <table id="activeBotsTable">
-                            <thead>
-                                <tr>
-                                    <th>ID</th>
-                                    <th>Nome</th>
-                                    <th>SL/TP</th>
-                                    <th>Status</th>
-                                    <th>Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr><td colspan="5" class="muted">Nenhum bot ativo no momento.</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                    
-                    <div id="bot-log-display" class="log-display">
-                    </div>
-                </section>
+class IAQueryRequest(BaseModel):
+    query: str
 
-                <section id="ia-view" class="page-content hidden">
-                    <h2>💡 IA Trader (Consulta)</h2>
-                    <p class="muted">Pergunte sobre Análise Técnica, regras dos livros ou o mercado. (Ex: O que é um triângulo ascendente?)</p>
-                    
-                    <div class="ia-input-group">
-                        <input type="text" id="iaQuery" placeholder="Digite sua pergunta sobre Trading...">
-                        <button onclick="sendQuery()">Perguntar à IA</button>
-                    </div>
-                    
-                    <div id="iaResponse" class="ia-response-box">
-                        <strong>Resposta da IA:</strong>
-                        <p class="muted">Aguardando sua pergunta...</p>
-                    </div>
-                </section>
-                
-            </main>
-            
-            <aside>
-                <h3>Histórico de Sinais</h3>
-                <pre id="history"></pre>
-            </aside>
-        </div>
 
-    </div> <script>
-        // O BLOCO JAVASCRIPT COMPLETO E FINAL COMEÇA AQUI
-        
-        // VARIÁVEIS DE ESTADO
-        const SERVER = "";
-        let isConnected = false;
-        let isAnalysisRunning = false;
-        let analysisTimeout = null;
-        
-        // --------------------------------------
-        // GESTÃO DE VIEWS
-        // --------------------------------------
+# --- EVENTOS DE INICIALIZAÇÃO ---
+@app.on_event("startup")
+async def startup_event():
+    """Função executada ao iniciar o servidor."""
+    global bots_manager
+    bots_manager = BotsManager()
 
-        function showView(viewId) {
-            document.querySelectorAll('.page-content').forEach(view => {
-                view.classList.add('hidden');
-                if (view.id === viewId) {
-                    view.classList.remove('hidden');
-                }
-            });
-            if (window.innerWidth <= 768) {
-                document.getElementById('side-menu').classList.remove('open');
-            }
-            if (viewId === 'bots-view') {
-                fetchBotsList();
-            }
-        }
+# --- 1. ROTA PRINCIPAL (INDEX) ---
+@app.get("/", response_class=HTMLResponse)
+async def read_root(request: Request):
+    """Carrega a página principal do aplicativo."""
+    return templates.TemplateResponse("index.html", {"request": request}) 
 
-        function toggleMenu() {
-            document.getElementById('side-menu').classList.toggle('open');
-        }
 
-        function log(message) {
-            console.log(message);
-        }
-        
-        // --------------------------------------
-        // AUTENTICAÇÃO E STATUS (FUNÇÃO CRÍTICA CORRIGIDA)
-        // --------------------------------------
+# --- 2. ROTA CRÍTICA: SET TOKEN (CORRIGIDA) ---
+@app.post("/set_token")
+async def set_token_and_start_client(token: str = Query(..., description="O Token API da Deriv")):
+    """
+    Recebe o token API como um parâmetro de query (Query Parameter) e inicia o cliente Deriv.
+    CORREÇÃO CRÍTICA PARA ELIMINAR ERRO 422 NO RENDER.
+    """
+    global client
+    
+    if client and client.connected:
+        raise HTTPException(status_code=400, detail="O cliente já está conectado. Desconecte primeiro.")
 
-        async function setTokenAndConnect() {
-            const token = document.getElementById("tokenInput").value.trim();
-            if (!token) {
-                document.getElementById("auth-status").innerText = "ERRO: O Token API não pode estar vazio.";
-                document.getElementById("auth-status").style.color = "var(--accent-red)";
-                return;
-            }
+    # 1. Cria e inicia o cliente Deriv
+    client = DerivClient(token=token)
+    
+    # Executa a função start em segundo plano para não bloquear a resposta HTTP
+    asyncio.create_task(client.start())
+    
+    # Retorna uma resposta imediata de sucesso
+    return JSONResponse({"ok": True, "message": "Cliente Deriv a iniciar a conexão."})
 
-            document.getElementById("auth-status").innerText = "Conectando com a Deriv...";
-            document.getElementById("auth-status").style.color = "yellow";
 
-            // 🟢 CORREÇÃO CRÍTICA: Envia o token como query parameter (na URL)
-            const url = SERVER + `/set_token?token=${token}`; 
+# --- 3. ROTA DE STATUS ---
+@app.get("/status")
+async def get_status():
+    """Retorna o status da conexão, saldo e bots ativos."""
+    is_authorized = client.authorized if client else False
+    balance = client.account_info.get("balance", 0.0) if client else 0.0
+    account_type = client.account_info.get("account_type", "demo") if client else "demo"
+    
+    # Busca a lista de bots para enviar ao frontend
+    active_bots_data = []
+    if bots_manager:
+        for bot in bots_manager.get_all_bots():
+            active_bots_data.append({
+                "id": bot.id,
+                "name": bot.name,
+                "symbol": bot.symbol,
+                "tf": bot.tf,
+                "stop_loss": bot.stop_loss,
+                "take_profit": bot.take_profit,
+                "is_active": bot.is_active
+            })
 
-            try {
-                // A requisição agora é um simples POST sem corpo JSON, usando a URL corrigida
-                const r = await fetch(url, { method: 'POST' }); 
-                const j = await r.json();
+    return JSONResponse({
+        "is_authorized": is_authorized,
+        "balance": balance,
+        "account_type": account_type,
+        "active_bots": active_bots_data
+    })
 
-                if (r.ok) {
-                    document.getElementById("auth-status").innerText = "Token Aceito! Verificando conexão...";
-                    setTimeout(checkStatus, 2000); 
-                } else {
-                    // A resposta de erro deve ter a chave 'detail' ou 'message'
-                    document.getElementById("auth-status").innerText = "ERRO: " + (j.detail || j.message || "Falha na conexão.");
-                    document.getElementById("auth-status").style.color = "var(--accent-red)";
-                }
 
-            } catch (e) {
-                document.getElementById("auth-status").innerText = "ERRO de Rede. O servidor está offline?";
-                document.getElementById("auth-status").style.color = "var(--accent-red)";
-                log("Erro ao conectar: " + e.message);
-            }
-        }
+# --- 4. ROTA DE SINAL (ANÁLISE MANUAL) ---
+@app.get("/signal")
+async def get_trading_signal(symbol: str, tf: str):
+    """Gera um sinal de trading com base nos dados mais recentes."""
+    
+    if not client or not client.authorized:
+        raise HTTPException(status_code=401, detail="Não Autorizado. Conecte o Token API primeiro.")
 
-        async function checkStatus() {
-            try {
-                const r = await fetch(SERVER + "/status");
-                const j = await r.json();
+    # Usa a função de estratégia
+    signal_data = generate_signal()
 
-                if (j.is_authorized) { // Usa is_authorized da resposta final do main.py
-                    // SUCESSO DE CONEXÃO
-                    document.getElementById('login-view').classList.remove('active');
-                    document.getElementById('dashboard-view').classList.add('active');
-                    isConnected = true;
-                    
-                    const successMsg = document.createElement('div');
-                    successMsg.className = 'status-message badge real';
-                    successMsg.innerText = '✅ CONECTADO com a Deriv!';
-                    document.querySelector('header').appendChild(successMsg);
-                    setTimeout(() => {
-                        successMsg.style.transition = 'opacity 2s';
-                        successMsg.style.opacity = '0';
-                        setTimeout(() => successMsg.remove(), 2000);
-                    }, 3000);
+    if not signal_data:
+        # Retorna 404 se não houver dados suficientes para análise (ex: menos de 20 ticks)
+        raise HTTPException(status_code=404, detail="Dados insuficientes para gerar um sinal (mínimo 20 ticks). Aguardando mais dados.")
+    
+    # Adiciona metadados ao sinal
+    signal_data["symbol"] = symbol
+    signal_data["tf"] = tf
+    
+    return JSONResponse(signal_data)
 
-                    // Atualizar Saldo e Tipo de Conta
-                    document.getElementById('account-balance').innerText = `Saldo: $${parseFloat(j.balance).toFixed(2)}`;
-                    const typeBadge = document.getElementById('account-type');
-                    typeBadge.innerText = j.account_type.toUpperCase();
-                    typeBadge.className = `badge ${j.account_type.toLowerCase()}`;
-                    
-                    fetchBotsList();
 
-                } else if (!isConnected) {
-                    // Se o servidor respondeu, mas não autorizado
-                    document.getElementById("auth-status").innerText = "Ainda não conectado. Verifique o Token ou tente novamente.";
-                    document.getElementById("auth-status").style.color = "yellow";
-                    setTimeout(checkStatus, 5000);
-                }
+# --- 5. ROTAS DE GESTÃO DE BOTS ---
 
-            } catch (e) {
-                log("Erro status: " + e.message);
-                if (!isConnected) {
-                    document.getElementById("auth-status").innerText = "ERRO: O servidor não está respondendo.";
-                    document.getElementById("auth-status").style.color = "var(--accent-red)";
-                }
-            } finally {
-                // Loop de atualização do status (mesmo após a conexão)
-                if (isConnected) {
-                    setTimeout(checkStatus, 10000); // Verifica a cada 10s se estiver conectado
-                } else {
-                    setTimeout(checkStatus, 5000); // Tenta de 5s em 5s se não estiver conectado
-                }
-            }
-        }
-
-        function logout() {
-            isConnected = false;
-            document.getElementById("tokenInput").value = '';
-            document.getElementById('dashboard-view').classList.remove('active');
-            document.getElementById('login-view').classList.add('active');
-            document.getElementById("auth-status").innerText = '';
-        }
-
-        // --------------------------------------
-        // LÓGICA DE ANÁLISE MANUAL
-        // --------------------------------------
-
-        function initiateAnalysis() {
-            if (isAnalysisRunning) return;
-
-            isAnalysisRunning = true;
-            document.getElementById('startAnalysisBtn').classList.add('hidden');
-            document.getElementById('stopAnalysisBtn').classList.remove('hidden');
-            
-            document.getElementById('processing-status').classList.remove('hidden');
-            document.getElementById('chart-placeholder').classList.add('hidden');
-            document.getElementById('signal-display').classList.add('hidden');
-            
-            fetchSignal();
-        }
-
-        function stopAnalysis() {
-            isAnalysisRunning = false;
-            if (analysisTimeout) {
-                clearTimeout(analysisTimeout);
-            }
-            
-            document.getElementById('startAnalysisBtn').classList.remove('hidden');
-            document.getElementById('stopAnalysisBtn').classList.add('hidden');
-            document.getElementById('processing-status').classList.add('hidden');
-            
-            document.getElementById('chart-placeholder').classList.remove('hidden');
-            document.getElementById('signal-display').classList.add('hidden');
-        }
-
-        // FUNÇÃO DE BUSCA DE SINAL
-        async function fetchSignal() {
-            if (!isAnalysisRunning || !isConnected) return;
-
-            const sym = document.getElementById("symbolSel").value;
-            const tf = document.getElementById("tfSel").value;
-            
-            document.getElementById('current-asset').innerText = `Ativo: ${sym}`;
-
-            try {
-                const r = await fetch(
-                    SERVER + "/signal?symbol=" + sym + "&tf=" + tf
-                );
-
-                // --- CRÍTICO: Tratar 404 (Sem dados suficientes) ---
-                if (r.status === 404) {
-                    document.getElementById('processing-text').innerText = 'Analisando Gráfico (Aguardando dados...)...';
-                    if (isAnalysisRunning) {
-                        analysisTimeout = setTimeout(fetchSignal, 5000); 
-                    }
-                    return; 
-                }
-                
-                // Se não for 404, processamos a resposta (deve ser 200 OK)
-                const j = await r.json();
-
-                if (j && j.action) {
-                    // Não parar, apenas atualizar
-                    
-                    document.getElementById('signal-display').classList.remove('hidden');
-                    document.getElementById('chart-placeholder').classList.add('hidden');
-                    document.getElementById('processing-status').classList.add('hidden');
-                    
-                    const prob = (j.probability * 100).toFixed(0);
-                    const isCall = j.action.includes("CALL") || j.action.includes("COMPRA");
-                    const signalClass = isCall ? 'signal-up' : 'signal-down';
-                    const arrow = isCall ? '↗️' : '↘️';
-
-                    document.getElementById("signals").innerHTML =
-                        `<div style="padding:15px;" class="${signalClass}">
-                            <strong style="font-size:1.5em">${arrow} ${j.action} (${prob}%)</strong>
-                            <div>${j.symbol} | TF ${j.tf}</div>
-                            <div class="muted">${j.reason}</div>
-                        </div>`;
-
-                    document.getElementById("lastSignal").innerHTML =
-                        `<span class="${signalClass}">${arrow} Sinal de ${j.action}</span>`;
-
-                    document.getElementById("analysis").innerText = j.explanation;
-
-                    let h = document.getElementById("history");
-                    // Adicionamos o indicador RSI/EMA aqui para referência
-                    const indicators = j.indicators || {};
-                    h.innerText = `${new Date().toLocaleTimeString()} — ${j.symbol} ${j.action} (${prob}%) | RSI: ${parseFloat(indicators.rsi || 0).
-        
+@app.post("/bots/create")
+async def create_new_bot(data: BotCreationRequest):
