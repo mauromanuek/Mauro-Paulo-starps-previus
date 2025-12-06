@@ -31,9 +31,9 @@ deriv_client: DerivClient = DerivClient(app_id=YOUR_APP_ID)
 # --- 1. ROTA PRINCIPAL (INDEX) ---
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
-    """Carrega a página principal do dashboard (index (1).html)."""
-    # Note que a página é index (1).html, conforme enviado
-    return templates.TemplateResponse("index (1).html", {"request": request})
+    """Carrega a página principal do dashboard (index.html)."""
+    # Note que a página é index.html, conforme enviado
+    return templates.TemplateResponse("index.html", {"request": request})
 
 # --- 2. ROTA DE CONEXÃO (CORREÇÃO CRÍTICA DO ERRO 422) ---
 @app.post("/set_token")
