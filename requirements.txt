@@ -1,8 +1,0 @@
-fastapi
-uvicorn[standard]
-websockets
-pydantic
-pandas
-numpy
-jinja2
-python-multipart
