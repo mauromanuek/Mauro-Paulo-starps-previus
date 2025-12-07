@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RobotMagic Pro - Trading Bot</title>
+    <link rel="stylesheet" href="/static/style.css"> 
+</head>
+<body>
+
+    <div id="app-container">
+
+        <div id="login-view" class="view active">
+            <div class="login-box">
+                <h1>RobotMagic Pro</h1>
+                <p>Análise Profissional (Deriv, Binary, Binance Style)</p>
+                <div class="input-group">
+                    <input type="password" id="tokenInput" placeholder="Insira seu Token API da Deriv">
+                    <button id="connectBtn" onclick="setTokenAndConnect()">CONECTAR</button>
+                </div>
+                <p id="auth-status" class="status-message"></p>
+            </div>
+        </div>
+
+        <div id="dashboard-view" class="view">
+            
+            <header>
+                <div class="logo">RM Pro</div>
+                <nav>
+                    <span id="account-type" class="badge demo">DEMO</span>
+                    <span id="account-balance" class="badge">Saldo: $0.00</span>
+                    <span id="current-asset" class="badge asset">Ativo: V100 Index</span>
+                    <button id="menu-btn" onclick="toggleMenu()">☰ Menu</button>
+                </nav>
+            </header>
+
+            <main>
+                <div id="side-menu" class="side-menu">
+                    <a href="#" onclick="showView('analysis-view')">⚙️ Página Inicial (Análise)</a>
+                    <a href="#" onclick="showView('ia-view')">💡 IA Trader</a>
+                    <a href="#" onclick="logout()">🔓 Sair</a>
+                </div>
+
+                <section id="analysis-view" class="page-content active">
+                    <h2>⚙️ Análise de Sinais em Tempo Real</h2>
+                    <div class="card signal-card">
+                        <div class="signal-value" id="signalAction">AGUARDANDO...</div>
+                        <div class="signal-details">
+                            <span class="probability" id="signalProbability">Probabilidade: --%</span>
+                            <p class="reason" id="signalReason">Motivo: Recebendo ticks para análise...</p>
+                        </div>
+                    </div>
+
+                    <div class="card asset-selector">
+                        <h3>Ativo Atual</h3>
+                        <p id="currentAssetInfo">Vol: 100 Index (R_100)</p>
+                        <p class="muted">O sistema está subscrito ao Volatility 100 Index.</p>
+                        </div>
+
+                    <div class="card last-tick-info">
+                        <h3>Último Tick Recebido</h3>
+                        <span id="lastTickPrice" class="price-display">$0.00</span>
+                        <span id="lastTickTime" class="muted">Hora: --:--:--</span>
+                    </div>
+
+                </section>
+
+                <section id="ia-view" class="page-content hidden">
+                    <h2>💡 IA Trader (Perguntas e Respostas)</h2>
+                    <div class="card">
+                        <p class="muted">Pergunte à IA sobre padrões de análise técnica, indicadores ou estratégias.</p>
+                        <div class="ia-input-group">
+                            <input type="text" id="iaQuery" placeholder="Ex: O que é um triângulo ascendente?">
+                            <button onclick="askIA()">PERGUNTAR</button>
+                        </div>
+                        <div class="ia-response-box" id="iaResponse">
+                            <strong>Resposta da IA:</strong>
+                            <p class="muted">Faça a sua primeira pergunta...</p>
+                        </div>
+                    </div>
+                </section>
+
+            </main>
+
+            <aside>
+                <h2>Logs do Sistema</h2>
+                <div class="logs-container" id="systemLogs">
+                    <p class="log-message muted">[Sistema] Dashboard carregado.</p>
+                </div>
+            </aside>
+
+        </div>
+    </div>
+
+    <script>
+        const SERVER = ""; // Em produção, deixe vazio se estiver no mesmo host
+        let isConnected = false;
+        let signalFetchInterval;
+        let statusCheckInterval;
+        
+        // --------------------------------------
+        // FUNÇÕES GERAIS DE UTILIDADE
+        // --------------------------------------
+
+        function log(message, type = 'system') {
+            const logsContainer = document.getElementById('systemLogs');
+            const p = document.createElement('p');
+            p.className = `log-message ${type}`;
+            const now = new Date();
+            const timeString = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+            p.innerHTML = `[${timeString}] ${message}`;
+            
+            // Adiciona ao topo
+            if (logsContainer.firstChild) {
+                logsContainer.insertBefore(p, logsContainer.firstChild);
+            } else {
+                logsContainer.appendChild(p);
+            }
+            // Limita o número de logs
+            while (logsContainer.children.length > 50) {
+                logsContainer.removeChild(logsContainer.lastChild);
+            }
+        }
+
+        function toggleMenu() {
+            document.getElementById('side-menu').classList.toggle('open');
+        }
+
+        function showView(viewId) {
+            document.querySelectorAll('.page-content').forEach(view => {
+                view.classList.add('hidden');
+                if (view.id === viewId) {
+                    view.classList.remove('hidden');
+                }
+            });
+            if (window.innerWidth <= 768) {
+                document.getElementById('side-menu').classList.remove('open');
+            }
+            // Não há mais necessidade de carregar a lista de bots, pois o recurso foi removido.
+        }
+
+        function logout() {
+            log("Sessão finalizada. Limpando dados.");
+            // Limpa o token e força o recarregamento (ou simplesmente retorna à tela de login)
+            localStorage.removeItem('deriv_token');
+            clearInterval(signalFetchInterval);
+            clearInterval(statusCheckInterval);
+            isConnected = false;
+
+            document.getElementById('dashboard-view').classList.remove('active');
+            document.getElementById('login-view').classList.add('active');
+            document.getElementById('auth-status').innerText = "";
+            document.getElementById('tokenInput').value = "";
+
+            // O servidor deve ser notificado para parar o cliente Deriv
+            fetch(SERVER + "/disconnect", { method: 'POST' }); 
+        }
+
+        // --------------------------------------
+        // AUTENTICAÇÃO E CONEXÃO
+        // --------------------------------------
+
+        async function setTokenAndConnect() {
+            const token = document.getElementById('tokenInput').value.trim();
+            const statusDiv = document.getElementById('auth-status');
+            
+            if (token.length < 15) {
+                statusDiv.innerText = "Token inválido. O token API da Deriv tem cerca de 48 caracteres.";
+                return;
+            }
+
+            statusDiv.innerText = "Conectando ao servidor e à Deriv...";
+            
+            try {
+                const r = await fetch(SERVER + "/set_token", {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ token: token })
+                });
+
+                const j = await r.json();
+
+                if (j.ok) {
+                    localStorage.setItem('deriv_token', token);
+                    statusDiv.innerText = `✅ Conexão bem-sucedida! Conta: ${j.account_type.toUpperCase()}`;
+                    log(`Conexão com Deriv bem-sucedida. Conta: ${j.account_type.toUpperCase()}`);
+                    // Inicia o processo de dashboard
+                    setTimeout(checkStatus, 1000); 
+                    if (!statusCheckInterval) {
+                         // Verifica o status a cada 5 segundos
+                        statusCheckInterval = setInterval(checkStatus, 5000); 
+                    }
+                    if (!signalFetchInterval) {
+                        // Inicia o loop para buscar sinais
+                        signalFetchInterval = setInterval(fetchSignal, 3000); 
+                    }
+                } else {
+                    statusDiv.innerText = `❌ Erro de Autenticação: ${j.message}`;
+                    log(`Erro de Autenticação: ${j.message}`, 'error');
+                }
+
+            } catch (e) {
+                statusDiv.innerText = "❌ Erro de Rede. Verifique se o servidor está online.";
+                log("Erro de Rede ao tentar conectar: " + e.message, 'error');
+            }
+        }
+
+        async function checkStatus() {
+            try {
+                const r = await fetch(SERVER + "/status");
+                const j = await r.json();
+
+                if (j.deriv_connected) {
+                    // SUCESSO DE CONEXÃO
+                    document.getElementById('login-view').classList.remove('active');
+                    document.getElementById('dashboard-view').classList.add('active');
+                    isConnected = true;
+                    
+                    // Atualizar Saldo e Tipo de Conta
+                    document.getElementById('account-balance').innerText = `Saldo: $${j.balance.toFixed(2)}`;
+                    const typeBadge = document.getElementById('account-type');
+                    typeBadge.innerText = j.account_type.toUpperCase();
+                    typeBadge.className = `badge ${j.account_type.toLowerCase()}`;
+                    
+                    // Nenhuma chamada a fetchBotsList, pois o recurso foi removido
+
+                } else if (!isConnected) {
+                    // O servidor está vivo, mas o cliente Deriv não está conectado (sessão expirou ou nunca iniciou)
+                    document.getElementById('login-view').classList.add('active');
+                    document.getElementById('dashboard-view').classList.remove('active');
+                    log("Conexão Deriv perdida. Por favor, reconecte.");
+                }
+
+            } catch (e) {
+                // Erro de rede (servidor FastAPI pode ter caído)
+                if (isConnected) {
+                    log("Conexão com o servidor perdida. Tentando reconectar...", 'error');
+                    // Não altera o estado do isConnected para permitir tentativas de recuperação
+                }
+            }
+        }
+
+
+        // --------------------------------------
+        // GESTÃO DE SINAIS (PONTO 7)
+        // --------------------------------------
+
+        async function fetchSignal() {
+            if (!isConnected) return;
+
+            // Variáveis fixas, pois o sistema é simples (apenas um ativo, R_100, e TF 60s)
+            const symbol = "R_100"; 
+            const tf = "60"; 
+
+            try {
+                const r = await fetch(SERVER + `/signal?symbol=${symbol}&tf=${tf}`);
+                const j = await r.json();
+
+                // Atualiza o preço do tick
+                document.getElementById('lastTickPrice').innerText = `$${j.last_tick.price.toFixed(4)}`;
+                document.getElementById('lastTickTime').innerText = `Hora: ${j.last_tick.time}`;
+
+                const signalDiv = document.getElementById('signalAction');
+                const probabilitySpan = document.getElementById('signalProbability');
+                const reasonP = document.getElementById('signalReason');
+                
+                if (j.signal && j.signal.action) {
+                    // Sinal Encontrado
+                    signalDiv.innerText = j.signal.action;
+                    signalDiv.className = `signal-value signal-${j.signal.action.toLowerCase().split('(')[0].trim()}`;
+                    probabilitySpan.innerText = `Probabilidade: ${(j.signal.probability * 100).toFixed(0)}%`;
+                    reasonP.innerText = `Motivo: ${j.signal.reason}`;
+                    log(`Sinal: ${j.signal.action} | Prob: ${(j.signal.probability * 100).toFixed(0)}%`, 'signal');
+                } else {
+                    // Nenhum Sinal
+                    signalDiv.innerText = "AGUARDANDO...";
+                    signalDiv.className = 'signal-value';
+                    probabilitySpan.innerText = `Probabilidade: --%`;
+                    reasonP.innerText = `Motivo: Nenhuma oportunidade de alta probabilidade encontrada.`;
+                }
+
+            } catch (e) {
+                log("Erro ao buscar sinal: " + e.message, 'error');
+            }
+        }
+        
+        // --------------------------------------
+        // REMOVIDO: Toda a seção de GESTÃO DE BOTS AUTOMÁTICOS
+        // --------------------------------------
+
+
+        // --------------------------------------
+        // IA TRADER (PONTO 9)
+        // --------------------------------------
+
+        async function askIA() {
+            const query = document.getElementById('iaQuery').value.trim();
+            const responseBox = document.getElementById('iaResponse');
+            
+            if (!query) return;
+
+            responseBox.innerHTML = '<strong>Resposta da IA:</strong><p class="muted">Analisando a sua pergunta...</p>';
+            document.getElementById('iaQuery').value = '';
+
+            try {
+                const r = await fetch(SERVER + "/ia/query", {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: query })
+                });
+
+                const j = await r.json();
+                
+                if (j.response) {
+                    // Substitui quebras de linha por tags <br> para melhor visualização
+                    const formattedResponse = j.response.replace(/\n/g, '<br>'); 
+                    responseBox.innerHTML = `<strong>Resposta da IA:</strong><p>${formattedResponse}</p>`;
+                } else {
+                    responseBox.innerHTML = `<strong>Resposta da IA:</strong><p class=\"muted\" style=\"color:var(--accent-red)\">Erro: ${j.message || 'Resposta inválida do servidor.'}</p>`;
+                }
+
+            } catch (e) {
+                responseBox.innerHTML = '<strong>Resposta da IA:</strong><p class=\"muted\" style=\"color:var(--accent-red)\">Erro de rede ao consultar a IA.</p>';
+                log("Erro IA: " + e.message, 'error');
+            }
+        }
+
+        // --------------------------------------
+        // INICIALIZAÇÃO
+        // --------------------------------------
+
+        window.onload = function() {
+            // Tenta obter token do localStorage para login automático
+            const storedToken = localStorage.getItem('deriv_token');
+            if (storedToken) {
+                document.getElementById('tokenInput').value = storedToken;
+                setTokenAndConnect();
+            } else {
+                // Se não houver token, apenas checa o status
+                checkStatus();
+            }
+
+            // Garante que a view inicial seja a de Análise
+            showView('analysis-view'); 
+        };
+
+    </script>
+</body>
+</html>
