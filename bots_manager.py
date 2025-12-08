@@ -1,120 +1,84 @@
-# bots_manager.py
+# bots_manager.py - Gerencia a instância de cada bot de trading
 
-import asyncio
 import uuid
+import asyncio
 from enum import Enum
-# --- 🚨 CORREÇÃO AQUI: ADICIONADO 'List' ao import de typing 🚨 ---
-from typing import Dict, Optional, Any, List 
+from typing import Optional, Dict, List, Any, TYPE_CHECKING
 import time
-from strategy import generate_signal # Requer que strategy.py esteja correto
 
-class BotState(Enum):
-    """Estados possíveis para um bot."""
-    ACTIVE = "ACTIVE"
-    INACTIVE = "INACTIVE"
+# Apenas para tipagem
+if TYPE_CHECKING:
+    from deriv_client import DerivClient
+
+# Enum para o estado do bot
+class BotState(str, Enum):
+    RUNNING = "RUNNING"
     PAUSED = "PAUSED"
+    STOPPED = "STOPPED"
 
 class TradingBot:
-    """Representa uma instância de um bot de trading automático."""
+    """Representa uma única instância de bot de trading."""
     
-    def __init__(self, name: str, symbol: str, tf: str, stop_loss: float, take_profit: float, client: Any):
+    def __init__(self, name: str, symbol: str, tf: str, sl: float, tp: float, client: 'DerivClient'):
         self.id = str(uuid.uuid4())
         self.name = name
         self.symbol = symbol
         self.tf = tf
-        self.stop_loss = stop_loss
-        self.take_profit = take_profit
+        self.stop_loss = sl
+        self.take_profit = tp
         self.client = client
-        self._state = BotState.ACTIVE
-        self.current_run_task = None
-
-    @property
-    def is_active(self) -> bool:
-        """Verifica se o bot está ativo."""
-        return self._state == BotState.ACTIVE
-
-    @property
-    def state(self) -> BotState:
-        """Retorna o estado atual do bot."""
-        return self._state
-
-    @state.setter
-    def state(self, new_state: BotState):
-        """Define um novo estado para o bot."""
-        self._state = new_state
-        print(f"[Bot {self.id[:4]}] Estado alterado para {new_state.value}")
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Retorna um dicionário com informações básicas do bot."""
-        return {
-            "id": self.id,
-            "name": self.name,
-            "symbol": self.symbol,
-            "tf": self.tf,
-            "stop_loss": self.stop_loss,
-            "take_profit": self.take_profit,
-            "is_active": self.is_active,
-            "status": self.state.value
-        }
-
-    async def run_bot_loop(self):
-        """Loop principal de execução do bot (simulação)."""
-        if self.current_run_task and not self.current_run_task.done():
-             print(f"[Bot {self.id[:4]}] Loop já está rodando.")
-             return
-
-        print(f"[Bot {self.id[:4]}] Loop iniciado para {self.symbol}.")
+        self.state: BotState = BotState.RUNNING
+        self.current_run_task: Optional[asyncio.Task] = None
+        self.trades_count = 0
         
-        # Cria a tarefa e armazena
-        self.current_run_task = asyncio.current_task()
+    async def run_loop(self):
+        """Loop de execução principal (simulação)."""
+        print(f"Bot {self.name} iniciado.")
+        try:
+            while self.state == BotState.RUNNING:
+                await asyncio.sleep(5) # Espera passiva
+        except asyncio.CancelledError:
+            print(f"Bot {self.name} loop cancelado.")
+        finally:
+            self.state = BotState.STOPPED
+            print(f"Bot {self.name} parado.")
 
-        while self.is_active:
-            try:
-                # 1. Obter sinal da estratégia (a mesma lógica do /signal)
-                signal = generate_signal(self.symbol, self.tf)
+    async def execute_trade(self, signal: Dict[str, Any]):
+        """Simula a execução de uma ordem (seria a API de trading real)."""
+        if self.state != BotState.RUNNING:
+            print(f"Bot {self.name} pausado, ignorando sinal.")
+            return
 
-                if signal:
-                    print(f"[Bot {self.id[:4]}] Sinal encontrado: {signal['action']} em {self.symbol}")
-                    
-                    # 2. Simulação de execução de ordem (substituir por API real)
-                    action = signal['action'].split(' ')[0] # CALL ou PUT
-                    
-                    print(f"[Bot {self.id[:4]}] -> EXECUTANDO ORDEM: {action}...")
-                    
-                    # Aqui você chamaria a API da Deriv para executar a ordem real
-                    # Ex: await self.client.buy(symbol, duration, amount, action)
-                    
-                    # Atrasar o loop para esperar pelo próximo sinal
-                    await asyncio.sleep(60) # Espera 1 minuto após um sinal (simulação)
-                else:
-                    # Se não houver sinal, espera um pouco e tenta novamente
-                    await asyncio.sleep(5) 
-
-            except Exception as e:
-                print(f"[ERRO Bot {self.id[:4]}] Erro no loop: {e}")
-                await asyncio.sleep(10) # Espera mais em caso de erro
-
-        print(f"[Bot {self.id[:4]}] Loop finalizado.")
+        print(f"[{self.name}] 🚀 Executando trade: {signal['action']} em {signal['symbol']}")
+        self.trades_count += 1
+        
+        await asyncio.sleep(0.5) 
+        print(f"[{self.name}] ✅ Ordem enviada com SL={self.stop_loss} e TP={self.take_profit}")
 
 
 class BotsManager:
-    """Gerencia todas as instâncias de bots de trading."""
+    """Gerencia todas as instâncias ativas do TradingBot."""
     
     def __init__(self):
-        self.active_bots: Dict[str, TradingBot] = {}
-
-    def create_bot(self, name: str, symbol: str, tf: str, stop_loss: float, take_profit: float, client: Any) -> TradingBot:
-        """Cria e registra um novo bot."""
-        bot = TradingBot(name, symbol, tf, stop_loss, take_profit, client)
-        self.active_bots[bot.id] = bot
-        print(f"[Manager] Novo bot criado: {bot.id}")
-        return bot
+        self.bots: Dict[str, TradingBot] = {}
+        
+    def create_bot(self, name: str, symbol: str, tf: str, sl: float, tp: float, client: 'DerivClient') -> TradingBot:
+        """Cria e regista um novo bot."""
+        new_bot = TradingBot(name, symbol, tf, sl, tp, client)
+        self.bots[new_bot.id] = new_bot
+        return new_bot
 
     def get_bot(self, bot_id: str) -> Optional[TradingBot]:
-        """Busca um bot pelo ID."""
-        return self.active_bots.get(bot_id)
+        """Retorna um bot pelo ID."""
+        return self.bots.get(bot_id)
 
     def get_all_bots(self) -> List[TradingBot]:
-        """Retorna a lista de todos os bots ativos e inativos."""
-        return list(self.active_bots.values())
-              
+        """Retorna uma lista de todos os bots."""
+        return list(self.bots.values())
+
+    async def process_signal(self, signal: Dict[str, Any]):
+        """Envia o sinal de trading para todos os bots ativos."""
+        for bot in self.bots.values():
+            if bot.state == BotState.RUNNING and bot.symbol == signal['symbol'] and bot.tf == signal['tf']:
+                # Cria uma tarefa de fundo para não bloquear o listener principal
+                asyncio.create_task(bot.execute_trade(signal))
