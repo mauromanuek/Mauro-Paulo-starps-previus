@@ -1,4 +1,4 @@
-# main.py - Versão Final: CORS, Conexão Assíncrona e Sinal de Velas
+# main.py - Versão FINAL E CORRIGIDA: CORS, Conexão Assíncrona e Sinal de Velas
 
 import asyncio
 import uuid
@@ -11,7 +11,6 @@ from typing import Optional, Dict, Any, List
 import json
 
 # --- IMPORTS CORRIGIDOS ---
-# Importação CRÍTICA para o CORS
 from fastapi.middleware.cors import CORSMiddleware 
 # --------------------------
 
@@ -24,13 +23,9 @@ app = FastAPI()
 client: Optional[DerivClient] = None
 bots_manager: Optional[BotsManager] = None
 
-# 🟢 CORREÇÃO 1: ADIÇÃO DO MIDDLEWARE CORS 🟢
-# Isso deve resolver o erro "Failed to fetch" no frontend.
+# 🟢 CORREÇÃO 1: ADIÇÃO DO MIDDLEWARE CORS (Extremamente Permissivo para Teste) 🟢
 origins = [
-    "http://localhost",
-    "http://localhost:8000",
-    "http://127.0.0.1:8000",
-    "*" # Permite todas as origens (use apenas para desenvolvimento/teste)
+    "*" 
 ]
 
 app.add_middleware(
@@ -49,7 +44,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # Configuração de templates
 templates = Jinja2Templates(directory=".")
 
-# --- Models Pydantic (para validação de dados) ---
+# --- Models Pydantic (inalteradas) ---
 class TokenRequest(BaseModel):
     token: str
 
@@ -78,7 +73,7 @@ async def read_root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 
-# --- 2. ROTA DE AUTORIZAÇÃO (POST) - 🟢 CORREÇÃO 2: CONEXÃO ASSÍNCRONA 🟢 ---
+# --- 2. ROTA DE AUTORIZAÇÃO (POST) ---
 @app.post("/set_token", response_class=JSONResponse)
 async def set_token(data: TokenRequest):
     """Lida com a conexão e autorização do token da Deriv."""
@@ -89,18 +84,17 @@ async def set_token(data: TokenRequest):
         await client.stop() 
         client = None
 
-    # O DerivClient agora recebe o bots_manager para enviar sinais diretamente
+    # O DerivClient agora recebe o bots_manager OBRIGATORIAMENTE
     client = DerivClient(data.token, bots_manager) 
     
     try:
-        # Inicia a conexão, autenticação e subscrição de velas de 1m em segundo plano
-        # (Isso impede que o servidor FastAPI fique bloqueado e evita o Timeout)
+        # 🟢 CORREÇÃO 2: Inicia a conexão em TAREFA DE FUNDO 🟢
+        # Isto é essencial para o FastAPI responder e evita o erro de timeout
         asyncio.create_task(client.connect_and_subscribe(symbol="R_100")) 
 
         # 2. Esperar pela autorização
-        # Espera no máximo 5 segundos para a autorização inicial (que é rápida)
-        for _ in range(10): # 10 tentativas * 0.5s
-            if client.authorized:
+        for _ in range(10): 
+            if client.authorized: # O client.authorized agora existe garantidamente
                 return JSONResponse({
                     "ok": True, 
                     "message": "Conectado e Autorizado. Dados de velas a carregar...",
@@ -117,7 +111,6 @@ async def set_token(data: TokenRequest):
         if client:
             await client.stop()
             client = None
-        # Use str(e) para garantir que o erro seja serializável
         raise HTTPException(status_code=500, detail=f"Erro ao conectar: {str(e)}")
 
 
@@ -126,41 +119,40 @@ async def set_token(data: TokenRequest):
 async def get_status():
     """Retorna o status atual da conexão e saldo."""
     global client
+    # 🚨 Linha onde estava o AttributeError 🚨:
+    # A verificação 'client and' garante que não tentamos acessar o atributo se client for None.
+    # Como o atributo 'authorized' agora é garantido no __init__ do DerivClient, o erro deve sumir.
     status = {
-        # O estado de conexão agora usa a nova variável 'is_connected' do DerivClient
-        "connected": client and client.is_connected, 
-        "authorized": client and client.authorized,
+        "connected": client and client.connected, 
+        "authorized": client and client.authorized, 
         "balance": client.account_info.get("balance", 0.0) if client else 0.0,
         "account_type": client.account_info.get("account_type", "offline") if client else "offline"
     }
     return JSONResponse(status)
 
 
-# --- 4. ROTA DE SINAL (GET) - 🟢 CORREÇÃO 3: LÓGICA DE VELAS DE 1M (MAIS RÁPIDA) 🟢 ---
+# --- 4. ROTA DE SINAL (GET) ---
 @app.get("/signal")
 async def get_signal(symbol: str = "R_100"):
     """
     Gera um sinal de trading com base nos preços de fecho das velas de 1m.
-    A estabilidade está no DerivClient (que só atualiza a cada 60s).
     """
     if not client or not client.authorized:
         raise HTTPException(status_code=401, detail="Não autorizado. Faça o login primeiro.")
     
-    # O tf (timeframe) é fixo em "1m" para usar a análise de velas
+    # O tf (timeframe) é fixo em "1m"
     signal = generate_signal(symbol, "1m") 
         
     if signal is not None:
         return signal
     
-    # Caso o histórico de velas ainda não tenha sido carregado
     raise HTTPException(
         status_code=404, 
         detail=f"Os dados históricos (velas de 1m) ainda não foram completamente carregados. Tente novamente em 5 segundos."
     )
 
 
-# --- 5. ROTAS DE GESTÃO DE BOTS (Inalteradas) ---
-
+# --- 5. ROTAS DE GESTÃO DE BOTS ---
 class BotAction(BaseModel):
     bot_id: str
 
@@ -171,10 +163,8 @@ async def create_bot(data: BotCreationRequest):
     if not bots_manager or not client or not client.authorized:
         raise HTTPException(status_code=401, detail="Cliente não autorizado ou gestor de bots não inicializado.")
 
-    # Note: O client.py agora precisa ser capaz de passar o cliente para o bot
     new_bot = bots_manager.create_bot(data.name, data.symbol, data.tf, data.stop_loss, data.take_profit, client)
 
-    # Inicia a tarefa assíncrona do bot
     new_bot.current_run_task = asyncio.create_task(new_bot.run_loop())
     
     return JSONResponse({"ok": True, "message": f"Bot '{data.name}' criado e iniciado.", "bot_id": new_bot.id})
@@ -210,18 +200,18 @@ async def pause_bot(data: BotAction):
     return JSONResponse({"ok": True, "message": f"Bot {bot.name} pausado."})
 
 
-# --- 6. ROTA DE CONSULTA DA IA (Inalterada) ---
+# --- 6. ROTA DE CONSULTA DA IA ---
 @app.post("/ia/query", response_class=JSONResponse)
 async def ia_query(data: IAQueryRequest):
     """Processa consultas de análise técnica feitas ao módulo de IA."""
     query = data.query.lower()
 
     if "triângulo ascendente" in query:
-        response_text = "O Triângulo Ascendente é um padrão de continuação bullish. É formado por uma linha de resistência horizontal no topo e uma linha de suporte ascendente na base. Sugere que os compradores estão a ganhar força e que uma quebra acima da resistência é provável. [attachment_0](attachment)"
+        response_text = "O Triângulo Ascendente é um padrão de continuação bullish. É formado por uma linha de resistência horizontal no topo e uma linha de suporte ascendente na base. Sugere que os compradores estão a ganhar força e que uma quebra acima da resistência é provável."
     elif "rsi" in query or "sobrecompra" in query:
         response_text = "O Índice de Força Relativa (RSI) mede a velocidade e a mudança dos movimentos de preço. Um RSI acima de 70 indica sobrecompra (potencial de queda), e um abaixo de 30 indica sobrevenda (potencial de subida)."
     elif "suporte e resistência" in query:
-        response_text = "Suporte e Resistência são níveis de preço cruciais onde a pressão de compra ou venda historicamente se concentra. O suporte é um 'piso' onde o preço tende a subir, e a resistência é um 'teto' onde o preço tende a cair. [attachment_1](attachment)"
+        response_text = "Suporte e Resistência são níveis de preço cruciais onde a pressão de compra ou venda historicamente se concentra. O suporte é um 'piso' onde o preço tende a subir, e a resistência é um 'teto' onde o preço tende a cair."
     elif "bitcoin" in query or "binance" in query:
         response_text = "A análise técnica se aplica a qualquer mercado, incluindo criptomoedas como Bitcoin. No entanto, a alta volatilidade exige cautela e stop-loss mais rígidos."
     else:
@@ -232,5 +222,4 @@ async def ia_query(data: IAQueryRequest):
 
 if __name__ == '__main__':
     import uvicorn
-    # A porta 10000 é comum em serviços de hospedagem
     uvicorn.run(app, host="0.0.0.0", port=10000)
