@@ -147,14 +147,8 @@
         }
 
         function log(message) {
-            // MANTEMOS A FUNÇÃO LOG AQUI, mas ela só escreve na consola (F12)
+            // Apenas escreve na consola (F12)
             console.log(`[LOG] ${message}`);
-            
-            // O código abaixo é apenas se você quiser re-ativar a exibição no DOM:
-            // const logOutput = document.getElementById('log-output');
-            // const now = new Date();
-            // const time = now.toLocaleTimeString();
-            // logOutput.innerHTML = `[${time}] ${message}<br>` + logOutput.innerHTML;
         }
 
         // --------------------------------------
@@ -256,14 +250,14 @@
             const tf = document.getElementById('signalTF').value;
             const signalBox = document.getElementById('signal-output');
             
-            signalBox.innerHTML = '<p class="muted">A analisar o mercado... Coletando 20 ticks de dados. Aguarde 3 segundos.</p>';
-
-            // 🟢 CORREÇÃO DOS 20 TICKS: Esperar 3 segundos para dar tempo de coleta
-            await new Promise(resolve => setTimeout(resolve, 3000)); 
-            log("Tentando obter sinal do servidor após coleta de dados...");
+            // 🟢 MENSAGEM ATUALIZADA: O BACKEND AGORA FAZ A ESPERA 🟢
+            signalBox.innerHTML = '<p class="muted">A analisar o mercado... O servidor está aguardando dados (máximo 5s).</p>';
+            
+            log("Requisitando sinal ao servidor...");
 
 
             try {
+                // Envia a requisição imediatamente. O backend fará a espera e o re-fetch.
                 const r = await fetch(SERVER + `/signal?symbol=${asset}&tf=${tf}`);
                 const j = await r.json();
 
@@ -282,7 +276,7 @@
                     log(`Sinal gerado: ${j.action} em ${asset}`);
 
                 } else {
-                    // Erro ao obter sinal (inclui o erro 404 de "não há dados suficientes")
+                    // Erro ao obter sinal
                     signalBox.innerHTML = `<p class="muted" style="color:var(--accent-red)">ERRO: ${j.detail || 'Falha ao obter sinal.'}</p>`;
                     log(`ERRO ao obter sinal: ${j.detail}`);
                 }
