@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import json
 
-# --- IMPORTS CRÍTICOS ---
+# --- IMPORTS CORRETOS ---
 from strategy import generate_signal 
 from deriv_client import DerivClient
 from bots_manager import BotsManager, BotState 
@@ -98,7 +98,7 @@ async def get_status():
     return JSONResponse(status)
 
 
-# --- 4. ROTA DE SINAL (GET) - 🟢 CORREÇÃO CRÍTICA: TIMEOUT DE 30s 🟢 ---
+# --- 4. ROTA DE SINAL (GET) - 🟢 CORREÇÃO CRÍTICA DO TIMEOUT (30 SEGUNDOS) 🟢 ---
 @app.get("/signal")
 async def get_signal(symbol: str = "R_100", tf: str = "TICK"):
     """
@@ -115,7 +115,7 @@ async def get_signal(symbol: str = "R_100", tf: str = "TICK"):
         signal = generate_signal(symbol, tf) 
         
         if signal is not None:
-            # Sucesso: Sinal gerado, retorna imediatamente
+            # Sucesso: Sinal gerado
             print(f"[Main] ✅ Sinal gerado após {attempt + 1} tentativas (tempo de espera: {attempt * 0.5}s).")
             return signal
         
@@ -130,6 +130,11 @@ async def get_signal(symbol: str = "R_100", tf: str = "TICK"):
 
 
 # --- 5. ROTAS DE GESTÃO DE BOTS ---
+
+# Note: Esta é uma classe auxiliar que o Pydantic espera. O seu bots_manager.py deve ter a TradingBot
+class BotAction(BaseModel):
+    bot_id: str
+
 @app.post("/bot/create", response_class=JSONResponse)
 async def create_bot(data: BotCreationRequest):
     """Cria e inicia um novo bot de trading."""
@@ -168,6 +173,7 @@ async def list_bots():
 @app.post("/bot/pause", response_class=JSONResponse)
 async def pause_bot(data: BotAction):
     """Pausa um bot de trading existente."""
+    global bots_manager
     bot = bots_manager.get_bot(data.bot_id)
     if not bot:
         raise HTTPException(status_code=404, detail="Bot não encontrado.")
@@ -193,4 +199,3 @@ async def ia_query(data: IAQueryRequest):
         response_text = "Desculpe, a minha base de dados de análise técnica está limitada. Por favor, faça uma pergunta sobre padrões gráficos, indicadores (como RSI/EMA) ou conceitos básicos de trading."
 
     return JSONResponse({"ok": True, "response": response_text})
-
