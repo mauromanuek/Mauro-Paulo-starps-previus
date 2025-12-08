@@ -25,7 +25,7 @@ BB_STDDEV = 2.0
 MAX_TICK_HISTORY = 200       # Define o tamanho máximo da lista de Fecho de velas.
 
 
-# --- 1. FUNÇÕES AUXILIARES DE CÁLCULO (INALTERADAS) ---
+# --- 1. FUNÇÕES AUXILIARES DE CÁLCULO ---
 
 def calculate_ema(prices: pd.Series, period: int) -> float:
     """Calcula a EMA do último preço na série."""
@@ -67,7 +67,7 @@ def calculate_adx(prices: pd.Series, period: int = ADX_PERIOD) -> float:
     return min(adx_proxy, 45.0) 
 
 
-# --- 2. FUNÇÃO PRINCIPAL DE CÁLCULO (INALTERADA) ---
+# --- 2. FUNÇÃO PRINCIPAL DE CÁLCULO ---
 def calculate_indicators() -> Optional[Dict[str, Any]]:
     """Calcula todos os indicadores necessários para a estratégia adaptativa."""
     global ticks_history
@@ -128,10 +128,8 @@ def generate_signal(symbol: str, tf: str) -> Optional[Dict[str, Any]]:
     probability = 0.50 
     market_state = "CONSOLIDAÇÃO" if adx <= ADX_TREND_THRESHOLD else "TENDÊNCIA"
     
-    # --- BLOCO DE CÓDIGO INALTERADO: A LÓGICA PERMANECE A MESMA ---
-    
     # ----------------------------------------------------------------------
-    # 1. ESTADO DE TENDÊNCIA (ADX > 20) -> Momentum Filtrado (Alerta de Reversão)
+    # 1. ESTADO DE TENDÊNCIA (ADX > 20) -> Momentum Filtrado
     # ----------------------------------------------------------------------
     if adx > ADX_TREND_THRESHOLD:
         
