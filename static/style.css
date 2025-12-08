@@ -45,8 +45,7 @@ body {
     border-radius: 12px;
     text-align: center;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-    width: 90%;
-    max-width: 400px;
+    width: 350px;
 }
 .login-box h1 {
     color: var(--accent-blue);
@@ -54,262 +53,189 @@ body {
 }
 .login-box p {
     color: var(--muted-color);
-    margin-bottom: 20px;
+    margin-bottom: 25px;
 }
-.input-group input, .input-group button {
-    width: 100%;
-    padding: 12px;
-    margin-bottom: 10px;
-    border: 1px solid var(--border-color);
+.input-group {
+    display: flex;
+    gap: 10px;
+}
+.input-group input {
+    flex-grow: 1;
+    padding: 10px;
+    border: none;
     border-radius: 6px;
-    background-color: #2a2a2a;
+    background-color: #333;
     color: var(--text-color);
-    font-size: 16px;
 }
-.input-group button {
-    background-color: var(--accent-blue);
+.login-box button {
+    padding: 10px 15px;
+    background-color: var(--accent-green);
+    color: var(--text-color);
+    border: none;
+    border-radius: 6px;
     cursor: pointer;
-    font-weight: bold;
     transition: background-color 0.3s;
 }
-.input-group button:hover {
-    background-color: #00a0b5;
+.login-box button:hover {
+    background-color: #388e3c;
 }
 .status-message {
     margin-top: 15px;
-    font-weight: bold;
-    min-height: 20px; /* Garante espaço */
+    min-height: 20px;
+    color: var(--muted-color);
 }
+
 
 /* DASHBOARD LAYOUT */
 #dashboard-view {
     display: grid;
+    grid-template-columns: 250px 1fr 300px;
+    grid-template-rows: auto 1fr;
     grid-template-areas:
-        "header header"
-        "menu main"
-        "menu aside";
-    grid-template-rows: auto 1fr auto;
-    grid-template-columns: 200px 1fr;
-    min-height: 100vh;
+        "header header header"
+        "menu main aside";
+    height: 100vh;
 }
 
 header {
     grid-area: header;
+    background-color: var(--card-color);
+    padding: 15px 20px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 15px 20px;
-    background-color: var(--card-color);
     border-bottom: 1px solid var(--border-color);
 }
+
 .logo {
-    font-size: 1.5em;
+    font-size: 1.8em;
     font-weight: bold;
     color: var(--accent-blue);
 }
-nav {
+
+header nav {
     display: flex;
     align-items: center;
     gap: 15px;
 }
+
 .badge {
     padding: 5px 10px;
     border-radius: 4px;
-    font-size: 0.85em;
+    font-size: 0.9em;
     font-weight: bold;
 }
-.demo { background-color: #5d5d5d; color: #fff; }
-.real { background-color: var(--accent-green); color: #fff; }
-.asset { background-color: #333; color: var(--accent-blue); }
+.badge.demo { background-color: #6a1b9a; } /* Roxo */
+.badge.real { background-color: var(--accent-green); } 
+.badge.asset { background-color: var(--accent-blue); }
+
+#menu-btn {
+    display: none; /* Esconder em telas grandes */
+}
 
 /* MENU LATERAL */
 .side-menu {
     grid-area: menu;
-    background-color: #1a1a1a;
-    padding-top: 20px;
+    background-color: #212121;
+    padding: 20px 0;
     border-right: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
 }
 .side-menu a {
-    display: block;
-    padding: 15px 20px;
-    text-decoration: none;
+    padding: 12px 20px;
     color: var(--text-color);
+    text-decoration: none;
     transition: background-color 0.2s;
 }
 .side-menu a:hover {
-    background-color: #2a2a2a;
-    color: var(--accent-blue);
+    background-color: var(--border-color);
+    border-left: 3px solid var(--accent-blue);
 }
 
-/* CONTEÚDO PRINCIPAL E ASIDE */
+/* CONTEÚDO PRINCIPAL (MAIN) */
 main {
     grid-area: main;
     padding: 20px;
-}
-aside {
-    grid-area: aside;
-    padding: 20px;
-    background-color: #1a1a1a;
-    border-top: 1px solid var(--border-color);
-    min-height: 200px;
-}
-aside h3 {
-    margin-bottom: 10px;
-    color: var(--accent-blue);
-}
-#history {
-    white-space: pre-wrap;
-    font-size: 0.9em;
-    color: var(--muted-color);
-    background: #121212;
-    padding: 10px;
-    border-radius: 6px;
-    max-height: 300px;
     overflow-y: auto;
 }
-
 .page-content h2 {
+    color: var(--accent-blue);
     margin-bottom: 20px;
-    color: var(--text-color);
 }
 .page-content.hidden {
     display: none;
 }
 
-/* CONTROLES E BOTÕES */
-.controls-bar {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 20px;
-    align-items: center;
-}
-.controls-bar select, .controls-bar button, .controls-bar input {
-    padding: 10px 15px;
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    background-color: #2a2a2a;
-    color: var(--text-color);
-    cursor: pointer;
-}
-.controls-bar button {
-    background-color: var(--accent-green);
-    font-weight: bold;
-}
-.controls-bar button:hover {
-    opacity: 0.9;
-}
-.hidden {
-    display: none !important;
-}
-
-/* PROCESSAMENTO */
-.processing-bar {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    color: yellow;
-}
-.progress {
-    width: 100px;
-    height: 8px;
-    background-color: #333;
-    border-radius: 4px;
-    overflow: hidden;
-    position: relative;
-}
-.progress::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 20%;
-    height: 100%;
-    background-color: var(--accent-blue);
-    border-radius: 4px;
-    animation: loading 1.5s infinite linear;
-}
-@keyframes loading {
-    0% { transform: translateX(-100%); }
-    100% { transform: translateX(500%); }
-}
-
-/* SINAL E RESULTADOS */
-#results-container {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 20px;
-}
-.chart-box, .signal-box {
+/* CARDS GERAIS */
+.card {
     background-color: var(--card-color);
     padding: 20px;
     border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
-}
-.chart-box {
-    text-align: center;
-    min-height: 300px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-}
-.signal-box h3 {
-    font-size: 1.8em;
-    margin-bottom: 10px;
-}
-.signal-details {
     margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
-.signal-up {
-    background-color: rgba(76, 175, 80, 0.1); /* Verde claro */
-    color: var(--accent-green);
-    border-left: 5px solid var(--accent-green);
-    padding: 10px;
-    border-radius: 4px;
-}
-.signal-down {
-    background-color: rgba(244, 67, 54, 0.1); /* Vermelho claro */
-    color: var(--accent-red);
-    border-left: 5px solid var(--accent-red);
-    padding: 10px;
-    border-radius: 4px;
-}
-.analysis-explanation strong {
-    color: var(--accent-blue);
+.card h3 {
+    color: var(--text-color);
+    margin-bottom: 10px;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 5px;
 }
 .muted {
     color: var(--muted-color);
     font-size: 0.9em;
 }
 
-/* BOTS AUTOMÁTICOS */
-.bot-controls input {
+/* ANÁLISE DE SINAIS */
+.signal-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 150px;
+}
+.signal-value {
+    font-size: 3em;
+    font-weight: bold;
+    padding: 10px 20px;
+    border-radius: 8px;
+    min-width: 250px;
+    text-align: center;
+    transition: background-color 0.5s;
+}
+.signal-value.signal-call {
+    background-color: var(--accent-green);
+    color: #121212;
+}
+.signal-value.signal-put {
+    background-color: var(--accent-red);
+    color: #121212;
+}
+.signal-details {
     flex-grow: 1;
+    margin-left: 20px;
 }
-.bots-list table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 15px;
-}
-.bots-list th, .bots-list td {
-    padding: 12px 8px;
-    text-align: left;
-    border-bottom: 1px solid var(--border-color);
-    font-size: 0.9em;
-}
-.bots-list th {
+.signal-details .probability {
+    display: block;
+    font-size: 1.2em;
+    font-weight: bold;
     color: var(--accent-blue);
+    margin-bottom: 5px;
 }
-.bots-list td button {
-    background-color: #333;
-    color: var(--text-color);
-    border: none;
-    padding: 5px 10px;
-    border-radius: 4px;
-    cursor: pointer;
+.signal-details .reason {
+    color: var(--muted-color);
 }
-.bots-list td button:hover {
-    background-color: #444;
+.last-tick-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
+.price-display {
+    font-size: 1.8em;
+    font-weight: bold;
+    color: var(--accent-green);
+}
+
+/* REMOVIDO: ESTILOS DE BOTS AUTOMÁTICOS */
 
 /* IA TRADER */
 .ia-input-group {
@@ -337,6 +263,36 @@ aside h3 {
     margin-bottom: 5px;
 }
 
+/* ASIDE (LOGS) */
+aside {
+    grid-area: aside;
+    background-color: #1a1a1a;
+    padding: 20px;
+    border-left: 1px solid var(--border-color);
+    overflow-y: auto;
+}
+aside h2 {
+    color: var(--accent-blue);
+    margin-bottom: 15px;
+    font-size: 1.4em;
+}
+.logs-container {
+    display: flex;
+    flex-direction: column-reverse; /* Exibir logs mais novos no topo */
+}
+.log-message {
+    padding: 5px 0;
+    font-size: 0.8em;
+    border-bottom: 1px dotted #2b2b2b;
+}
+.log-message.signal {
+    color: var(--accent-blue);
+    font-weight: bold;
+}
+.log-message.error {
+    color: var(--accent-red);
+}
+
 /* MEDIA QUERIES (Responsividade) */
 @media (max-width: 1024px) {
     #dashboard-view {
@@ -349,29 +305,56 @@ aside h3 {
     }
     .side-menu {
         grid-area: menu;
+        position: static;
+        flex-direction: row;
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+    }
+    .side-menu a {
+        padding: 10px 15px;
+    }
+    aside {
+        border-left: none;
+        border-top: 1px solid var(--border-color);
+        height: 300px; /* Limita a altura do log */
+    }
+    .signal-card {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .signal-details {
+        margin-left: 0;
+        margin-top: 15px;
+    }
+    .signal-value {
+        min-width: 150px;
+    }
+}
+
+@media (max-width: 768px) {
+    .side-menu {
         position: fixed;
-        width: 250px;
-        height: 100%;
         left: -250px;
         top: 0;
-        z-index: 100;
-        transition: left 0.3s;
-        box-shadow: 2px 0 5px rgba(0, 0, 0, 0.5);
+        bottom: 0;
+        height: 100vh;
+        z-index: 10;
+        flex-direction: column;
+        width: 250px;
+        transition: left 0.3s ease-in-out;
     }
     .side-menu.open {
         left: 0;
     }
     #menu-btn {
         display: block;
+        background-color: transparent;
+        color: var(--text-color);
+        border: none;
+        font-size: 1.5em;
+        cursor: pointer;
     }
-    main {
-        padding-top: 15px;
-    }
-    #results-container {
-        grid-template-columns: 1fr;
-    }
-    .controls-bar {
-        flex-direction: column;
-        align-items: stretch;
+    header nav {
+        gap: 10px;
     }
 }
