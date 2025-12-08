@@ -1,4 +1,4 @@
-# main.py
+# main.py - Versão Final: CORS, Conexão Assíncrona e Sinal de Velas
 
 import asyncio
 import uuid
@@ -10,7 +10,11 @@ from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import json
 
-# --- IMPORTS CORRETOS ---
+# --- IMPORTS CORRIGIDOS ---
+# Importação CRÍTICA para o CORS
+from fastapi.middleware.cors import CORSMiddleware 
+# --------------------------
+
 from strategy import generate_signal 
 from deriv_client import DerivClient
 from bots_manager import BotsManager, BotState 
@@ -19,6 +23,25 @@ from bots_manager import BotsManager, BotState
 app = FastAPI()
 client: Optional[DerivClient] = None
 bots_manager: Optional[BotsManager] = None
+
+# 🟢 CORREÇÃO 1: ADIÇÃO DO MIDDLEWARE CORS 🟢
+# Isso deve resolver o erro "Failed to fetch" no frontend.
+origins = [
+    "http://localhost",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "*" # Permite todas as origens (use apenas para desenvolvimento/teste)
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"], 
+    allow_headers=["*"],
+)
+# -------------------------------------------
+
 
 # Montar pasta static para CSS e JS
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -55,33 +78,47 @@ async def read_root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 
-# --- 2. ROTA DE AUTORIZAÇÃO (POST) ---
+# --- 2. ROTA DE AUTORIZAÇÃO (POST) - 🟢 CORREÇÃO 2: CONEXÃO ASSÍNCRONA 🟢 ---
 @app.post("/set_token", response_class=JSONResponse)
 async def set_token(data: TokenRequest):
     """Lida com a conexão e autorização do token da Deriv."""
-    global client
+    global client, bots_manager
+    
+    # 1. Parar cliente antigo (se existir)
     if client:
         await client.stop() 
         client = None
 
-    client = DerivClient(data.token)
+    # O DerivClient agora recebe o bots_manager para enviar sinais diretamente
+    client = DerivClient(data.token, bots_manager) 
+    
     try:
-        await client.start()
-        if client.authorized:
-            return JSONResponse({
-                "ok": True, 
-                "message": "Conectado e Autorizado.",
-                "account_type": client.account_info.get("account_type"),
-                "balance": client.account_info.get("balance")
-            })
-        else:
-            await client.stop()
-            raise HTTPException(status_code=401, detail="Token inválido ou falha na autorização.")
+        # Inicia a conexão, autenticação e subscrição de velas de 1m em segundo plano
+        # (Isso impede que o servidor FastAPI fique bloqueado e evita o Timeout)
+        asyncio.create_task(client.connect_and_subscribe(symbol="R_100")) 
+
+        # 2. Esperar pela autorização
+        # Espera no máximo 5 segundos para a autorização inicial (que é rápida)
+        for _ in range(10): # 10 tentativas * 0.5s
+            if client.authorized:
+                return JSONResponse({
+                    "ok": True, 
+                    "message": "Conectado e Autorizado. Dados de velas a carregar...",
+                    "account_type": client.account_info.get("account_type"),
+                    "balance": client.account_info.get("balance")
+                })
+            await asyncio.sleep(0.5)
+
+        # Se o loop terminar sem autorização
+        await client.stop()
+        raise HTTPException(status_code=401, detail="Token inválido ou falha na autorização (Timeout).")
+        
     except Exception as e:
         if client:
             await client.stop()
             client = None
-        raise HTTPException(status_code=500, detail=f"Erro ao conectar: {e}")
+        # Use str(e) para garantir que o erro seja serializável
+        raise HTTPException(status_code=500, detail=f"Erro ao conectar: {str(e)}")
 
 
 # --- 3. ROTA DE STATUS (GET) ---
@@ -90,7 +127,8 @@ async def get_status():
     """Retorna o status atual da conexão e saldo."""
     global client
     status = {
-        "connected": client and client.connected,
+        # O estado de conexão agora usa a nova variável 'is_connected' do DerivClient
+        "connected": client and client.is_connected, 
         "authorized": client and client.authorized,
         "balance": client.account_info.get("balance", 0.0) if client else 0.0,
         "account_type": client.account_info.get("account_type", "offline") if client else "offline"
@@ -98,40 +136,31 @@ async def get_status():
     return JSONResponse(status)
 
 
-# --- 4. ROTA DE SINAL (GET) - 🟢 CORREÇÃO CRÍTICA DO TIMEOUT (30 SEGUNDOS) 🟢 ---
+# --- 4. ROTA DE SINAL (GET) - 🟢 CORREÇÃO 3: LÓGICA DE VELAS DE 1M (MAIS RÁPIDA) 🟢 ---
 @app.get("/signal")
-async def get_signal(symbol: str = "R_100", tf: str = "TICK"):
+async def get_signal(symbol: str = "R_100"):
     """
-    Tenta gerar um sinal de trading, repetindo por 30 segundos para acumular ticks.
+    Gera um sinal de trading com base nos preços de fecho das velas de 1m.
+    A estabilidade está no DerivClient (que só atualiza a cada 60s).
     """
     if not client or not client.authorized:
         raise HTTPException(status_code=401, detail="Não autorizado. Faça o login primeiro.")
     
-    # Tentaremos 180 vezes * 0.5s = 30 segundos de espera total (necessário para o R_100)
-    MAX_ATTEMPTS = 180 
+    # O tf (timeframe) é fixo em "1m" para usar a análise de velas
+    signal = generate_signal(symbol, "1m") 
+        
+    if signal is not None:
+        return signal
     
-    for attempt in range(MAX_ATTEMPTS):
-        # Tenta gerar o sinal (strategy.py retorna None se faltarem dados ou houver NaN)
-        signal = generate_signal(symbol, tf) 
-        
-        if signal is not None:
-            # Sucesso: Sinal gerado
-            print(f"[Main] ✅ Sinal gerado após {attempt + 1} tentativas (tempo de espera: {attempt * 0.5}s).")
-            return signal
-        
-        # Espera 0.5s e tenta novamente
-        await asyncio.sleep(0.5) 
-        
-    # Falha Total: Após 90 segundos
+    # Caso o histórico de velas ainda não tenha sido carregado
     raise HTTPException(
         status_code=404, 
-        detail=f"Não foi possível gerar o sinal após 90 segundos. O ativo ({symbol}) está a enviar ticks muito lentamente ou o cálculo falhou permanentemente. Verifique os logs."
+        detail=f"Os dados históricos (velas de 1m) ainda não foram completamente carregados. Tente novamente em 5 segundos."
     )
 
 
-# --- 5. ROTAS DE GESTÃO DE BOTS ---
+# --- 5. ROTAS DE GESTÃO DE BOTS (Inalteradas) ---
 
-# Note: Esta é uma classe auxiliar que o Pydantic espera. O seu bots_manager.py deve ter a TradingBot
 class BotAction(BaseModel):
     bot_id: str
 
@@ -142,6 +171,7 @@ async def create_bot(data: BotCreationRequest):
     if not bots_manager or not client or not client.authorized:
         raise HTTPException(status_code=401, detail="Cliente não autorizado ou gestor de bots não inicializado.")
 
+    # Note: O client.py agora precisa ser capaz de passar o cliente para o bot
     new_bot = bots_manager.create_bot(data.name, data.symbol, data.tf, data.stop_loss, data.take_profit, client)
 
     # Inicia a tarefa assíncrona do bot
@@ -158,7 +188,6 @@ async def list_bots():
         
     bots_list = []
     for bot in bots_manager.get_all_bots():
-        # Excluir referências não serializáveis
         bots_list.append({
             "id": bot.id,
             "name": bot.name,
@@ -181,21 +210,27 @@ async def pause_bot(data: BotAction):
     return JSONResponse({"ok": True, "message": f"Bot {bot.name} pausado."})
 
 
-# --- 6. ROTA DE CONSULTA DA IA ---
+# --- 6. ROTA DE CONSULTA DA IA (Inalterada) ---
 @app.post("/ia/query", response_class=JSONResponse)
 async def ia_query(data: IAQueryRequest):
     """Processa consultas de análise técnica feitas ao módulo de IA."""
     query = data.query.lower()
 
     if "triângulo ascendente" in query:
-        response_text = "O Triângulo Ascendente é um padrão de continuação bullish. É formado por uma linha de resistência horizontal no topo e uma linha de suporte ascendente na base. Sugere que os compradores estão a ganhar força e que uma quebra acima da resistência é provável."
+        response_text = "O Triângulo Ascendente é um padrão de continuação bullish. É formado por uma linha de resistência horizontal no topo e uma linha de suporte ascendente na base. Sugere que os compradores estão a ganhar força e que uma quebra acima da resistência é provável. [attachment_0](attachment)"
     elif "rsi" in query or "sobrecompra" in query:
         response_text = "O Índice de Força Relativa (RSI) mede a velocidade e a mudança dos movimentos de preço. Um RSI acima de 70 indica sobrecompra (potencial de queda), e um abaixo de 30 indica sobrevenda (potencial de subida)."
     elif "suporte e resistência" in query:
-        response_text = "Suporte e Resistência são níveis de preço cruciais onde a pressão de compra ou venda historicamente se concentra. O suporte é um 'piso' onde o preço tende a subir, e a resistência é um 'teto' onde o preço tende a cair."
+        response_text = "Suporte e Resistência são níveis de preço cruciais onde a pressão de compra ou venda historicamente se concentra. O suporte é um 'piso' onde o preço tende a subir, e a resistência é um 'teto' onde o preço tende a cair. [attachment_1](attachment)"
     elif "bitcoin" in query or "binance" in query:
         response_text = "A análise técnica se aplica a qualquer mercado, incluindo criptomoedas como Bitcoin. No entanto, a alta volatilidade exige cautela e stop-loss mais rígidos."
     else:
         response_text = "Desculpe, a minha base de dados de análise técnica está limitada. Por favor, faça uma pergunta sobre padrões gráficos, indicadores (como RSI/EMA) ou conceitos básicos de trading."
 
     return JSONResponse({"ok": True, "response": response_text})
+
+
+if __name__ == '__main__':
+    import uvicorn
+    # A porta 10000 é comum em serviços de hospedagem
+    uvicorn.run(app, host="0.0.0.0", port=10000)
