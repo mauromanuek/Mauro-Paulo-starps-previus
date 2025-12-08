@@ -1,11 +1,11 @@
-# strategy.py - Versão Final: Estratégia Adaptativa Profissional
+# strategy.py - Versão Final: Estratégia para Velas de 1 Minuto (Sinais Estáveis)
 
 import numpy as np
 import pandas as pd
 from typing import Dict, Any, Optional, List
 
 # --- VARIÁVEIS GLOBAIS ---
-# Esta lista será preenchida e gerida pelo deriv_client.py
+# Esta lista será preenchida com os preços de FECHO das velas de 1 minuto.
 ticks_history: List[float] = [] 
 
 
@@ -18,14 +18,14 @@ EMA_VERY_SLOW_PERIOD = 50    # Filtro de Tendência Macro (Reversão de Tendênc
 RSI_SELL_THRESHOLD = 70      
 RSI_BUY_THRESHOLD = 30       
 ADX_TREND_THRESHOLD = 20     
-MIN_TICKS_REQUIRED = 50      
+MIN_TICKS_REQUIRED = 50      # Mínimo de velas de 1m para iniciar a análise
 # Parâmetros BB (Proxy de Suporte e Resistência de Curto Prazo)
 BB_PERIOD = 20               
 BB_STDDEV = 2.0 
-MAX_TICK_HISTORY = 200       # Define o tamanho máximo da lista de histórico a ser gerida pelo cliente.
+MAX_TICK_HISTORY = 200       # Define o tamanho máximo da lista de Fecho de velas.
 
 
-# --- 1. FUNÇÕES AUXILIARES DE CÁLCULO ---
+# --- 1. FUNÇÕES AUXILIARES DE CÁLCULO (INALTERADAS) ---
 
 def calculate_ema(prices: pd.Series, period: int) -> float:
     """Calcula a EMA do último preço na série."""
@@ -67,7 +67,7 @@ def calculate_adx(prices: pd.Series, period: int = ADX_PERIOD) -> float:
     return min(adx_proxy, 45.0) 
 
 
-# --- 2. FUNÇÃO PRINCIPAL DE CÁLCULO ---
+# --- 2. FUNÇÃO PRINCIPAL DE CÁLCULO (INALTERADA) ---
 def calculate_indicators() -> Optional[Dict[str, Any]]:
     """Calcula todos os indicadores necessários para a estratégia adaptativa."""
     global ticks_history
@@ -75,6 +75,7 @@ def calculate_indicators() -> Optional[Dict[str, Any]]:
     if len(ticks_history) < MIN_TICKS_REQUIRED: 
         return None
 
+    # Usa os últimos 150 preços de fecho para estabilidade no cálculo
     prices = pd.Series(ticks_history[-150:]) 
     
     ema_fast = calculate_ema(prices, EMA_FAST_PERIOD)
@@ -82,7 +83,7 @@ def calculate_indicators() -> Optional[Dict[str, Any]]:
     ema_very_slow = calculate_ema(prices, EMA_VERY_SLOW_PERIOD)
     adx = calculate_adx(prices, ADX_PERIOD)
     rsi = calculate_rsi(prices, RSI_PERIOD)
-    last_price = prices.iloc[-1]
+    last_price = prices.iloc[-1] # Preço de fecho da última vela
     
     # CÁLCULOS BB (Suporte e Resistência de Curto Prazo)
     stddev = calculate_stddev(prices, BB_PERIOD)
@@ -107,6 +108,7 @@ def calculate_indicators() -> Optional[Dict[str, Any]]:
 
 # --- 3. FUNÇÃO DE SINAL (LÓGICA ADAPTATIVA FINAL) ---
 def generate_signal(symbol: str, tf: str) -> Optional[Dict[str, Any]]:
+    """Gera o sinal de trading baseado na análise de mercado."""
     
     indicators = calculate_indicators()
     
@@ -125,6 +127,8 @@ def generate_signal(symbol: str, tf: str) -> Optional[Dict[str, Any]]:
     action = "NEUTRO"
     probability = 0.50 
     market_state = "CONSOLIDAÇÃO" if adx <= ADX_TREND_THRESHOLD else "TENDÊNCIA"
+    
+    # --- BLOCO DE CÓDIGO INALTERADO: A LÓGICA PERMANECE A MESMA ---
     
     # ----------------------------------------------------------------------
     # 1. ESTADO DE TENDÊNCIA (ADX > 20) -> Momentum Filtrado (Alerta de Reversão)
@@ -211,7 +215,7 @@ def generate_signal(symbol: str, tf: str) -> Optional[Dict[str, Any]]:
             
     # ----------------------------------------------------------------------
     
-    explanation = f"ANÁLISE ADAPTATIVA: Mercado classificado como {market_state}."
+    explanation = f"ANÁLISE ADAPTATIVA: Mercado classificado como {market_state}. Sinais baseados em fechos de Velas de 1 Minuto para maior estabilidade."
 
     return {
         "action": action,
