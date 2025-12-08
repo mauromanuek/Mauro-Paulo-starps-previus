@@ -108,7 +108,7 @@ async def get_signal(symbol: str = "R_100", tf: str = "TICK"):
         raise HTTPException(status_code=401, detail="Não autorizado. Faça o login primeiro.")
     
     # Tentaremos 180 vezes * 0.5s = 30 segundos de espera total (necessário para o R_100)
-    MAX_ATTEMPTS = 120 
+    MAX_ATTEMPTS = 180 
     
     for attempt in range(MAX_ATTEMPTS):
         # Tenta gerar o sinal (strategy.py retorna None se faltarem dados ou houver NaN)
