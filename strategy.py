@@ -1,24 +1,26 @@
-# strategy.py - Versão Final Completa (Lógica Adaptativa + Cálculos Corretos)
+# strategy.py - Versão Final Completa e Otimizada (Lógica Adaptativa)
 
 import numpy as np
 import pandas as pd
 from typing import Dict, Any, Optional, List
 
 # --- VARIÁVEIS GLOBAIS ---
-# Certifique-se de que o seu DerivClient.py ou outro módulo preenche esta lista
+# Esta lista é preenchida pelo DerivClient.py (com a correção da linha 116)
 ticks_history: List[float] = [] 
 
 
-# --- PARÂMETROS DA ESTRATÉGIA ---
+# --- PARÂMETROS OTIMIZADOS DA ESTRATÉGIA ---
 RSI_PERIOD = 14
 ADX_PERIOD = 14
 EMA_FAST_PERIOD = 5
 EMA_SLOW_PERIOD = 20
-ADX_TREND_THRESHOLD = 25 # Se ADX > 25, considera-se tendência.
-MIN_TICKS_REQUIRED = 30 # Aumentamos o mínimo para suportar ADX/RSI estáveis
+RSI_SELL_THRESHOLD = 70      # OTIMIZADO: Mais sinais de reversão
+RSI_BUY_THRESHOLD = 30       # OTIMIZADO: Mais sinais de reversão
+ADX_TREND_THRESHOLD = 20     # OTIMIZADO: Reconhece tendências mais fracas
+MIN_TICKS_REQUIRED = 30      # Mínimo de ticks para cálculos estáveis
 
 
-# --- 1. FUNÇÕES AUXILIARES DE CÁLCULO (IMPLEMENTAÇÃO COMPLETA) ---
+# --- 1. FUNÇÕES AUXILIARES DE CÁLCULO ---
 
 def calculate_ema(prices: pd.Series, period: int) -> float:
     """Calcula a EMA do último preço na série."""
@@ -26,50 +28,46 @@ def calculate_ema(prices: pd.Series, period: int) -> float:
     return prices.astype(float).ewm(span=period, adjust=False).mean().iloc[-1]
 
 def calculate_rsi(prices: pd.Series, period: int = RSI_PERIOD) -> float:
-    """Calcula o RSI correto com base na diferença entre os preços."""
+    """Calcula o RSI com base na diferença entre os preços."""
     if len(prices) < period * 2: return np.nan
     
-    # Diferença entre preços consecutivos
     delta = prices.diff()
     gain = delta.where(delta > 0, 0)
     loss = -delta.where(delta < 0, 0)
 
     # Cálculo da Média Móvel Exponencial Suavizada (SMMA/RMA)
-    # pandas.ewm(com=period - 1) é equivalente ao SMMA/RMA
     avg_gain = gain.ewm(com=period - 1, adjust=False).mean()
     avg_loss = loss.ewm(com=period - 1, adjust=False).mean()
     
-    # Cálculo do RS e RSI
     rs = avg_gain / avg_loss
-    rsi = 100 - (100 / (1 + rs))
+    # Evitar divisão por zero se avg_loss for 0
+    rsi = 100 - (100 / (1 + rs.fillna(0))) 
     
     return rsi.iloc[-1]
 
 def calculate_adx(prices: pd.Series, period: int = ADX_PERIOD) -> float:
     """
-    Calcula o ADX. NOTA: Em um sistema de TICKs (onde High/Low/Close são iguais),
-    o ADX não é a ferramenta ideal. Aqui, simplificamos o conceito de ADX
-    (força da tendência) usando o desvio padrão da EMA em relação ao preço.
-    Isto simula o conceito de força da tendência.
+    Simula o cálculo do ADX (força da tendência) através do desvio da EMA.
+    (Proxy necessária para mercados de tick sem dados de High/Low/Volume).
     """
     if len(prices) < period: return np.nan
     
-    # Simulação da Força da Tendência: Desvio Padrão do Preço para a EMA
-    # Uma diferença (residuo) grande indica uma tendência forte (ADX alto)
-    ema = prices.ewm(span=period, adjust=False).mean()
-    residues = (prices - ema).abs()
+    # Média dos últimos 50 ticks para estabilidade no cálculo
+    prices_subset = prices.iloc[-50:] 
     
-    # Calculamos a média do Desvio Absoluto (um bom proxy para ADX)
-    adx_proxy = residues.mean() * 10 
+    # Calcula o desvio padrão do preço em relação à sua média móvel
+    ema = prices_subset.ewm(span=period, adjust=False).mean()
+    residues = (prices_subset - ema).abs()
     
-    # Normalizamos o valor para o limite 0-100 para ser comparável ao ADX tradicional (máximo 100)
-    # Usaremos um valor entre 10 e 40 como limite.
-    return min(adx_proxy, 45) # Limita a 45 para fins práticos de ADX
+    # ADX Proxy: Média do Desvio Absoluto, normalizada para 0-45
+    adx_proxy = residues.mean() * 10
+    
+    return min(adx_proxy, 45.0) # Limita o proxy para ser comparável ao ADX (máx. 100)
 
 
 # --- 2. FUNÇÃO PRINCIPAL DE CÁLCULO ---
 def calculate_indicators() -> Optional[Dict[str, Any]]:
-    """Calcula todos os indicadores necessários."""
+    """Calcula todos os indicadores necessários para a estratégia adaptativa."""
     global ticks_history
     
     if len(ticks_history) < MIN_TICKS_REQUIRED:
@@ -78,16 +76,14 @@ def calculate_indicators() -> Optional[Dict[str, Any]]:
     # Usamos os últimos 100 ticks para estabilizar os cálculos
     prices = pd.Series(ticks_history[-100:]) 
     
-    # 1. Indicadores de Tendência/Momentum
+    # Indicadores
     ema_fast = calculate_ema(prices, EMA_FAST_PERIOD)
     ema_slow = calculate_ema(prices, EMA_SLOW_PERIOD)
     adx = calculate_adx(prices, ADX_PERIOD)
-    
-    # 2. Indicador de Reversão
     rsi = calculate_rsi(prices, RSI_PERIOD)
-    
     last_price = prices.iloc[-1]
     
+    # Verifica se todos os cálculos foram bem-sucedidos
     if np.isnan(ema_fast) or np.isnan(ema_slow) or np.isnan(rsi) or np.isnan(adx):
         return None
         
@@ -100,10 +96,10 @@ def calculate_indicators() -> Optional[Dict[str, Any]]:
     }
 
 
-# --- 3. FUNÇÃO DE SINAL (LÓGICA ADAPTATIVA) ---
+# --- 3. FUNÇÃO DE SINAL (LÓGICA ADAPTATIVA OTIMIZADA) ---
 def generate_signal(symbol: str, tf: str) -> Optional[Dict[str, Any]]:
     """
-    Gera um sinal de trading com base numa estratégia adaptativa profissional.
+    Gera um sinal de trading com base na estratégia adaptativa (ADX, Crossover, RSI 30/70).
     """
     indicators = calculate_indicators()
     
@@ -121,45 +117,45 @@ def generate_signal(symbol: str, tf: str) -> Optional[Dict[str, Any]]:
     market_state = "CONSOLIDAÇÃO" if adx <= ADX_TREND_THRESHOLD else "TENDÊNCIA"
     
     # ----------------------------------------------------------------------
-    # 1. ANÁLISE PROFISSIONAL: ESTADO DO MERCADO (ADX)
+    # 1. ESTADO DE TENDÊNCIA (ADX > 20) -> Estratégia de Momentum
     # ----------------------------------------------------------------------
     if adx > ADX_TREND_THRESHOLD:
-        # 🟢 ESTADO 1: MERCADO EM TENDÊNCIA FORTE (ADX > 25)
-        # Estratégia de Momentum (EMA Crossover)
         
         if ema_fast > ema_slow:
             action = "CALL (COMPRA)"
             probability = 0.85 
-            reason = f"TENDÊNCIA: ADX ({adx:.2f}) forte. EMA 5 cruza acima da EMA 20. MOMENTUM de alta."
+            reason = f"TENDÊNCIA: ADX ({adx:.2f}) indica força. EMA 5 > EMA 20. MOMENTUM de alta."
         elif ema_fast < ema_slow:
             action = "PUT (VENDA)"
             probability = 0.85
-            reason = f"TENDÊNCIA: ADX ({adx:.2f}) forte. EMA 5 cruza abaixo da EMA 20. MOMENTUM de baixa."
+            reason = f"TENDÊNCIA: ADX ({adx:.2f}) indica força. EMA 5 < EMA 20. MOMENTUM de baixa."
         else:
-            action = "NEUTRO"
-            probability = 0.60
-            reason = f"TENDÊNCIA: ADX ({adx:.2f}) forte, mas EMAs em confluência. Aguardando o Crossover."
+            # Em tendência forte, mas sem crossover claro.
+            action = "NEUTRO" 
+            probability = 0.60 
+            reason = f"TENDÊNCIA: ADX ({adx:.2f}) ativo, mas EMAs em confluência. Aguardando o Crossover."
             
-    else: # adx <= 25
-        # 🔴 ESTADO 2: MERCADO EM CONSOLIDAÇÃO/RANGE (ADX <= 25)
-        # Estratégia de Reversão (RSI Extremo 80/20)
+    # ----------------------------------------------------------------------
+    # 2. ESTADO DE CONSOLIDAÇÃO (ADX <= 20) -> Estratégia de Reversão
+    # ----------------------------------------------------------------------
+    else: 
         
-        if rsi > 80:
+        if rsi > RSI_SELL_THRESHOLD: # NOVO LIMITE: 70
             action = "PUT (VENDA)"
-            probability = 0.92 
-            reason = f"CONSOLIDAÇÃO: ADX ({adx:.2f}) baixo. RSI ({rsi:.2f}) em extremo de sobrecompra (>80). Esperada reversão."
-        elif rsi < 20:
+            probability = 0.88 
+            reason = f"CONSOLIDAÇÃO: ADX ({adx:.2f}) baixo. RSI ({rsi:.2f}) em sobrecompra (>70). Reversão esperada."
+        elif rsi < RSI_BUY_THRESHOLD: # NOVO LIMITE: 30
             action = "CALL (COMPRA)"
-            probability = 0.92
-            reason = f"CONSOLIDAÇÃO: ADX ({adx:.2f}) baixo. RSI ({rsi:.2f}) em extremo de sobrevenda (<20). Esperada reversão."
+            probability = 0.88
+            reason = f"CONSOLIDAÇÃO: ADX ({adx:.2f}) baixo. RSI ({rsi:.2f}) em sobrevenda (<30). Reversão esperada."
         else:
             action = "NEUTRO"
             probability = 0.50
-            reason = f"CONSOLIDAÇÃO: ADX ({adx:.2f}) baixo e RSI ({rsi:.2f}) neutro. Aguardando extremos (20/80)."
+            reason = f"CONSOLIDAÇÃO: ADX ({adx:.2f}) baixo e RSI ({rsi:.2f}) neutro (30-70). Aguardando extremos."
             
     # ----------------------------------------------------------------------
     
-    explanation = f"ANÁLISE ADAPTATIVA: Mercado classificado como {market_state}. A estratégia foi ajustada automaticamente."
+    explanation = f"ANÁLISE ADAPTATIVA (Frequência Otimizada): Mercado classificado como {market_state}."
 
     return {
         "action": action,
