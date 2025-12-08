@@ -12,7 +12,7 @@ import json
 
 from fastapi.middleware.cors import CORSMiddleware 
 
-from strategy import generate_signal 
+from strategy import generate_signal # Importa a função de sinal adaptativa
 from deriv_client import DerivClient
 from bots_manager import BotsManager, BotState 
 
@@ -98,7 +98,6 @@ async def set_token(data: TokenRequest):
             # Se a conexão falhou (erro de rede/token) e não está autorizado
             if not client.is_connected and not client.authorized and client.ws is None:
                  await client.stop()
-                 # Esta mensagem aparecerá na sua interface quando a conexão falhar imediatamente
                  raise HTTPException(status_code=401, detail="Conexão Falhou: Token inválido, expirado ou problema de rede (veja o log do servidor).")
             
             await asyncio.sleep(0.5)
