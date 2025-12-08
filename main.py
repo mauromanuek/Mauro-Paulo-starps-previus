@@ -107,8 +107,8 @@ async def get_signal(symbol: str = "R_100", tf: str = "TICK"):
     if not client or not client.authorized:
         raise HTTPException(status_code=401, detail="Não autorizado. Faça o login primeiro.")
     
-    # Tentaremos 60 vezes * 0.5s = 30 segundos de espera total (necessário para o R_100)
-    MAX_ATTEMPTS = 60 
+    # Tentaremos 180 vezes * 0.5s = 30 segundos de espera total (necessário para o R_100)
+    MAX_ATTEMPTS = 120 
     
     for attempt in range(MAX_ATTEMPTS):
         # Tenta gerar o sinal (strategy.py retorna None se faltarem dados ou houver NaN)
@@ -122,10 +122,10 @@ async def get_signal(symbol: str = "R_100", tf: str = "TICK"):
         # Espera 0.5s e tenta novamente
         await asyncio.sleep(0.5) 
         
-    # Falha Total: Após 30 segundos
+    # Falha Total: Após 90 segundos
     raise HTTPException(
         status_code=404, 
-        detail=f"Não foi possível gerar o sinal após 30 segundos. O ativo ({symbol}) está a enviar ticks muito lentamente ou o cálculo falhou permanentemente. Verifique os logs."
+        detail=f"Não foi possível gerar o sinal após 90 segundos. O ativo ({symbol}) está a enviar ticks muito lentamente ou o cálculo falhou permanentemente. Verifique os logs."
     )
 
 
