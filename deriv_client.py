@@ -4,7 +4,7 @@ import asyncio
 import websockets
 import json
 from datetime import datetime
-from strategy import update_ticks 
+from strategy import ticks_history 
 
 
 class DerivClient:
@@ -113,7 +113,7 @@ class DerivClient:
                 if data.get("msg_type") == "tick":
                     tick = data["tick"]
                     price = float(tick["quote"])
-                    update_ticks(price) 
+                     ticks_history.append(float(price))
                     
                     print(f"[Deriv] ✅ Tick recebido: {price}") 
                     
