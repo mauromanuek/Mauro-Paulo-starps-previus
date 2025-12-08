@@ -1,18 +1,15 @@
-# main.py - Versão FINAL E CORRIGIDA: CORS, Conexão Assíncrona e Sinal de Velas
+# main.py - Versão FINAL E COMPLETA: CORS, Conexão Assíncrona e Lógica de Erros
 
 import asyncio
-import uuid
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
-from typing import Optional, Dict, Any, List
+from typing import Optional
 import json
 
-# --- IMPORTS CORRIGIDOS ---
 from fastapi.middleware.cors import CORSMiddleware 
-# --------------------------
 
 from strategy import generate_signal 
 from deriv_client import DerivClient
@@ -23,7 +20,7 @@ app = FastAPI()
 client: Optional[DerivClient] = None
 bots_manager: Optional[BotsManager] = None
 
-# 🟢 CORREÇÃO 1: ADIÇÃO DO MIDDLEWARE CORS (Extremamente Permissivo para Teste) 🟢
+# --- ADIÇÃO DO MIDDLEWARE CORS ---
 origins = [
     "*" 
 ]
@@ -35,16 +32,16 @@ app.add_middleware(
     allow_methods=["*"], 
     allow_headers=["*"],
 )
-# -------------------------------------------
+# ---------------------------------
 
 
-# Montar pasta static para CSS e JS
+# Montar pasta static
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Configuração de templates
 templates = Jinja2Templates(directory=".")
 
-# --- Models Pydantic (inalteradas) ---
+# --- Models Pydantic ---
 class TokenRequest(BaseModel):
     token: str
 
@@ -62,14 +59,12 @@ class IAQueryRequest(BaseModel):
 # --- EVENTOS DE INICIALIZAÇÃO ---
 @app.on_event("startup")
 async def startup_event():
-    """Função executada ao iniciar o servidor."""
     global bots_manager
     bots_manager = BotsManager()
 
 # --- 1. ROTA PRINCIPAL (INDEX) ---
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
-    """Carrega a página principal do dashboard."""
     return templates.TemplateResponse("index.html", {"request": request})
 
 
@@ -79,49 +74,53 @@ async def set_token(data: TokenRequest):
     """Lida com a conexão e autorização do token da Deriv."""
     global client, bots_manager
     
-    # 1. Parar cliente antigo (se existir)
     if client:
         await client.stop() 
         client = None
 
-    # O DerivClient agora recebe o bots_manager OBRIGATORIAMENTE
     client = DerivClient(data.token, bots_manager) 
     
     try:
-        # 🟢 CORREÇÃO 2: Inicia a conexão em TAREFA DE FUNDO 🟢
-        # Isto é essencial para o FastAPI responder e evita o erro de timeout
+        # Inicia a conexão em TAREFA DE FUNDO
         asyncio.create_task(client.connect_and_subscribe(symbol="R_100")) 
 
-        # 2. Esperar pela autorização
-        for _ in range(10): 
-            if client.authorized: # O client.authorized agora existe garantidamente
+        # 2. Esperar pela autorização ou falha (Timeout)
+        for _ in range(10): # Espera no máximo 5 segundos
+            if client.authorized:
                 return JSONResponse({
                     "ok": True, 
                     "message": "Conectado e Autorizado. Dados de velas a carregar...",
                     "account_type": client.account_info.get("account_type"),
                     "balance": client.account_info.get("balance")
                 })
+            
+            # Se a conexão falhou (erro de rede/token) e não está autorizado
+            if not client.is_connected and not client.authorized and client.ws is None:
+                 await client.stop()
+                 # A mensagem de erro específica será logada no servidor pelo DerivClient
+                 raise HTTPException(status_code=401, detail="Conexão Falhou: Token inválido, expirado ou problema de rede (veja o log do servidor).")
+            
             await asyncio.sleep(0.5)
 
-        # Se o loop terminar sem autorização
+        # Se o loop terminar sem autorização (TIMEOUT)
         await client.stop()
         raise HTTPException(status_code=401, detail="Token inválido ou falha na autorização (Timeout).")
         
+    except HTTPException as e:
+        # Re-lança o HTTPException para ser capturado pelo FastAPI
+        raise e
     except Exception as e:
+        # Captura erros inesperados
         if client:
             await client.stop()
             client = None
-        raise HTTPException(status_code=500, detail=f"Erro ao conectar: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erro fatal ao conectar: {str(e)}")
 
 
 # --- 3. ROTA DE STATUS (GET) ---
 @app.get("/status", response_class=JSONResponse)
 async def get_status():
-    """Retorna o status atual da conexão e saldo."""
     global client
-    # 🚨 Linha onde estava o AttributeError 🚨:
-    # A verificação 'client and' garante que não tentamos acessar o atributo se client for None.
-    # Como o atributo 'authorized' agora é garantido no __init__ do DerivClient, o erro deve sumir.
     status = {
         "connected": client and client.connected, 
         "authorized": client and client.authorized, 
@@ -134,13 +133,9 @@ async def get_status():
 # --- 4. ROTA DE SINAL (GET) ---
 @app.get("/signal")
 async def get_signal(symbol: str = "R_100"):
-    """
-    Gera um sinal de trading com base nos preços de fecho das velas de 1m.
-    """
     if not client or not client.authorized:
         raise HTTPException(status_code=401, detail="Não autorizado. Faça o login primeiro.")
     
-    # O tf (timeframe) é fixo em "1m"
     signal = generate_signal(symbol, "1m") 
         
     if signal is not None:
@@ -158,7 +153,6 @@ class BotAction(BaseModel):
 
 @app.post("/bot/create", response_class=JSONResponse)
 async def create_bot(data: BotCreationRequest):
-    """Cria e inicia um novo bot de trading."""
     global bots_manager, client
     if not bots_manager or not client or not client.authorized:
         raise HTTPException(status_code=401, detail="Cliente não autorizado ou gestor de bots não inicializado.")
@@ -171,7 +165,6 @@ async def create_bot(data: BotCreationRequest):
 
 @app.get("/bots/list", response_class=JSONResponse)
 async def list_bots():
-    """Lista todos os bots ativos."""
     global bots_manager
     if not bots_manager:
         return JSONResponse({"bots": []})
@@ -191,7 +184,6 @@ async def list_bots():
 
 @app.post("/bot/pause", response_class=JSONResponse)
 async def pause_bot(data: BotAction):
-    """Pausa um bot de trading existente."""
     global bots_manager
     bot = bots_manager.get_bot(data.bot_id)
     if not bot:
@@ -203,7 +195,6 @@ async def pause_bot(data: BotAction):
 # --- 6. ROTA DE CONSULTA DA IA ---
 @app.post("/ia/query", response_class=JSONResponse)
 async def ia_query(data: IAQueryRequest):
-    """Processa consultas de análise técnica feitas ao módulo de IA."""
     query = data.query.lower()
 
     if "triângulo ascendente" in query:
