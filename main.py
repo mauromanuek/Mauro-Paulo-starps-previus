@@ -9,9 +9,8 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import json
-from fastapi.middleware.cors import CORSMiddleware # Adicionado para garantir CORS
 
-# --- IMPORTS CORRETOS ---
+# --- IMPORTS CRÍTICOS ---
 from strategy import generate_signal 
 from deriv_client import DerivClient
 from bots_manager import BotsManager, BotState 
@@ -20,20 +19,6 @@ from bots_manager import BotsManager, BotState
 app = FastAPI()
 client: Optional[DerivClient] = None
 bots_manager: Optional[BotsManager] = None
-
-# 🟢 CONFIGURAÇÃO DE CORS (Para garantir que o Render funcione) 🟢
-origins = [
-    "*", 
-]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-# -------------------------------------------------------------
 
 # Montar pasta static para CSS e JS
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -66,173 +51,146 @@ async def startup_event():
 # --- 1. ROTA PRINCIPAL (INDEX) ---
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
-    """Carrega a página principal do dashboard/login."""
+    """Carrega a página principal do dashboard."""
     return templates.TemplateResponse("index.html", {"request": request})
 
-# --- 2. ROTAS DE AUTENTICAÇÃO E CONEXÃO ---
 
-@app.post("/set_token")
-async def set_token_and_connect(data: TokenRequest):
-    """
-    Recebe o token do usuário e inicia a conexão com a Deriv.
-    Espera 8 segundos para garantir a autorização.
-    """
+# --- 2. ROTA DE AUTORIZAÇÃO (POST) ---
+@app.post("/set_token", response_class=JSONResponse)
+async def set_token(data: TokenRequest):
+    """Lida com a conexão e autorização do token da Deriv."""
     global client
-    
-    # Se o cliente já estiver rodando, pare-o
-    if client and client.connected:
-        await client.stop()
+    if client:
+        await client.stop() 
+        client = None
 
-    client = DerivClient(token=data.token)
-    
-    # Inicia a conexão em segundo plano
-    asyncio.create_task(client.start())
-    
-    # 🟢 CORREÇÃO CRÍTICA: ESPERAR PELA AUTORIZAÇÃO E ESTABILIZAÇÃO
-    await asyncio.sleep(8) 
-    
-    # Verifica o estado após o tempo de espera
-    if client.authorized:
-        # Retorna sucesso e o tipo de conta para o frontend
-        return JSONResponse({
-            "ok": True, 
-            "message": "Conectado e Autorizado!",
-            "account_type": client.account_info['account_type']
-        })
-    else:
-        # Falha na autorização após o tempo de espera
-        raise HTTPException(status_code=401, detail="Falha de Autorização. Verifique o token ou a conexão.")
+    client = DerivClient(data.token)
+    try:
+        await client.start()
+        if client.authorized:
+            return JSONResponse({
+                "ok": True, 
+                "message": "Conectado e Autorizado.",
+                "account_type": client.account_info.get("account_type"),
+                "balance": client.account_info.get("balance")
+            })
+        else:
+            await client.stop()
+            raise HTTPException(status_code=401, detail="Token inválido ou falha na autorização.")
+    except Exception as e:
+        if client:
+            await client.stop()
+            client = None
+        raise HTTPException(status_code=500, detail=f"Erro ao conectar: {e}")
 
-@app.get("/status")
+
+# --- 3. ROTA DE STATUS (GET) ---
+@app.get("/status", response_class=JSONResponse)
 async def get_status():
-    """Retorna o status atual da conexão e da conta."""
+    """Retorna o status atual da conexão e saldo."""
     global client
-    global bots_manager
-
-    if client and client.connected and client.authorized:
-        return {
-            "deriv_connected": client.connected,
-            "authorized": client.authorized,
-            "balance": client.account_info['balance'],
-            "account_type": client.account_info['account_type'],
-            "active_bots": [bot.to_dict() for bot in bots_manager.get_all_bots()] if bots_manager else []
-        }
-    
-    return {
-        "deriv_connected": False,
-        "authorized": False,
-        "balance": 0.0,
-        "account_type": "n/a",
-        "active_bots": []
+    status = {
+        "connected": client and client.connected,
+        "authorized": client and client.authorized,
+        "balance": client.account_info.get("balance", 0.0) if client else 0.0,
+        "account_type": client.account_info.get("account_type", "offline") if client else "offline"
     }
+    return JSONResponse(status)
 
-# --- 3. ROTA DE SINAL (ANÁLISE) ---
 
+# --- 4. ROTA DE SINAL (GET) - 🟢 CORREÇÃO CRÍTICA: TIMEOUT DE 30s 🟢 ---
 @app.get("/signal")
-async def get_signal(symbol: str, tf: str):
+async def get_signal(symbol: str = "R_100", tf: str = "TICK"):
     """
-    Gera e retorna um sinal de trading com base na análise dos ticks.
-    Agora tenta gerar o sinal por até 5 segundos antes de falhar. 🟢
+    Tenta gerar um sinal de trading, repetindo por 30 segundos para acumular ticks.
     """
     if not client or not client.authorized:
         raise HTTPException(status_code=401, detail="Não autorizado. Faça o login primeiro.")
     
-    MAX_ATTEMPTS = 10
+    # Tentaremos 60 vezes * 0.5s = 30 segundos de espera total (necessário para o R_100)
+    MAX_ATTEMPTS = 60 
     
     for attempt in range(MAX_ATTEMPTS):
-        # 1. Tenta gerar o sinal
-        signal = generate_signal(symbol, tf)
+        # Tenta gerar o sinal (strategy.py retorna None se faltarem dados ou houver NaN)
+        signal = generate_signal(symbol, tf) 
         
         if signal is not None:
-            # 2. Sucesso: Sinal gerado, retorna imediatamente
+            # Sucesso: Sinal gerado, retorna imediatamente
+            print(f"[Main] ✅ Sinal gerado após {attempt + 1} tentativas (tempo de espera: {attempt * 0.5}s).")
             return signal
         
-        # 3. Falha: Dados insuficientes, espera e tenta novamente
-        await asyncio.sleep(0.5) # Espera meio segundo antes da próxima tentativa
+        # Espera 0.5s e tenta novamente
+        await asyncio.sleep(0.5) 
         
-    # 4. Falha Total: Após 10 tentativas (5 segundos), retorna o erro 404
-    raise HTTPException(status_code=404, detail="Não há dados suficientes para gerar o sinal (requer 20 ticks após 5s de espera).")
-
-# --- 4. ROTAS DE BOTS AUTOMÁTICOS ---
-
-@app.post("/bots/create")
-async def create_new_bot(data: BotCreationRequest):
-    """Cria e inicia um novo bot."""
-    global bots_manager
-
-    if not client or not client.authorized or not bots_manager:
-        raise HTTPException(status_code=401, detail="Não autorizado ou Manager não inicializado.")
-
-    bot = bots_manager.create_bot(
-        name=data.name,
-        symbol=data.symbol,
-        tf=data.tf,
-        stop_loss=data.stop_loss,
-        take_profit=data.take_profit,
-        client=client 
+    # Falha Total: Após 30 segundos
+    raise HTTPException(
+        status_code=404, 
+        detail=f"Não foi possível gerar o sinal após 30 segundos. O ativo ({symbol}) está a enviar ticks muito lentamente ou o cálculo falhou permanentemente. Verifique os logs."
     )
-    
-    # Inicia a tarefa do bot em segundo plano
-    asyncio.create_task(bot.run_bot_loop())
-    
-    return JSONResponse({"ok": True, "id": bot.id, "message": f"Bot '{data.name}' criado e iniciado."})
 
-@app.post("/bots/activate/{bot_id}")
-async def activate_bot(bot_id: str):
-    """Ativa um bot existente."""
+
+# --- 5. ROTAS DE GESTÃO DE BOTS ---
+@app.post("/bot/create", response_class=JSONResponse)
+async def create_bot(data: BotCreationRequest):
+    """Cria e inicia um novo bot de trading."""
+    global bots_manager, client
+    if not bots_manager or not client or not client.authorized:
+        raise HTTPException(status_code=401, detail="Cliente não autorizado ou gestor de bots não inicializado.")
+
+    new_bot = bots_manager.create_bot(data.name, data.symbol, data.tf, data.stop_loss, data.take_profit, client)
+
+    # Inicia a tarefa assíncrona do bot
+    new_bot.current_run_task = asyncio.create_task(new_bot.run_loop())
+    
+    return JSONResponse({"ok": True, "message": f"Bot '{data.name}' criado e iniciado.", "bot_id": new_bot.id})
+
+@app.get("/bots/list", response_class=JSONResponse)
+async def list_bots():
+    """Lista todos os bots ativos."""
     global bots_manager
     if not bots_manager:
-        raise HTTPException(status_code=500, detail="Bots Manager não inicializado.")
-    
-    bot = bots_manager.get_bot(bot_id)
+        return JSONResponse({"bots": []})
+        
+    bots_list = []
+    for bot in bots_manager.get_all_bots():
+        # Excluir referências não serializáveis
+        bots_list.append({
+            "id": bot.id,
+            "name": bot.name,
+            "symbol": bot.symbol,
+            "tf": bot.tf,
+            "state": bot.state.value,
+            "sl": bot.stop_loss,
+            "tp": bot.take_profit,
+        })
+    return JSONResponse({"bots": bots_list})
+
+@app.post("/bot/pause", response_class=JSONResponse)
+async def pause_bot(data: BotAction):
+    """Pausa um bot de trading existente."""
+    bot = bots_manager.get_bot(data.bot_id)
     if not bot:
         raise HTTPException(status_code=404, detail="Bot não encontrado.")
-
-    if bot.is_active:
-        return JSONResponse({"ok": True, "message": "Bot já está ativo."})
-    
-    bot.state = BotState.ACTIVE
-    asyncio.create_task(bot.run_bot_loop())
-    return JSONResponse({"ok": True, "message": f"Bot ID {bot_id} ativado."})
-
-@app.post("/bots/deactivate/{bot_id}")
-async def deactivate_bot(bot_id: str):
-    """Desativa um bot existente."""
-    global bots_manager
-    if not bots_manager:
-        raise HTTPException(status_code=500, detail="Bots Manager não inicializado.")
-
-    bot = bots_manager.get_bot(bot_id)
-    if not bot:
-        raise HTTPException(status_code=404, detail="Bot não encontrado.")
-
-    if not bot.is_active:
-        return JSONResponse({"ok": True, "message": "Bot já está inativo."})
-    
-    bot.state = BotState.INACTIVE
-    return JSONResponse({"ok": True, "message": f"Bot ID {bot_id} desativado."})
+    bot.state = BotState.PAUSED
+    return JSONResponse({"ok": True, "message": f"Bot {bot.name} pausado."})
 
 
-# --- 5. ROTA DE IA TRADER ---
-
-@app.post("/ia/query")
+# --- 6. ROTA DE CONSULTA DA IA ---
+@app.post("/ia/query", response_class=JSONResponse)
 async def ia_query(data: IAQueryRequest):
-    """Simula uma resposta de IA para perguntas de trading."""
-    # Simulação: Em um projeto real, aqui você usaria um modelo de LLM (como Gemini, GPT)
-    
-    # Lógica de resposta simples (simulação de IA)
-    response_text = ""
+    """Processa consultas de análise técnica feitas ao módulo de IA."""
     query = data.query.lower()
 
     if "triângulo ascendente" in query:
-        response_text = "O Triângulo Ascendente é um padrão de continuação bullish. É formado por uma linha de resistência horizontal no topo e uma linha de suporte ascendente na base. Sugere que os compradores estão a ganhar força e que uma quebra acima da resistência é provável. [attachment_0](attachment)"
+        response_text = "O Triângulo Ascendente é um padrão de continuação bullish. É formado por uma linha de resistência horizontal no topo e uma linha de suporte ascendente na base. Sugere que os compradores estão a ganhar força e que uma quebra acima da resistência é provável."
     elif "rsi" in query or "sobrecompra" in query:
         response_text = "O Índice de Força Relativa (RSI) mede a velocidade e a mudança dos movimentos de preço. Um RSI acima de 70 indica sobrecompra (potencial de queda), e um abaixo de 30 indica sobrevenda (potencial de subida)."
     elif "suporte e resistência" in query:
-        response_text = "Suporte e Resistência são níveis de preço cruciais onde a pressão de compra ou venda historicamente se concentra. O suporte é um 'piso' onde o preço tende a subir, e a resistência é um 'teto' onde o preço tende a cair. [attachment_1](attachment)"
+        response_text = "Suporte e Resistência são níveis de preço cruciais onde a pressão de compra ou venda historicamente se concentra. O suporte é um 'piso' onde o preço tende a subir, e a resistência é um 'teto' onde o preço tende a cair."
     elif "bitcoin" in query or "binance" in query:
         response_text = "A análise técnica se aplica a qualquer mercado, incluindo criptomoedas como Bitcoin. No entanto, a alta volatilidade exige cautela e stop-loss mais rígidos."
     else:
         response_text = "Desculpe, a minha base de dados de análise técnica está limitada. Por favor, faça uma pergunta sobre padrões gráficos, indicadores (como RSI/EMA) ou conceitos básicos de trading."
 
     return JSONResponse({"ok": True, "response": response_text})
+
