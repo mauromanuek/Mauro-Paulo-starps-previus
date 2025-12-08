@@ -5,6 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RobotMagic Pro - Trading Bot</title>
     <link rel="stylesheet" href="/static/style.css">
+    <style>
+        /* CORREÇÃO VISUAL: ESCONDER A ASIDE (LOGS) */
+        aside {
+            display: none !important; 
+        }
+        /* Ajusta o grid do dashboard para ocupar o espaço do aside */
+        #dashboard-view main {
+            grid-column: 1 / -1; /* Faz o MAIN ocupar toda a largura */
+        }
+    </style>
 </head>
 <body>
 
@@ -73,7 +83,7 @@
                         <h2>Bots de Trading Ativos</h2>
                         <div class="card">
                             <p class="muted">A secção de Bots será implementada na próxima fase.</p>
-                            </div>
+                        </div>
                     </div>
 
                     <div id="ia-content" class="content-view">
@@ -106,7 +116,7 @@
 
     <script>
         // 🚨 LEMBRE-SE DE SUBSTITUIR PELO SEU DOMÍNIO DO RENDER 🚨
-        const SERVER = "https://mauro-paulo-starps-previus.onrender.com"; 
+        const SERVER = "https://SEU-DOMINIO-AQUI.onrender.com"; 
         
         // --------------------------------------
         // FUNÇÕES DE UTILIDADE
@@ -137,10 +147,14 @@
         }
 
         function log(message) {
-            const logOutput = document.getElementById('log-output');
-            const now = new Date();
-            const time = now.toLocaleTimeString();
-            logOutput.innerHTML = `[${time}] ${message}<br>` + logOutput.innerHTML;
+            // MANTEMOS A FUNÇÃO LOG AQUI, mas ela só escreve na consola (F12)
+            console.log(`[LOG] ${message}`);
+            
+            // O código abaixo é apenas se você quiser re-ativar a exibição no DOM:
+            // const logOutput = document.getElementById('log-output');
+            // const now = new Date();
+            // const time = now.toLocaleTimeString();
+            // logOutput.innerHTML = `[${time}] ${message}<br>` + logOutput.innerHTML;
         }
 
         // --------------------------------------
@@ -172,7 +186,6 @@
 
                 if (r.ok) {
                     log('Token enviado. Servidor a autorizar...');
-                    // Se o set_token retornar 200, ele já esperou 8 segundos e está autorizado.
                     checkStatus(); 
                 } else {
                     statusMessage.textContent = j.detail || 'Falha na autorização. Verifique o token.';
@@ -195,14 +208,12 @@
                 if (status.authorized) {
                     updateDashboard(status);
                 } else {
-                    // Se não estiver autorizado (por exemplo, token expirou), volta ao login
                     updateDashboard(status);
-                    setTimeout(checkStatus, 3000); // Tenta verificar novamente
+                    setTimeout(checkStatus, 3000); 
                 }
             } catch (e) {
                 log('Erro na verificação de status: Servidor indisponível.');
                 showView('login-view');
-                // Tenta reconectar a cada 5 segundos
                 setTimeout(checkStatus, 5000); 
             }
         }
@@ -220,7 +231,7 @@
             // 2. Mudar a Vista
             if (isAuthorized) {
                 showView('dashboard-view');
-                // 🟢 ATIVAÇÃO CRÍTICA DO BOTÃO DE ANÁLISE 🟢
+                // ATIVAÇÃO CRÍTICA DO BOTÃO DE ANÁLISE 
                 document.getElementById('getSignalBtn').disabled = false;
                 document.getElementById('signalAsset').disabled = false;
                 document.getElementById('signalTF').disabled = false;
@@ -233,7 +244,6 @@
                 document.getElementById('signalTF').disabled = true;
                 log('Sessão expirada. Por favor, reconecte.');
             }
-            // Chama a função novamente para manter a atualização
             setTimeout(checkStatus, 3000);
         }
 
@@ -241,13 +251,17 @@
         // FUNÇÕES DE SINAL (ANÁLISE MANUAL)
         // --------------------------------------
 
-        // 🟢 FUNÇÃO getSignal() IMPLEMENTADA 🟢
         async function getSignal() {
             const asset = document.getElementById('signalAsset').value;
             const tf = document.getElementById('signalTF').value;
             const signalBox = document.getElementById('signal-output');
             
-            signalBox.innerHTML = '<p class="muted">A analisar o mercado...</p>';
+            signalBox.innerHTML = '<p class="muted">A analisar o mercado... Coletando 20 ticks de dados. Aguarde 3 segundos.</p>';
+
+            // 🟢 CORREÇÃO DOS 20 TICKS: Esperar 3 segundos para dar tempo de coleta
+            await new Promise(resolve => setTimeout(resolve, 3000)); 
+            log("Tentando obter sinal do servidor após coleta de dados...");
+
 
             try {
                 const r = await fetch(SERVER + `/signal?symbol=${asset}&tf=${tf}`);
@@ -268,7 +282,7 @@
                     log(`Sinal gerado: ${j.action} em ${asset}`);
 
                 } else {
-                    // Erro ao obter sinal (e.g., dados insuficientes, 404)
+                    // Erro ao obter sinal (inclui o erro 404 de "não há dados suficientes")
                     signalBox.innerHTML = `<p class="muted" style="color:var(--accent-red)">ERRO: ${j.detail || 'Falha ao obter sinal.'}</p>`;
                     log(`ERRO ao obter sinal: ${j.detail}`);
                 }
@@ -289,7 +303,7 @@
             
             if (!query) return;
 
-            responseBox.innerHTML = '<strong>Resposta da IA:</strong><p class="muted">Analisando a sua pergunta...</p>';
+            responseBox.innerHTML = '<strong>Resposta da IA:</strong><p class=\"muted\">Analisando a sua pergunta...</p>';
             document.getElementById('iaQuery').value = '';
 
             try {
@@ -318,9 +332,7 @@
         // --------------------------------------
 
         window.onload = function() {
-            // Inicia a verificação de status (para manter a sessão viva ou voltar ao login)
             checkStatus();
-            // Inicia mostrando a vista de análise
             showContent('analysis-content'); 
         };
 
