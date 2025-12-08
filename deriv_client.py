@@ -113,7 +113,7 @@ class DerivClient:
                 if data.get("msg_type") == "tick":
                     tick = data["tick"]
                     price = float(tick["quote"])
-                     ticks_history.append(float(price))
+                    ticks_history.append(float(price))
                     
                     print(f"[Deriv] ✅ Tick recebido: {price}") 
                     
