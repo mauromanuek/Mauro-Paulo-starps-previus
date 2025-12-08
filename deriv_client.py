@@ -1,8 +1,8 @@
-# deriv_client.py - Versão FINAL E CORRIGIDA: Import e Subscrição de Velas
+# deriv_client.py - Versão FINAL E CORRIGIDA: Import, Velas de 1m, e Tratamento de Conexão
 
 import asyncio
 import json
-import websockets # 🟢 CORREÇÃO CRÍTICA: Importar o módulo completo aqui
+import websockets # 🟢 CORREÇÃO: Importação do módulo completo
 from typing import Optional, Dict, Any, TYPE_CHECKING
 import time
 
@@ -13,12 +13,13 @@ from strategy import ticks_history, MIN_TICKS_REQUIRED, generate_signal, MAX_TIC
 if TYPE_CHECKING:
     from bots_manager import BotsManager 
 
-# --- CONFIGURAÇÃO CORRIGIDA (SEU APP ID) ---
+# --- CONFIGURAÇÃO (SEU APP ID) ---
 DERIV_APP_ID = 114910 
-# -------------------------------------------
+# ---
 
-WS_URL = f"wss://ws.binaryws.com/websockets/v3?app_id={DERIV_APP_ID}"
-CANDLE_GRANULARITY = 60 # 60 segundos = 1 Minuto (para sinais estáveis)
+# URL padrão para a API WebSocket
+WS_URL = f"wss://ws.binaryws.com/websockets/v3?app_id={DERIV_APP_ID}" 
+CANDLE_GRANULARITY = 60 # 1 Minuto
 
 class DerivClient:
     """
@@ -28,7 +29,7 @@ class DerivClient:
     def __init__(self, token: str, bots_manager: 'BotsManager'): 
         self.token = token
         self.bots_manager = bots_manager
-        self.ws: Optional[websockets.WebSocketClientProtocol] = None # Tipo atualizado
+        self.ws: Optional[websockets.WebSocketClientProtocol] = None
         self.is_connected = False
         self.connected = False 
         self.authorized = False 
@@ -39,30 +40,30 @@ class DerivClient:
     # --- FUNÇÕES CORE ---
 
     async def connect_and_subscribe(self, symbol: str):
-        """
-        Função de wrapper para iniciar a conexão, autenticar, 
-        e iniciar a escuta de velas em sequência (executada em segundo plano).
-        """
+        """Inicia a conexão, autenticação e subscrição em sequência."""
         await self.connect()
-        
         await asyncio.sleep(1) 
         
-        if self.is_connected:
+        if self.authorized: 
             await self.subscribe_candles(symbol)
             await self.run_listener()
+        else:
+            await self.stop()
+
 
     async def connect(self):
-        """Estabelece a conexão e autentica."""
+        """Estabelece a conexão e autentica, tratando falhas imediatas."""
         if self.is_connected: return
         try:
-            # 🟢 CORREÇÃO AQUI: Usa websockets.connect() que agora está definido 🟢
+            # Estabelece a conexão
             self.ws = await websockets.connect(WS_URL)
             self.is_connected = True
             self.connected = True
-            print("Conectado ao Deriv WebSocket.")
+            print("[Deriv] Conectado ao Deriv WebSocket.")
             await self.ws.send(json.dumps({"authorize": self.token}))
             
-            auth_response_str = await self.ws.recv()
+            # Espera 5 segundos pela resposta de autorização
+            auth_response_str = await asyncio.wait_for(self.ws.recv(), timeout=5)
             auth_response = json.loads(auth_response_str)
 
             if auth_response.get("error"):
@@ -75,8 +76,19 @@ class DerivClient:
             print("✅ Autenticação bem-sucedida.")
             await self.get_account_info() 
             
+        except websockets.ConnectionClosed as e:
+            # 🟢 TRATAMENTO DO ERRO "sent 1000 (OK)": O WebSocket fechou antes da autenticação.
+            print(f"❌ Erro de Conexão: O WebSocket foi fechado imediatamente. Código: {e.code}. Verifique o token e a rede.")
+            self.is_connected = False
+            self.connected = False
+            
+        except asyncio.TimeoutError:
+            print("❌ Erro de Conexão: Timeout ao esperar pela resposta de autorização (5s).")
+            self.is_connected = False
+            self.connected = False
+
         except Exception as e:
-            print(f"❌ Erro ao conectar ao Deriv: {e}")
+            print(f"❌ Erro geral ao conectar ao Deriv: {e}")
             self.is_connected = False
             self.connected = False
 
@@ -105,7 +117,6 @@ class DerivClient:
         """Loop principal para escutar mensagens do WebSocket."""
         while self.is_connected and self.ws:
             try:
-                # O Timeout é necessário para enviar Pings
                 response_str = await asyncio.wait_for(self.ws.recv(), timeout=30) 
                 response = json.loads(response_str)
                 
@@ -126,13 +137,13 @@ class DerivClient:
             except asyncio.TimeoutError:
                 await self.ws.send(json.dumps({"ping": 1}))
                 continue
-            except websockets.ConnectionClosedOK: # Adicionado tratamento de fecho limpo
-                print("Conexão fechada de forma limpa.")
+            except websockets.ConnectionClosedOK:
+                print("[Deriv] Conexão fechada de forma limpa.")
                 self.is_connected = False
                 self.connected = False
                 break
             except Exception as e:
-                print(f"Conexão fechada inesperadamente: {e}")
+                print(f"[Deriv] Conexão fechada inesperadamente no listener: {e}")
                 self.is_connected = False
                 self.connected = False
                 break
@@ -150,9 +161,7 @@ class DerivClient:
             
     
     async def handle_candle_update(self, response: Dict[str, Any]):
-        """
-        Processa uma nova vela (quando o 'is_closed' é 1) e chama a análise.
-        """
+        """Processa uma nova vela fechada e gera o sinal."""
         global ticks_history
 
         candle_data = response.get('ohlc', {})
@@ -178,11 +187,9 @@ class DerivClient:
                         await self.bots_manager.process_signal(signal)
                         
     async def get_account_info(self):
-        """Busca o saldo e tipo de conta (movido para dentro do connect)."""
+        """Busca o saldo e tipo de conta."""
         if not self.authorized or not self.is_connected: return
-
         try:
-            # Envia a requisição; a resposta será capturada pelo run_listener
             await self.ws.send(json.dumps({"balance": 1})) 
         except Exception as e:
             print(f"[ERRO] Falha ao buscar informações da conta: {e}")
@@ -197,5 +204,4 @@ class DerivClient:
                 await self.ws.close()
         except:
             pass
-
         print("[Deriv] Cliente parado.")
