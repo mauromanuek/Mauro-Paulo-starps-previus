@@ -1,4 +1,4 @@
-# deriv_client.py - Versão FINAL E CORRIGIDA: Tratamento de Duplicação de Vela
+# deriv_client.py - Versão FINAL E CORRIGIDA: Candles, Robustez e Anti-Duplicação
 
 import asyncio
 import json
@@ -6,13 +6,14 @@ import websockets
 from typing import Optional, Dict, Any, TYPE_CHECKING
 import time
 
-# --- IMPORTS CORRIGIDOS ---
+# --- IMPORTS OBRIGATÓRIOS ---
+# Importa as variáveis de controlo e a lógica de trading do strategy.py
 from strategy import ticks_history, MIN_TICKS_REQUIRED, generate_signal, MAX_TICK_HISTORY
 
 if TYPE_CHECKING:
     from bots_manager import BotsManager 
 
-# --- CONFIGURAÇÃO (VERIFIQUE O SEU APP ID) ---
+# --- CONFIGURAÇÃO (SEU APP ID) ---
 DERIV_APP_ID = 114910 
 # ---
 
@@ -32,7 +33,8 @@ class DerivClient:
         self.account_info = {"balance": 0.0, "account_type": "demo"}
         self.symbol = "" 
         self.candles_subscription_id: Optional[str] = None
-        self.last_processed_candle_time = 0 # NOVO: Tempo do último fecho de vela processado
+        # Correção contra duplicação: tempo do último fecho de vela processado
+        self.last_processed_candle_time = 0 
 
     # --- FUNÇÕES CORE ---
 
@@ -151,6 +153,7 @@ class DerivClient:
         
         if history:
             ticks_history.clear()
+            # O histórico de velas precisa dos dados completos para o cálculo de RSI/ADX/BB
             ticks_history.extend([float(c.get('close')) for c in history])
             
             # Captura o tempo da última vela histórica para evitar duplicação
@@ -161,7 +164,7 @@ class DerivClient:
     
     async def handle_candle_update(self, response: Dict[str, Any]):
         """
-        Processa uma nova vela (quando o 'is_closed' é 1) e chama a análise.
+        Processa uma nova vela fechada (is_closed = 1) e chama a análise.
         """
         global ticks_history
 
@@ -171,7 +174,7 @@ class DerivClient:
             
             candle_time = candle_data.get('open_time', 0) 
             
-            # VERIFICA SE ESTA VELA JÁ FOI PROCESSADA
+            # VERIFICAÇÃO ANTI-DUPLICAÇÃO
             if candle_time <= self.last_processed_candle_time:
                  return 
 
@@ -191,11 +194,15 @@ class DerivClient:
                 if len(ticks_history) >= MIN_TICKS_REQUIRED:
                     signal = generate_signal(self.symbol, "1m") 
                     
-                    if signal:
+                    if signal and signal['action'] != 'NEUTRO': # Ignora sinais neutros para não poluir o log
                         print(f"=== NOVO SINAL ({signal['tf']}) ===")
-                        print(f"Ação: {signal['action']} | Probabilidade: {signal['probability']:.2f} | Razão: {signal['reason']}")
+                        print(f"Ação: {signal['action']} | Prob: {signal['probability']:.2f} | Razão: {signal['reason']}")
+                        print(f"Estado: {signal['explanation']}")
                         print("===================================")
                         await self.bots_manager.process_signal(signal)
+                    elif signal:
+                        # Log discreto para o estado neutro
+                        pass 
                         
     async def get_account_info(self):
         """Busca o saldo e tipo de conta."""
