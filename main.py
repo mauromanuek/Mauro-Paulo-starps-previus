@@ -1,12 +1,13 @@
 # main.py - Versão FINAL E COMPLETA: CORS, Conexão Assíncrona e Lógica de Erros
 
 import asyncio
+import uuid
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Dict, Any, List
 import json
 
 from fastapi.middleware.cors import CORSMiddleware 
@@ -81,7 +82,7 @@ async def set_token(data: TokenRequest):
     client = DerivClient(data.token, bots_manager) 
     
     try:
-        # Inicia a conexão em TAREFA DE FUNDO
+        # 1. Inicia a conexão em TAREFA DE FUNDO
         asyncio.create_task(client.connect_and_subscribe(symbol="R_100")) 
 
         # 2. Esperar pela autorização ou falha (Timeout)
@@ -97,7 +98,7 @@ async def set_token(data: TokenRequest):
             # Se a conexão falhou (erro de rede/token) e não está autorizado
             if not client.is_connected and not client.authorized and client.ws is None:
                  await client.stop()
-                 # A mensagem de erro específica será logada no servidor pelo DerivClient
+                 # Esta mensagem aparecerá na sua interface quando a conexão falhar imediatamente
                  raise HTTPException(status_code=401, detail="Conexão Falhou: Token inválido, expirado ou problema de rede (veja o log do servidor).")
             
             await asyncio.sleep(0.5)
