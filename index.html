@@ -29,142 +29,140 @@
                 <nav>
                     <span id="account-type" class="badge demo">DEMO</span>
                     <span id="account-balance" class="badge">Saldo: $0.00</span>
-                    <span id="current-asset" class="badge asset">Ativo: R_100 Index</span>
+                    <span id="current-asset" class="badge asset">Ativo: V100 Index</span>
                     <button id="menu-btn" onclick="toggleMenu()">☰ Menu</button>
                 </nav>
             </header>
 
-            <div id="side-menu" class="side-menu">
-                <a href="#" onclick="showView('analysis-view')">Análise de Sinais</a>
-                <a href="#" onclick="showView('ia-trader-view')">IA Trader</a>
-                <a href="#" onclick="logout()">Sair</a>
-            </div>
-
             <main>
-                
-                <div id="analysis-view" class="page-content active">
-                    <h2>📊 Análise de Sinais ao Vivo</h2>
+                <div id="side-menu" class="side-menu closed">
+                    <button class="nav-button active" onclick="showContent('analysis-content')">Análise Manual</button>
+                    <button class="nav-button" onclick="showContent('bots-content')">Bots Automáticos</button>
+                    <button class="nav-button" onclick="showContent('ia-content')">IA Trader</button>
+                </div>
+
+                <div id="content-container">
+
+                    <div id="analysis-content" class="content-view active">
+                        <h2>Análise de Mercado em Tempo Real</h2>
+
+                        <div class="card analysis-controls">
+                            <h3>Análise de Sinais Manual</h3>
+                            <div class="input-group">
+                                <select id="signalAsset" disabled>
+                                    <option value="R_100">Volatility 100 Index (R_100)</option>
+                                    <option value="R_50">Volatility 50 Index (R_50)</option>
+                                    <option value="R_25">Volatility 25 Index (R_25)</option>
+                                </select>
+                                <select id="signalTF" disabled>
+                                    <option value="TICK">Tick</option>
+                                    <option value="M1">M1 (1 Minuto)</option>
+                                    <option value="M5">M5 (5 Minutos)</option>
+                                </select>
+                                <button id="getSignalBtn" onclick="getSignal()" disabled>COMEÇAR ANÁLISE</button>
+                            </div>
+                        </div>
+
+                        <div id="signal-output" class="card signal-box">
+                            <p class="muted">Aguardando o clique em "COMEÇAR ANÁLISE".</p>
+                        </div>
+
+                    </div>
                     
-                    <div class="card signal-card">
-                        <div class="signal-value" id="signal-action">VO:</div>
-                        <div class="signal-details">
-                            <span class="probability" id="signal-prob">Recebendo ticks para análise...</span>
-                            <span class="reason muted" id="signal-reason">O sistema está subscrito ao Volatility 100 Index.</span>
-                        </div>
-                    </div>
-
-                    <div class="card">
-                        <h3>Detalhes do Mercado</h3>
-                        <div class="last-tick-info">
-                            <div>
-                                <p class="muted">Ativo Atual</p>
-                                <p>Vol: 100 Index (R_100)</p>
+                    <div id="bots-content" class="content-view">
+                        <h2>Bots de Trading Ativos</h2>
+                        <div class="card">
+                            <p class="muted">A secção de Bots será implementada na próxima fase.</p>
                             </div>
-                            <div>
-                                <p class="muted">Último Tick Recebido</p>
-                                <p class="price-display"><span id="last-price">$0.00</span><span id="last-time" class="muted">Hora: --:--:--</span></p>
+                    </div>
+
+                    <div id="ia-content" class="content-view">
+                        <h2>IA Trader (Análise Técnica Aprofundada)</h2>
+                        <div class="card">
+                            <p>Pergunte sobre qualquer conceito ou padrão de análise técnica e receba uma explicação e recursos.</p>
+                            <div class="ia-input-group">
+                                <input type="text" id="iaQuery" placeholder="Ex: O que é um triângulo ascendente?">
+                                <button onclick="iaQuery()">Perguntar</button>
+                            </div>
+                            <div id="iaResponse" class="ia-response-box">
+                                <strong>Resposta da IA:</strong>
+                                <p class="muted">Pronto para a sua pergunta.</p>
                             </div>
                         </div>
                     </div>
-                </div>
 
-                <div id="ia-trader-view" class="page-content hidden">
-                    <h2>🧠 IA Trader (Análise Técnica)</h2>
-                    <div class="card">
-                        <h3>Pergunte à IA</h3>
-                        <div class="ia-input-group">
-                            <input type="text" id="iaQuery" placeholder="Ex: O que é RSI?">
-                            <button onclick="sendIAQuery()">Perguntar</button>
-                        </div>
-                        <div id="iaResponse" class="ia-response-box">
-                            <strong>Resposta da IA:</strong>
-                            <p class="muted">Pergunte algo sobre análise técnica (RSI, Suporte, Resistência) para obter uma resposta simulada.</p>
-                        </div>
-                    </div>
                 </div>
-
-                
             </main>
 
             <aside>
-                <h2>Logs do Sistema</h2>
-                <div class="logs-container" id="system-logs">
-                    </div>
+                <div class="log-box">
+                    <h4>Log de Atividades</h4>
+                    <div id="log-output"></div>
+                </div>
             </aside>
+            
+        </div>
+    </div>
 
-        </div> </div> <script>
+    <script>
+        // 🚨 LEMBRE-SE DE SUBSTITUIR PELO SEU DOMÍNIO DO RENDER 🚨
+        const SERVER = "https://SEU_DOMINIO_AQUI.onrender.com"; 
         
         // --------------------------------------
-        // 🚨 PARTE CRÍTICA 1: URL DO SERVIDOR 🚨
-        // 
-        // Você DEVE substituir "SEU_DOMINIO_AQUI.onrender.com" pela URL exata 
-        // que o Render forneceu no seu log. Exemplo: https://mauro-paulo-starps-previus.onrender.com
+        // FUNÇÕES DE UTILIDADE
         // --------------------------------------
-        const SERVER = "https://mauro-paulo-starps-previus.onrender.com"; 
-
-        let statusInterval; 
-        let signalInterval; 
-        const MAX_LOGS = 50;
-
-        // --------------------------------------
-        // FUNÇÕES GERAIS DE UI
-        // --------------------------------------
-
-        function log(message, type = 'general') {
-            const logsContainer = document.getElementById('system-logs');
-            const logEl = document.createElement('div');
-            const timestamp = new Date().toLocaleTimeString('pt-BR');
-            logEl.className = `log-message ${type}`;
-            logEl.innerHTML = `[${timestamp}] ${message}`;
-
-            // Adiciona no topo e limita o número de logs
-            logsContainer.prepend(logEl);
-            while (logsContainer.children.length > MAX_LOGS) {
-                logsContainer.removeChild(logsContainer.lastChild);
-            }
-        }
 
         function showView(viewId) {
-            document.querySelectorAll('.view, .page-content').forEach(el => {
-                el.classList.remove('active');
+            document.querySelectorAll('.view').forEach(view => {
+                view.classList.remove('active');
             });
             document.getElementById(viewId).classList.add('active');
+        }
 
-            // Se estiver no dashboard, garantir que a main view correta esteja ativa
-            if (viewId === 'dashboard-view' || viewId.includes('-view')) {
-                document.getElementById('dashboard-view').classList.add('active');
-                document.getElementById(viewId).classList.add('active');
-            }
+        function showContent(contentId) {
+            document.querySelectorAll('.content-view').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(contentId).classList.add('active');
+
+            document.querySelectorAll('.nav-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.querySelector(`.nav-button[onclick="showContent('${contentId}')"]`).classList.add('active');
         }
 
         function toggleMenu() {
             const menu = document.getElementById('side-menu');
-            menu.classList.toggle('open');
+            menu.classList.toggle('closed');
         }
 
-        function logout() {
-            // Limpa intervalos
-            clearInterval(statusInterval);
-            clearInterval(signalInterval);
-            log("Sessão finalizada. Limpando dados.");
-            // Volta para a tela de login
-            showView('login-view'); 
+        function log(message) {
+            const logOutput = document.getElementById('log-output');
+            const now = new Date();
+            const time = now.toLocaleTimeString();
+            logOutput.innerHTML = `[${time}] ${message}<br>` + logOutput.innerHTML;
         }
 
         // --------------------------------------
-        // 🚨 PARTE CRÍTICA 2: FUNÇÃO DE CONEXÃO (CORRIGIDA) 🚨
+        // FUNÇÕES DE CONEXÃO E STATUS
         // --------------------------------------
 
         async function setTokenAndConnect() {
-            const token = document.getElementById('tokenInput').value;
-            const statusEl = document.getElementById('auth-status');
-            statusEl.textContent = "Conectando e autorizando token...";
-            statusEl.style.color = 'var(--muted-color)';
-            log(`Tentando conexão com o token...`);
+            const tokenInput = document.getElementById('tokenInput');
+            const statusMessage = document.getElementById('auth-status');
+            const connectBtn = document.getElementById('connectBtn');
+            const token = tokenInput.value.trim();
+
+            if (token.length < 15) {
+                statusMessage.textContent = 'Token inválido.';
+                return;
+            }
+
+            statusMessage.textContent = 'A conectar... Aguarde 8 segundos.';
+            connectBtn.disabled = true;
 
             try {
-                // Tenta POST para o servidor
-                const r = await fetch(SERVER + "/set_token", { 
+                const r = await fetch(SERVER + "/set_token", {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ token: token })
@@ -172,141 +170,126 @@
 
                 const j = await r.json();
 
-                if (j.ok) {
-                    // SUCESSO: Conexão e autorização OK.
-                    statusEl.textContent = j.message;
-                    statusEl.style.color = 'var(--accent-green)';
-                    
-                    // 🟢 CORREÇÃO: Acessa account_type de forma segura (resolve o erro 'toUpperCase')
-                    const accountType = j.account_type || 'demo'; 
-                    
-                    document.getElementById('account-type').textContent = accountType.toUpperCase();
-                    document.getElementById('account-type').className = `badge ${accountType.toLowerCase()}`;
-                    
-                    checkStatus(); // Inicia o monitoramento
-                    // Inicia o loop de sinais
-                    if (!signalInterval) {
-                        signalInterval = setInterval(getTradingSignal, 5000); // 5 segundos
-                    }
-
-                    showView('dashboard-view');
-                    showView('analysis-view');
-                    log(`Conexão estabelecida. Conta: ${accountType.toUpperCase()}`);
-
+                if (r.ok) {
+                    log('Token enviado. Servidor a autorizar...');
+                    // Se o set_token retornar 200, ele já esperou 8 segundos e está autorizado.
+                    checkStatus(); 
                 } else {
-                    // FALHA DE AUTORIZAÇÃO (Token Inválido)
-                    statusEl.textContent = `Falha de Autorização: ${j.message || 'Token inválido.'}`;
-                    statusEl.style.color = 'var(--accent-red)';
-                    log(`Falha de Autorização: ${j.message || 'Token inválido.'}`);
+                    statusMessage.textContent = j.detail || 'Falha na autorização. Verifique o token.';
+                    log(`Falha de conexão: ${j.detail}`);
                 }
 
             } catch (e) {
-                // ERRO DE REDE GERAL (Servidor não encontrado ou não responde)
-                const errorMessage = e.message || e.toString();
-                statusEl.textContent = "Erro de Rede. Verifique se o servidor está online.";
-                statusEl.style.color = 'var(--accent-red)';
-                log(`Erro de Rede ao tentar conectar: ${errorMessage}`);
+                statusMessage.textContent = 'Erro na verificação de status: Failed to fetch';
+                log("Erro de rede: " + e.message);
+            } finally {
+                connectBtn.disabled = false;
             }
         }
-        
-        // --------------------------------------
-        // FUNÇÃO DE STATUS E SALDO (Pode precisar de ajustes se o erro persistir)
-        // --------------------------------------
 
         async function checkStatus() {
             try {
                 const r = await fetch(SERVER + "/status");
-                const j = await r.json();
-                
-                if (j.authorized) {
-                    // Atualiza Saldo e Tipo de Conta
-                    const balance = parseFloat(j.balance).toFixed(2);
-                    document.getElementById('account-balance').textContent = `Saldo: $${balance}`;
-                    
-                    const accountType = j.account_type || 'demo';
-                    document.getElementById('account-type').textContent = accountType.toUpperCase();
-                    document.getElementById('account-type').className = `badge ${accountType.toLowerCase()}`;
+                const status = await r.json();
 
-                    // Inicia loop de verificação de status (a cada 15 segundos)
-                    if (!statusInterval) {
-                        statusInterval = setInterval(checkStatus, 15000); 
-                    }
-
-                } else if (!j.authorized && document.getElementById('dashboard-view').classList.contains('active')) {
-                    // Se estiver no dashboard e perder a autorização
-                    logout();
-                    alert("A sessão expirou. Por favor, faça login novamente.");
+                if (status.authorized) {
+                    updateDashboard(status);
+                } else {
+                    // Se não estiver autorizado (por exemplo, token expirou), volta ao login
+                    updateDashboard(status);
+                    setTimeout(checkStatus, 3000); // Tenta verificar novamente
                 }
-
             } catch (e) {
-                // Erro de rede na verificação de status (normal se o servidor estiver reiniciando)
-                log("Erro na verificação de status: " + e.message, 'error');
-                // Mantém o loop de status para tentar reconectar
-                if (!statusInterval) {
-                    statusInterval = setInterval(checkStatus, 15000);
-                }
+                log('Erro na verificação de status: Servidor indisponível.');
+                showView('login-view');
+                // Tenta reconectar a cada 5 segundos
+                setTimeout(checkStatus, 5000); 
             }
         }
 
+        function updateDashboard(status) {
+            const isAuthorized = status.authorized;
+            const balance = status.balance;
+            const accountType = status.account_type.toUpperCase();
+
+            // 1. Atualizar Badges de Status
+            document.getElementById('account-balance').textContent = `Saldo: $${balance.toFixed(2)}`;
+            document.getElementById('account-type').textContent = accountType;
+            document.getElementById('account-type').className = `badge ${accountType.toLowerCase()}`;
+            
+            // 2. Mudar a Vista
+            if (isAuthorized) {
+                showView('dashboard-view');
+                // 🟢 ATIVAÇÃO CRÍTICA DO BOTÃO DE ANÁLISE 🟢
+                document.getElementById('getSignalBtn').disabled = false;
+                document.getElementById('signalAsset').disabled = false;
+                document.getElementById('signalTF').disabled = false;
+                log(`Conexão OK. Saldo: $${balance.toFixed(2)} (${accountType})`);
+            } else {
+                showView('login-view');
+                // Desativar o botão se deslogado
+                document.getElementById('getSignalBtn').disabled = true;
+                document.getElementById('signalAsset').disabled = true;
+                document.getElementById('signalTF').disabled = true;
+                log('Sessão expirada. Por favor, reconecte.');
+            }
+            // Chama a função novamente para manter a atualização
+            setTimeout(checkStatus, 3000);
+        }
+
         // --------------------------------------
-        // FUNÇÃO DE SINAIS
+        // FUNÇÕES DE SINAL (ANÁLISE MANUAL)
         // --------------------------------------
 
-        async function getTradingSignal() {
+        // 🟢 FUNÇÃO getSignal() IMPLEMENTADA 🟢
+        async function getSignal() {
+            const asset = document.getElementById('signalAsset').value;
+            const tf = document.getElementById('signalTF').value;
+            const signalBox = document.getElementById('signal-output');
+            
+            signalBox.innerHTML = '<p class="muted">A analisar o mercado...</p>';
+
             try {
-                const r = await fetch(SERVER + "/signal?symbol=R_100&tf=60"); // Assumindo R_100, 1 min
+                const r = await fetch(SERVER + `/signal?symbol=${asset}&tf=${tf}`);
                 const j = await r.json();
 
-                const signalEl = document.getElementById('signal-action');
-                const probEl = document.getElementById('signal-prob');
-                const reasonEl = document.getElementById('signal-reason');
-                const priceEl = document.getElementById('last-price');
-                const timeEl = document.getElementById('last-time');
+                if (r.ok) {
+                    // Sinal Recebido com Sucesso
+                    const actionColor = j.action.startsWith('CALL') ? 'var(--accent-green)' : 'var(--accent-red)';
+                    const signalHTML = `
+                        <div class="signal-result">
+                            <span style="color:${actionColor}; font-weight:bold; font-size:1.4em;">${j.action}</span>
+                            <p>Probabilidade: <span class="badge" style="background-color:var(--accent-blue);">${(j.probability * 100).toFixed(0)}%</span></p>
+                            <p class="muted">Motivo: ${j.reason}</p>
+                            <p class="muted small">${j.explanation}</p>
+                        </div>
+                    `;
+                    signalBox.innerHTML = signalHTML;
+                    log(`Sinal gerado: ${j.action} em ${asset}`);
 
-                // Atualiza o último tick
-                if (j.last_tick) {
-                    priceEl.textContent = `$${parseFloat(j.last_tick.price).toFixed(4)}`;
-                    timeEl.textContent = `Hora: ${j.last_tick.time}`;
-                }
-
-                if (j.signal) {
-                    // Sinal Recebido
-                    const action = j.signal.action;
-                    signalEl.textContent = action;
-                    signalEl.className = `signal-value ${action.includes('CALL') ? 'signal-call' : 'signal-put'}`;
-                    
-                    probEl.textContent = `Probabilidade: ${j.signal.probability * 100}%`;
-                    reasonEl.textContent = `Motivo: ${j.signal.reason}`;
-                    log(`Sinal GERAL: ${action} - ${j.signal.probability * 100}%`, 'signal');
-
-                } else if (j.last_tick && j.last_tick.price !== 0.0) {
-                    // Não há sinal, mas há ticks
-                    signalEl.textContent = 'Aguardando';
-                    signalEl.className = 'signal-value';
-                    probEl.textContent = 'Não há sinal forte o suficiente.';
-                    reasonEl.textContent = 'Continue monitorando o mercado. (Necessita de mais ticks ou RSI está neutro.)';
                 } else {
-                    // Aguardando ticks (no início)
-                    signalEl.textContent = 'VO:';
-                    signalEl.className = 'signal-value';
+                    // Erro ao obter sinal (e.g., dados insuficientes, 404)
+                    signalBox.innerHTML = `<p class="muted" style="color:var(--accent-red)">ERRO: ${j.detail || 'Falha ao obter sinal.'}</p>`;
+                    log(`ERRO ao obter sinal: ${j.detail}`);
                 }
 
             } catch (e) {
-                // log("Erro na busca de sinal: " + e.message, 'error');
+                signalBox.innerHTML = `<p class="muted" style="color:var(--accent-red)">Erro de rede: ${e.message}</p>`;
+                log(`Erro de rede ao buscar sinal: ${e.message}`);
             }
         }
         
         // --------------------------------------
-        // FUNÇÃO DE IA TRADER
+        // FUNÇÕES DE IA TRADER
         // --------------------------------------
-
-        async function sendIAQuery() {
-            const query = document.getElementById('iaQuery').value;
+        
+        async function iaQuery() {
+            const query = document.getElementById('iaQuery').value.trim();
             const responseBox = document.getElementById('iaResponse');
             
             if (!query) return;
 
-            responseBox.innerHTML = '<strong>Resposta da IA:</strong><p class=\"muted\">Analisando a sua pergunta...</p>';
+            responseBox.innerHTML = '<strong>Resposta da IA:</strong><p class="muted">Analisando a sua pergunta...</p>';
             document.getElementById('iaQuery').value = '';
 
             try {
@@ -330,18 +313,15 @@
             }
         }
 
-
         // --------------------------------------
         // INICIALIZAÇÃO
         // --------------------------------------
 
         window.onload = function() {
-            // Verifica o status do servidor a cada 15 segundos
-            checkStatus(); 
-            // Inicia o loop de sinais a cada 5 segundos
-            signalInterval = setInterval(getTradingSignal, 5000); 
-            // Mostra a tela de login inicialmente
-            showView('login-view');
+            // Inicia a verificação de status (para manter a sessão viva ou voltar ao login)
+            checkStatus();
+            // Inicia mostrando a vista de análise
+            showContent('analysis-content'); 
         };
 
     </script>
