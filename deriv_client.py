@@ -1,4 +1,4 @@
-# deriv_client.py 
+# deriv_client.py (ATUALIZADO)
 
 import asyncio
 import websockets
@@ -35,12 +35,14 @@ class DerivClient:
                 await self.get_account_info() 
                 print("[Deriv] DEBUG: Informações da conta processadas.") 
                 
-                # --- 🟢 CORREÇÃO CRÍTICA AQUI: MUDANÇA DE V100 PARA R_100 🟢 ---
                 await self.subscribe_to_ticks("R_100") 
                 
                 print("[Deriv] DEBUG: Tentando iniciar o listener de ticks...")
                 asyncio.create_task(self.listen())
                 print("[Deriv] DEBUG: Tarefa de listener iniciada. Aguardando ticks...")
+
+                # 🟢 CORREÇÃO CRÍTICA 1: Esperar 2 segundos para o listener estabilizar
+                await asyncio.sleep(2) 
 
             else:
                 print("[Deriv] Erro: token NÃO autorizado. Verifique se o token está correto e ativo.")
@@ -53,7 +55,6 @@ class DerivClient:
         """Subscreve explicitamente aos ticks de um ativo."""
         if not self.authorized or not self.connected: return
         try:
-            # Enviando a mensagem de subscrição para o ativo corrigido
             await self.ws.send(json.dumps({"ticks": symbol, "subscribe": 1}))
             print(f"[Deriv] Subscrição enviada para {symbol}.")
         except Exception as e:
