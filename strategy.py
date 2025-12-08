@@ -1,3 +1,5 @@
+# strategy.py
+
 import numpy as np
 import pandas as pd
 from typing import Dict, Any, Optional
@@ -17,31 +19,42 @@ def update_ticks(new_tick: float):
 def calculate_indicators() -> Dict[str, Any]:
     """
     Calcula o RSI e EMA usando os últimos ticks de preço.
-    Retorna None se não houver dados suficientes.
+    Retorna dicionário vazio se não houver dados suficientes.
     """
+    # 1. Verifica a quantidade mínima de dados
     if len(ticks_history) < MAX_TICKS:
-        return {} # Retorna dicionário vazio se não há dados suficientes
+        return {} 
 
     # Converte a lista para uma Série Pandas para cálculo de indicadores
     prices = pd.Series(ticks_history)
     
-    # 1. RSI (Relative Strength Index)
-    # Período comum para RSI é 14, mas ajustamos para o nosso pequeno volume de ticks (MAX_TICKS)
+    # 2. RSI (Relative Strength Index)
+    # Ajustamos o período para o nosso volume (MAX_TICKS=20)
     delta = prices.diff()
     gain = delta.where(delta > 0, 0)
     loss = -delta.where(delta < 0, 0)
 
+    # Cálculo da Média Móvel Exponencial (EWM)
+    # min_periods=MAX_TICKS garante que só teremos um valor numérico quando tivermos 20 pontos.
     avg_gain = gain.ewm(com=MAX_TICKS - 1, min_periods=MAX_TICKS).mean()
     avg_loss = loss.ewm(com=MAX_TICKS - 1, min_periods=MAX_TICKS).mean()
 
-    rs = avg_gain / avg_loss
-    # O valor final é o último calculado (o mais recente)
-    rsi = 100 - (100 / (1 + rs.iloc[-1])) if not pd.isna(rs.iloc[-1]) else None
+    # Extrai o último valor calculado (índice -1)
+    final_avg_gain = avg_gain.iloc[-1]
+    final_avg_loss = avg_loss.iloc[-1]
 
-    # 2. EMA (Exponential Moving Average)
-    # Período de 10 ticks para uma EMA rápida
+    # Cálculo do RS e RSI
+    if final_avg_loss == 0:
+        # Se avg_loss for 0, o preço só subiu no período. RSI deve ser 100.
+        rs = np.inf
+    else:
+        rs = final_avg_gain / final_avg_loss
+
+    rsi = 100 - (100 / (1 + rs))
+    
+    # 3. EMA (Exponential Moving Average)
     ema = prices.ewm(span=10, adjust=False).mean().iloc[-1]
-
+    
     return {
         "rsi": rsi,
         "ema": ema,
@@ -50,19 +63,24 @@ def calculate_indicators() -> Dict[str, Any]:
 
 def generate_signal(symbol: str, tf: str) -> Optional[Dict[str, Any]]:
     """
-    Gera um sinal de trading com base nos indicadores calculados.
+    Gera um sinal de trading (CALL/PUT) com base nos indicadores calculados.
     """
     indicators = calculate_indicators()
     
-    # Se o dicionário de indicadores estiver vazio, a estratégia não pode rodar.
-    if not indicators or indicators['rsi'] is None or indicators['ema'] is None:
-        # Retorna None. Isso fará com que o main.py retorne 404 (erro) ao frontend.
-        return None 
+    # 🟢 CORREÇÃO CRÍTICA AQUI: Verifica se os dados são insuficientes OU se a primeira tentativa gerou NaN.
+    if not indicators: 
+        return None # Dados insuficientes (len < 20)
     
+    # Extrai indicadores
     rsi = indicators['rsi']
     ema = indicators['ema']
     price = indicators['last_price']
     
+    # ✅ NOVO CHECK: Se o Pandas retornou NaN (mesmo com 20 ticks, pode acontecer nos primeiros momentos)
+    if pd.isna(rsi) or pd.isna(ema):
+        print("[Strategy] DEBUG: RSI ou EMA é NaN, retornando None para re-tentativa.")
+        return None 
+        
     action = None
     reason = f"RSI: {rsi:.2f}, Preço: {price:.4f}, EMA (10): {ema:.4f}"
     explanation = (
@@ -85,16 +103,21 @@ def generate_signal(symbol: str, tf: str) -> Optional[Dict[str, Any]]:
         reason += ". RSI está em zona de sobrevenda e o preço está abaixo da EMA."
         explanation += "Atingiu uma zona extrema e pode reverter para cima."
         
-    # Se nenhuma regra de extremo for acionada, não retorna sinal.
+    # Se nenhuma regra de extremo for acionada, retorna None, o que é um sinal VÁLIDO de 'NÃO HÁ SINAL'
     if action is None:
-        return None 
-
+        # Aqui, decidimos se queremos retornar um 'sem sinal' ou None.
+        # Para a lógica atual, vamos retornar um sinal de "NEUTRO" se houver dados, mas sem regra acionada.
+        return {
+            "action": "NEUTRO (Aguardar)",
+            "probability": 0.50,
+            "reason": "Condições de mercado neutras ou fora dos extremos do RSI/EMA.",
+            "explanation": "Nenhuma das regras de reversão de extremo foi satisfeita. Não operar."
+        }
+        
+    # Se o sinal foi gerado
     return {
         "action": action,
-        "probability": 0.85, # Valor fixo, mas poderia ser dinâmico
-        "symbol": symbol,
-        "tf": tf,
+        "probability": 0.85, # Valor fixo para esta fase
         "reason": reason,
-        "explanation": explanation,
-        "generated_at": pd.Timestamp.now().isoformat()
+        "explanation": explanation
     }
