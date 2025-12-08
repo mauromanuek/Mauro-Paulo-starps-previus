@@ -1,148 +1,193 @@
-# deriv_client.py 
+# deriv_client.py - Versão Atualizada e Final: Subscrição de Velas (Estabilidade)
 
 import asyncio
-import websockets
 import json
-from datetime import datetime
-from strategy import ticks_history 
+from websockets import connect
+from typing import Optional, Dict, Any, TYPE_CHECKING
+import time
 
+# Importa as variáveis de controlo e a lógica de trading do strategy.py
+from strategy import ticks_history, MIN_TICKS_REQUIRED, generate_signal, MAX_TICK_HISTORY
+
+# Apenas para tipagem
+if TYPE_CHECKING:
+    from bots_manager import BotsManager 
+
+# --- CONFIGURAÇÃO CORRIGIDA ---
+# 🚨 SEU APP ID INSERIDO AQUI 🚨
+DERIV_APP_ID = 114910 
+# ------------------------------
+
+WS_URL = f"wss://ws.binaryws.com/websockets/v3?app_id={DERIV_APP_ID}"
+CANDLE_GRANULARITY = 60 # 60 segundos = 1 Minuto (para sinais estáveis)
 
 class DerivClient:
-    
-    # SEU APP ID INSERIDO AQUI
-    APP_ID = "114910" 
-
-    def __init__(self, token: str):
+    """
+    Gerencia a conexão WebSocket com a Deriv, autentica, gere o stream de dados 
+    de velas de 1 minuto e envia sinais estáveis para o BotsManager.
+    """
+    def __init__(self, token: str, bots_manager: 'BotsManager'):
         self.token = token
-        self.ws = None
-        self.connected = False
-        self.authorized = False
-        self.account_info = {"balance": 0.0, "account_type": "demo"} 
+        self.bots_manager = bots_manager
+        self.ws: Optional[connect] = None
+        self.is_connected = False
+        self.symbol = "" 
+        self.candles_subscription_id: Optional[str] = None # Para gerir a subscrição
 
-    async def start(self):
-        """Inicia a conexão completa com a Deriv."""
+    async def connect(self):
+        """Estabelece a conexão e autentica."""
+        if self.is_connected: return
         try:
-            self.ws = await websockets.connect(
-                f"wss://ws.derivws.com/websockets/v3?app_id={self.APP_ID}"
-            )
-            print("[Deriv] Conexão WebSocket aberta.")
-            self.connected = True
-            await self.authorize()
-
-            if self.authorized:
-                print("[Deriv] Token autorizado com sucesso. O bot está ONLINE.")
-                
-                await self.get_account_info() 
-                print("[Deriv] DEBUG: Informações da conta processadas.") 
-                
-                # --- 🟢 CORREÇÃO CRÍTICA AQUI: MUDANÇA DE V100 PARA R_100 🟢 ---
-                await self.subscribe_to_ticks("R_100") 
-                
-                print("[Deriv] DEBUG: Tentando iniciar o listener de ticks...")
-                asyncio.create_task(self.listen())
-                print("[Deriv] DEBUG: Tarefa de listener iniciada. Aguardando ticks...")
-
-            else:
-                print("[Deriv] Erro: token NÃO autorizado. Verifique se o token está correto e ativo.")
-                self.connected = False
-        except Exception as e:
-            print("[ERRO] Falha ao conectar WebSocket (URL/Rede):", e)
-            self.connected = False
-            
-    async def subscribe_to_ticks(self, symbol: str):
-        """Subscreve explicitamente aos ticks de um ativo."""
-        if not self.authorized or not self.connected: return
-        try:
-            # Enviando a mensagem de subscrição para o ativo corrigido
-            await self.ws.send(json.dumps({"ticks": symbol, "subscribe": 1}))
-            print(f"[Deriv] Subscrição enviada para {symbol}.")
-        except Exception as e:
-            print(f"[ERRO] Falha ao subscrever ticks: {e}")
-
-
-    async def authorize(self):
-        """Envia token e aguarda resposta."""
-        try:
+            self.ws = await connect(WS_URL)
+            self.is_connected = True
+            print("Conectado ao Deriv WebSocket.")
             await self.ws.send(json.dumps({"authorize": self.token}))
-            resp = await self.ws.recv()
-            data = json.loads(resp)
-            if data.get("msg_type") == "authorize" and not data.get("error"):
-                self.authorized = True
-            elif data.get("error"):
-                print("[Deriv] Falha na autorização:", data["error"])
+            auth_response = json.loads(await self.ws.recv())
+            if auth_response.get("error"):
+                print(f"❌ Erro de Autenticação: {auth_response['error']['message']}")
+                self.is_connected = False
+                return
+            print("✅ Autenticação bem-sucedida.")
         except Exception as e:
-            print("[ERRO] authorize:", e)
+            print(f"❌ Erro ao conectar ao Deriv: {e}")
+            self.is_connected = False
 
-    async def get_account_info(self):
-        """Busca o saldo e tipo de conta."""
-        if not self.authorized or not self.connected: return
+
+    async def subscribe_candles(self, symbol: str):
+        """Subscreve as velas (OHLC) para um ativo com 1 minuto de granularidade."""
+        if not self.is_connected: return
+        self.symbol = symbol
 
         try:
-            await self.ws.send(json.dumps({"balance": 1}))
-            resp_balance = await self.ws.recv()
-            balance_data = json.loads(resp_balance)
-
-            if balance_data.get('balance'):
-                balance_info = balance_data['balance']
-                self.account_info['balance'] = balance_info.get('balance', 0.0)
-                
-                login_id = balance_info.get('loginid', '')
-                self.account_info['account_type'] = "demo" if "VRTC" in login_id else "real"
-                
-                print(f"[Deriv] Saldo Atualizado: {self.account_info['balance']} ({self.account_info['account_type']})")
-
+            # Pede o histórico e subscreve as novas velas (timeframe de 1 minuto)
+            await self.ws.send(json.dumps({
+                "forget_all": "candles" # Limpa quaisquer subscrições de velas anteriores
+            }))
+            
+            await self.ws.send(json.dumps({
+                "ticks_history": symbol,
+                "end": "latest",
+                "start": 1,
+                "count": MAX_TICK_HISTORY,
+                "subscribe": 1,
+                "style": "candles",
+                "granularity": CANDLE_GRANULARITY 
+            }))
+            print(f"Subscrito aos dados de Velas de 1 Minuto para {symbol}")
         except Exception as e:
-            print(f"[ERRO] Falha ao buscar informações da conta: {e}")
+            print(f"❌ Erro ao subscrever velas: {e}")
 
-    async def listen(self):
-        """Loop de mensagens e envio de ticks para a estratégia."""
-        print("[Deriv] Iniciando listener de ticks…")
-        while self.connected:
+    async def run_listener(self):
+        """Loop principal para escutar mensagens do WebSocket."""
+        while self.is_connected and self.ws:
             try:
-                # O timeout ajuda a prevenir travamento do listener
-                msg = await asyncio.wait_for(self.ws.recv(), timeout=10) 
-                data = json.loads(msg)
-
-                if data.get("error"):
-                    # O erro de InvalidSymbol que você viu antes
-                    print("[ERRO FATAL DERIV]:", data["error"])
-                    # Se receber um erro, tenta continuar o loop (para evitar queda total)
-                    continue 
+                # Timeout para poder enviar pings
+                response_str = await asyncio.wait_for(self.ws.recv(), timeout=30) 
+                response = json.loads(response_str)
                 
-                # Processamento de Ticks
-                if data.get("msg_type") == "tick":
-                    tick = data["tick"]
-                    price = float(tick["quote"])
-                    ticks_history.append(float(price))
-                    
-                    print(f"[Deriv] ✅ Tick recebido: {price}") 
-                    
-                # Processamento de Saldos (para atualização em tempo real, se necessário)
-                if data.get("msg_type") == "balance":
-                     if data.get('balance'):
-                        self.account_info['balance'] = data['balance'].get('balance', 0.0)
+                if response.get('error'):
+                    print(f"❌ Erro da API: {response['error']['message']}")
+                elif response.get('ohlc'):
+                    await self.handle_candle_update(response)
+                elif response.get('candles'):
+                    self.handle_history_response(response)
+                elif response.get('msg_type') == 'candles':
+                    self.candles_subscription_id = response.get('subscription', {}).get('id')
+                elif response.get('msg_type') == 'ping':
+                    # Responde ao ping da API (Manter conexão ativa)
+                    await self.ws.send(json.dumps({"pong": 1}))
 
-            except websockets.ConnectionClosed as e:
-                print(f"[Deriv] Conexão fechada. Motivo: {e}. Desligando cliente.")
-                self.connected = False
-                break
             except asyncio.TimeoutError:
-                # Envia um 'ping' para manter a conexão viva
+                # Se o timeout for atingido, envia um ping para o servidor Deriv
                 await self.ws.send(json.dumps({"ping": 1}))
-                print("[Deriv] Ping enviado para manter conexão...") 
                 continue
             except Exception as e:
-                print(f"[ERRO GERAL] no listener: {e}")
-                continue
+                print(f"Conexão fechada inesperadamente: {e}")
+                self.is_connected = False
+                break
+    
+    def handle_history_response(self, response: Dict[str, Any]):
+        """Processa o histórico inicial de velas."""
+        global ticks_history
+        history = response.get('candles', [])
+        
+        if history:
+            ticks_history.clear()
+            ticks_history.extend([float(c.get('close')) for c in history])
+            
+            print(f"✅ Histórico de velas de 1m carregado: {len(ticks_history)} preços de fecho.")
+            
+    
+    async def handle_candle_update(self, response: Dict[str, Any]):
+        """
+        Processa uma nova vela (quando o 'is_closed' é 1) e chama a análise.
+        """
+        global ticks_history
 
-    async def stop(self):
-        """Fecha a conexão."""
-        try:
-            self.connected = False
-            self.authorized = False
-            if self.ws:
-                await self.ws.close()
-        except:
-            pass
+        candle_data = response.get('ohlc', {})
+        
+        # O preço de fecho (close) só é confiável quando a vela está fechada (is_closed: 1)
+        if candle_data.get('is_closed') == 1:
+            closed_price = candle_data.get('close')
 
-        print("[Deriv] Cliente parado.")
+            if closed_price and self.symbol:
+                price_float = float(closed_price)
+                
+                # 1. Adicionar o novo preço de fecho
+                ticks_history.append(price_float)
+                
+                # 2. Gerir o tamanho da lista (Limpeza)
+                if len(ticks_history) > MAX_TICK_HISTORY:
+                    del ticks_history[0] 
+                
+                # 3. Análise e Decisão da Estratégia
+                if len(ticks_history) >= MIN_TICKS_REQUIRED:
+                    signal = generate_signal(self.symbol, "1m") 
+                    
+                    if signal:
+                        print(f"=== NOVO SINAL ({signal['tf']}) ===")
+                        print(f"Ação: {signal['action']} | Probabilidade: {signal['probability']:.2f} | Razão: {signal['reason']}")
+                        print("===================================")
+                        await self.bots_manager.process_signal(signal)
+
+
+# ----------------------------------------------------------------------
+# FUNÇÃO DE EXECUÇÃO PRINCIPAL
+# ----------------------------------------------------------------------
+
+# Assumimos que BotsManager existe
+async def main():
+    
+    # 🚨 SUBSTITUA ESTES VALORES 🚨
+    YOUR_API_TOKEN = "SEU_TOKEN_AQUI"
+    TRADING_SYMBOL = "R_100" # Exemplo: Volatility 100 Index
+    
+    if YOUR_API_TOKEN == "SEU_TOKEN_AQUI":
+        print("🚨 Por favor, insira o seu token da Deriv para continuar. 🚨")
+        return
+
+    try:
+        from bots_manager import BotsManager
+    except ImportError:
+        print("🚨 Erro: O arquivo bots_manager.py não foi encontrado. 🚨")
+        return
+
+    # Um BotsManager simples para fins de demonstração
+    class SimpleBotsManager:
+        async def process_signal(self, signal):
+            print(f"🤖 BOT_MANAGER: Recebido sinal de {signal['action']} ({signal['tf']})")
+
+    bots_manager_instance = SimpleBotsManager() 
+    client = DerivClient(token=YOUR_API_TOKEN, bots_manager=bots_manager_instance)
+
+    await client.connect()
+    
+    if client.is_connected:
+        await client.subscribe_candles(TRADING_SYMBOL)
+        await client.run_listener()
+
+if __name__ == '__main__':
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\nCliente Deriv encerrado pelo utilizador.")
