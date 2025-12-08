@@ -9,6 +9,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import json
+from fastapi.middleware.cors import CORSMiddleware # Adicionado para garantir CORS
 
 # --- IMPORTS CORRETOS ---
 from strategy import generate_signal 
@@ -19,6 +20,20 @@ from bots_manager import BotsManager, BotState
 app = FastAPI()
 client: Optional[DerivClient] = None
 bots_manager: Optional[BotsManager] = None
+
+# 🟢 CONFIGURAÇÃO DE CORS (Para garantir que o Render funcione) 🟢
+origins = [
+    "*", 
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+# -------------------------------------------------------------
 
 # Montar pasta static para CSS e JS
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -58,8 +73,9 @@ async def read_root(request: Request):
 
 @app.post("/set_token")
 async def set_token_and_connect(data: TokenRequest):
-    """Recebe o token do usuário e inicia a conexão com a Deriv.
-       Inclui agora uma espera para garantir a autorização. 🟢
+    """
+    Recebe o token do usuário e inicia a conexão com a Deriv.
+    Espera 8 segundos para garantir a autorização.
     """
     global client
     
@@ -72,8 +88,7 @@ async def set_token_and_connect(data: TokenRequest):
     # Inicia a conexão em segundo plano
     asyncio.create_task(client.start())
     
-    # 🟢 CORREÇÃO CRÍTICA: AGORA ESPERAMOS 8 SEGUNDOS!
-    # Isso dá tempo suficiente para a autorização da Deriv e estabilização do listener.
+    # 🟢 CORREÇÃO CRÍTICA: ESPERAR PELA AUTORIZAÇÃO E ESTABILIZAÇÃO
     await asyncio.sleep(8) 
     
     # Verifica o estado após o tempo de espera
@@ -86,7 +101,6 @@ async def set_token_and_connect(data: TokenRequest):
         })
     else:
         # Falha na autorização após o tempo de espera
-        # Retorna 401 para o frontend mostrar "Falha de Autorização"
         raise HTTPException(status_code=401, detail="Falha de Autorização. Verifique o token ou a conexão.")
 
 @app.get("/status")
@@ -118,18 +132,26 @@ async def get_status():
 async def get_signal(symbol: str, tf: str):
     """
     Gera e retorna um sinal de trading com base na análise dos ticks.
+    Agora tenta gerar o sinal por até 5 segundos antes de falhar. 🟢
     """
     if not client or not client.authorized:
         raise HTTPException(status_code=401, detail="Não autorizado. Faça o login primeiro.")
     
-    # A lógica da estratégia está no strategy.py
-    signal = generate_signal(symbol, tf)
+    MAX_ATTEMPTS = 10
     
-    if signal is None:
-        # Retorna 404 se não houver dados suficientes ou o sinal não estiver pronto
-        raise HTTPException(status_code=404, detail="Não há dados suficientes para gerar o sinal (requer 20 ticks).")
-    
-    return signal
+    for attempt in range(MAX_ATTEMPTS):
+        # 1. Tenta gerar o sinal
+        signal = generate_signal(symbol, tf)
+        
+        if signal is not None:
+            # 2. Sucesso: Sinal gerado, retorna imediatamente
+            return signal
+        
+        # 3. Falha: Dados insuficientes, espera e tenta novamente
+        await asyncio.sleep(0.5) # Espera meio segundo antes da próxima tentativa
+        
+    # 4. Falha Total: Após 10 tentativas (5 segundos), retorna o erro 404
+    raise HTTPException(status_code=404, detail="Não há dados suficientes para gerar o sinal (requer 20 ticks após 5s de espera).")
 
 # --- 4. ROTAS DE BOTS AUTOMÁTICOS ---
 
