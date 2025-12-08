@@ -4,7 +4,7 @@ import asyncio
 import websockets
 import json
 from datetime import datetime
-from strategy import update_ticks(float(price)) # <--
+from strategy import update_ticks
 
 
 class DerivClient:
