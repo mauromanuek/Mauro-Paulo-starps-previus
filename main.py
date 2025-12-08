@@ -11,7 +11,6 @@ from typing import Optional, Dict, Any, List
 import json
 
 # --- IMPORTS CORRETOS ---
-# Importa as funções da estratégia, não a classe antiga
 from strategy import generate_signal 
 from deriv_client import DerivClient
 from bots_manager import BotsManager, BotState 
@@ -59,7 +58,9 @@ async def read_root(request: Request):
 
 @app.post("/set_token")
 async def set_token_and_connect(data: TokenRequest):
-    """Recebe o token do usuário e inicia a conexão com a Deriv."""
+    """Recebe o token do usuário e inicia a conexão com a Deriv.
+       Inclui agora uma espera para garantir a autorização. 🟢
+    """
     global client
     
     # Se o cliente já estiver rodando, pare-o
@@ -71,8 +72,22 @@ async def set_token_and_connect(data: TokenRequest):
     # Inicia a conexão em segundo plano
     asyncio.create_task(client.start())
     
-    # Não espera a conexão terminar, retorna imediatamente
-    return JSONResponse({"ok": True, "message": "Conexão iniciada. Verifique o status em breve."})
+    # 🟢 CORREÇÃO CRÍTICA: AGORA ESPERAMOS 8 SEGUNDOS!
+    # Isso dá tempo suficiente para a autorização da Deriv e estabilização do listener.
+    await asyncio.sleep(8) 
+    
+    # Verifica o estado após o tempo de espera
+    if client.authorized:
+        # Retorna sucesso e o tipo de conta para o frontend
+        return JSONResponse({
+            "ok": True, 
+            "message": "Conectado e Autorizado!",
+            "account_type": client.account_info['account_type']
+        })
+    else:
+        # Falha na autorização após o tempo de espera
+        # Retorna 401 para o frontend mostrar "Falha de Autorização"
+        raise HTTPException(status_code=401, detail="Falha de Autorização. Verifique o token ou a conexão.")
 
 @app.get("/status")
 async def get_status():
@@ -199,4 +214,3 @@ async def ia_query(data: IAQueryRequest):
         response_text = "Desculpe, a minha base de dados de análise técnica está limitada. Por favor, faça uma pergunta sobre padrões gráficos, indicadores (como RSI/EMA) ou conceitos básicos de trading."
 
     return JSONResponse({"ok": True, "response": response_text})
-
