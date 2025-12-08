@@ -1,19 +1,18 @@
-# deriv_client.py - Versão FINAL E CORRIGIDA: Import, Velas de 1m, e Tratamento de Conexão
+# deriv_client.py - Versão FINAL E CORRIGIDA: Tratamento de Duplicação de Vela
 
 import asyncio
 import json
-import websockets # 🟢 CORREÇÃO: Importação do módulo completo
+import websockets 
 from typing import Optional, Dict, Any, TYPE_CHECKING
 import time
 
-# Importa as variáveis de controlo e a lógica de trading do strategy.py
+# --- IMPORTS CORRIGIDOS ---
 from strategy import ticks_history, MIN_TICKS_REQUIRED, generate_signal, MAX_TICK_HISTORY
 
-# Apenas para tipagem
 if TYPE_CHECKING:
     from bots_manager import BotsManager 
 
-# --- CONFIGURAÇÃO (SEU APP ID) ---
+# --- CONFIGURAÇÃO (VERIFIQUE O SEU APP ID) ---
 DERIV_APP_ID = 114910 
 # ---
 
@@ -22,10 +21,7 @@ WS_URL = f"wss://ws.binaryws.com/websockets/v3?app_id={DERIV_APP_ID}"
 CANDLE_GRANULARITY = 60 # 1 Minuto
 
 class DerivClient:
-    """
-    Gerencia a conexão WebSocket com a Deriv, autentica, gere o stream de dados 
-    de velas de 1 minuto e envia sinais estáveis para o BotsManager.
-    """
+    
     def __init__(self, token: str, bots_manager: 'BotsManager'): 
         self.token = token
         self.bots_manager = bots_manager
@@ -36,6 +32,7 @@ class DerivClient:
         self.account_info = {"balance": 0.0, "account_type": "demo"}
         self.symbol = "" 
         self.candles_subscription_id: Optional[str] = None
+        self.last_processed_candle_time = 0 # NOVO: Tempo do último fecho de vela processado
 
     # --- FUNÇÕES CORE ---
 
@@ -49,7 +46,6 @@ class DerivClient:
             await self.run_listener()
         else:
             await self.stop()
-
 
     async def connect(self):
         """Estabelece a conexão e autentica, tratando falhas imediatas."""
@@ -77,7 +73,7 @@ class DerivClient:
             await self.get_account_info() 
             
         except websockets.ConnectionClosed as e:
-            # 🟢 TRATAMENTO DO ERRO "sent 1000 (OK)": O WebSocket fechou antes da autenticação.
+            # TRATAMENTO DO ERRO "sent 1000 (OK)"
             print(f"❌ Erro de Conexão: O WebSocket foi fechado imediatamente. Código: {e.code}. Verifique o token e a rede.")
             self.is_connected = False
             self.connected = False
@@ -147,7 +143,7 @@ class DerivClient:
                 self.is_connected = False
                 self.connected = False
                 break
-
+                
     def handle_history_response(self, response: Dict[str, Any]):
         """Processa o histórico inicial de velas."""
         global ticks_history
@@ -157,16 +153,28 @@ class DerivClient:
             ticks_history.clear()
             ticks_history.extend([float(c.get('close')) for c in history])
             
-            print(f"✅ Histórico de velas de 1m carregado: {len(ticks_history)} preços de fecho.")
+            # Captura o tempo da última vela histórica para evitar duplicação
+            if history:
+                 self.last_processed_candle_time = history[-1].get('open_time', 0)
             
+            print(f"✅ Histórico de velas de 1m carregado: {len(ticks_history)} preços de fecho.")
     
     async def handle_candle_update(self, response: Dict[str, Any]):
-        """Processa uma nova vela fechada e gera o sinal."""
+        """
+        Processa uma nova vela (quando o 'is_closed' é 1) e chama a análise.
+        """
         global ticks_history
 
         candle_data = response.get('ohlc', {})
         
         if candle_data.get('is_closed') == 1:
+            
+            candle_time = candle_data.get('open_time', 0) 
+            
+            # VERIFICA SE ESTA VELA JÁ FOI PROCESSADA
+            if candle_time <= self.last_processed_candle_time:
+                 return 
+
             closed_price = candle_data.get('close')
 
             if closed_price and self.symbol:
@@ -176,6 +184,9 @@ class DerivClient:
                 
                 if len(ticks_history) > MAX_TICK_HISTORY:
                     del ticks_history[0] 
+                
+                # ATUALIZA O TEMPO DA ÚLTIMA VELA PROCESSADA
+                self.last_processed_candle_time = candle_time
                 
                 if len(ticks_history) >= MIN_TICKS_REQUIRED:
                     signal = generate_signal(self.symbol, "1m") 
