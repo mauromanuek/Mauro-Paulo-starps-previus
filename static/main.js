@@ -1,186 +1,184 @@
-// /static/main.js
+document.addEventListener('DOMContentLoaded', () => {
+    const tokenInputContainer = document.getElementById('token-input-container');
+    const controlPanelContainer = document.getElementById('control-panel-container');
+    const apiTokenInput = document.getElementById('api-token');
+    const saveTokenButton = document.getElementById('save-token-btn');
+    const startBotButton = document.getElementById('start-bot-btn');
+    const stopBotButton = document.getElementById('stop-bot-btn');
+    const assetSelect = document.getElementById('asset-select');
+    const modeSelect = document.getElementById('mode-select');
+    const statusText = document.getElementById('status-text');
+    const directionText = document.getElementById('direction-text');
+    const confidenceText = document.getElementById('confidence-text');
+    const justificationText = document.getElementById('justification-text');
+    const timingText = document.getElementById('timing-text');
+    const logsList = document.getElementById('logs-list');
+    const strategyText = document.getElementById('strategy-text');
+    const indicatorStatusText = document.getElementById('indicator-status-text');
 
-const BOT_STATUS_TEXT = document.getElementById('bot-status-text');
-const LOG_AREA = document.getElementById('log-area');
-const START_BTN = document.getElementById('start-bot-btn');
-const STOP_BTN = document.getElementById('stop-bot-btn');
-const SYMBOL_SELECT = document.getElementById('symbol-select');
-const MODE_SELECT = document.getElementById('mode-select');
+    // --- UTILS ---
 
-// Sinalização
-const HEADER_BOX = document.getElementById('signal-header-box');
-const MAIN_DIRECTION_TEXT = document.getElementById('main-direction-text');
-const CONFIDENCE_TEXT = document.getElementById('confidence-text');
-const STRATEGY_TEXT = document.getElementById('strategy-text');
-const INDICATOR_TEXT = document.getElementById('indicator-status-text');
-const JUSTIFICATION_BOX = document.getElementById('justification-box');
-const JUSTIFICATION_TEXT = document.getElementById('justification-text');
-const ENTRY_TIME = document.getElementById('signal-entry-time');
-const EXIT_TIME = document.getElementById('signal-exit-time');
-
-// Login
-const LOGIN_SCREEN = document.getElementById('login-screen');
-const MAIN_APP_CONTENT = document.getElementById('main-app-content');
-const API_TOKEN_INPUT = document.getElementById('api-token-input');
-const SAVE_TOKEN_BTN = document.getElementById('save-token-btn');
-const TOKEN_STATUS = document.getElementById('token-status');
-
-let statusInterval;
-
-// --- FUNÇÕES DE LOGIN E AUTENTICAÇÃO ---
-
-function checkTokenAndDisplay() {
-    // Carrega o token salvo do armazenamento local
-    const tokenStored = localStorage.getItem('deriv_api_token');
-    if (tokenStored && tokenStored.length > 10) {
-        // Se houver token, mostra a aplicação principal
-        LOGIN_SCREEN.style.display = 'none';
-        MAIN_APP_CONTENT.style.display = 'block';
-        TOKEN_STATUS.textContent = 'Token API Carregado!';
-        TOKEN_STATUS.style.color = '#00bf00'; 
-        API_TOKEN_INPUT.value = tokenStored; // Preenche o campo
-        checkBotStatusAndLogs();
-    } else {
-        // Mostra a tela de login
-        LOGIN_SCREEN.style.display = 'flex';
-        MAIN_APP_CONTENT.style.display = 'none';
-        TOKEN_STATUS.textContent = 'Aguardando Token...';
-        TOKEN_STATUS.style.color = 'orange';
+    function showTokenInput() {
+        tokenInputContainer.style.display = 'block';
+        controlPanelContainer.style.display = 'none';
+        // Limpar o campo para forçar a inserção
+        apiTokenInput.value = '';
     }
-}
 
-SAVE_TOKEN_BTN.onclick = () => {
-    const token = API_TOKEN_INPUT.value.trim();
-    if (token.length > 10) {
-        localStorage.setItem('deriv_api_token', token);
-        checkTokenAndDisplay();
-    } else {
-        alert('Por favor, insira um token API válido.');
-    }
-};
-
-// --- FUNÇÕES DE CONTROLO DO BOT ---
-
-async function controlBot(action) {
-    const apiToken = API_TOKEN_INPUT.value; 
-    
-    if (action === 'start' && !apiToken) {
-        alert('O Token API é obrigatório para iniciar a conexão.');
-        return;
+    function showControlPanel(tokenValue) {
+        tokenInputContainer.style.display = 'none';
+        controlPanelContainer.style.display = 'block';
+        // Definir o valor para que possa ser enviado para o backend
+        apiTokenInput.value = tokenValue; 
     }
     
-    const symbol = SYMBOL_SELECT.value;
-    const mode = MODE_SELECT.value;
+    // --- TOKEN HANDLER (MODIFICADO) ---
     
-    try {
-        const response = await fetch('/control', {
+    // NUNCA SALVAR O TOKEN. Apenas lê o valor para usar na sessão.
+    saveTokenButton.addEventListener('click', () => {
+        const token = apiTokenInput.value.trim();
+        if (token) {
+            showControlPanel(token);
+            // Começa a verificar o status do bot
+            fetchStatus(); 
+            // Atualiza o display dos inputs para disabled/enabled
+            updateControls(false); 
+        } else {
+            alert("Por favor, insira um Token API válido.");
+        }
+    });
+
+    // Ao carregar a página, sempre mostra o input do token
+    showTokenInput(); 
+
+    // --- API CALLS ---
+
+    function controlBot(action) {
+        // Enviar o token lido do campo (agora não salvo)
+        const token = apiTokenInput.value; 
+        const asset = assetSelect.value;
+        const mode = modeSelect.value;
+
+        fetch('/control', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                action, 
-                symbol, 
-                mode, 
-                api_token: apiToken // O token é enviado ao backend
-            }) 
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                action: action,
+                api_token: token,
+                asset: asset,
+                mode: mode
+            }),
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log(data.message);
+            // Se for iniciar e for sucesso, desativa os controles de seleção
+            if (action === 'start' && data.status === 'success') {
+                 updateControls(true);
+            }
+            // Se for parar, reativa os controles
+            if (action === 'stop' && data.status === 'success') {
+                updateControls(false);
+            }
+        })
+        .catch(error => {
+            console.error('Erro ao controlar o bot:', error);
+            // Em caso de erro, reativa os controles para que o usuário possa tentar novamente
+            updateControls(false);
         });
-        const result = await response.json();
-        
-        if (!response.ok) {
-            alert(`Erro: ${result.message}`);
+    }
+
+    function fetchStatus() {
+        fetch('/status')
+            .then(response => response.json())
+            .then(data => {
+                // Atualizar o display com os dados mais recentes
+                statusText.textContent = data.status;
+                directionText.textContent = data.direction;
+                confidenceText.textContent = `${data.confidence}%`;
+                justificationText.textContent = data.justification;
+                timingText.textContent = data.timing;
+                strategyText.textContent = data.strategy || 'N/A';
+                indicatorStatusText.textContent = data.indicators || 'N/A';
+
+                // Cores de status
+                statusText.className = getStatusClass(data.status);
+                directionText.className = getDirectionClass(data.direction);
+                
+                // Atualizar logs
+                logsList.innerHTML = '';
+                if (data.logs && data.logs.length > 0) {
+                    data.logs.forEach(log => {
+                        const li = document.createElement('li');
+                        li.textContent = log;
+                        logsList.appendChild(li);
+                    });
+                }
+                
+                // Habilitar/desabilitar botões
+                if (data.current_status === 'ON') {
+                    startBotButton.disabled = true;
+                    stopBotButton.disabled = false;
+                } else {
+                    startBotButton.disabled = false;
+                    stopBotButton.disabled = true;
+                }
+            })
+            .catch(error => {
+                console.error('Erro ao buscar status:', error);
+                statusText.textContent = 'ERRO DE CONEXÃO COM O SERVIDOR';
+                statusText.className = 'status-error';
+            });
+    }
+
+    // Função para atualização dos controles
+    function updateControls(isBotRunning) {
+        assetSelect.disabled = isBotRunning;
+        modeSelect.disabled = isBotRunning;
+    }
+
+    // Função para atribuição de classes CSS
+    function getStatusClass(status) {
+        switch (status) {
+            case 'SINAL ATIVO!':
+                return 'status-active';
+            case 'AGUARDANDO':
+                return 'status-waiting';
+            case 'INICIANDO':
+            case 'PARANDO':
+                return 'status-starting';
+            case 'ERRO - PARADO':
+                return 'status-error';
+            default:
+                return 'status-default';
         }
-    } catch (error) {
-        alert('Erro de conexão com o servidor.');
-    }
-}
-
-START_BTN.onclick = () => controlBot('start');
-STOP_BTN.onclick = () => controlBot('stop');
-
-// --- FUNÇÃO DE RENDERIZAÇÃO DE SINAL ---
-
-function renderFinalSignal(signalData) {
-    const direction = signalData.direction;
-
-    // Estado NEUTRO/AGUARDANDO/OFF
-    if (direction === 'NEUTRA' || direction === 'AGUARDANDO' || direction === 'OFF') {
-        const color = direction === 'OFF' ? '#4a4a4a' : 'gray';
-        MAIN_DIRECTION_TEXT.textContent = `Robot Analista: ${direction}`;
-        HEADER_BOX.style.backgroundColor = color;
-        HEADER_BOX.classList.remove('call', 'put');
-        JUSTIFICATION_BOX.classList.remove('call', 'put');
-        JUSTIFICATION_BOX.style.borderTopColor = color;
-        
-        CONFIDENCE_TEXT.innerHTML = '';
-        STRATEGY_TEXT.textContent = signalData.strategy_used;
-        INDICATOR_TEXT.textContent = signalData.indicator_status;
-        JUSTIFICATION_TEXT.textContent = signalData.justification;
-        ENTRY_TIME.textContent = '--:--:--';
-        EXIT_TIME.textContent = '--:--:--';
-        return;
     }
 
-    // Estado CALL / PUT
-    const isCall = direction === 'CALL';
-    const color = isCall ? '#00bf00' : '#ff3333';
-    
-    MAIN_DIRECTION_TEXT.textContent = `SINAL: ${direction.toUpperCase()} (${isCall ? 'COMPRA' : 'VENDA'})`;
-    
-    // Atualização das Cores e Classes
-    HEADER_BOX.classList.toggle('call', isCall);
-    HEADER_BOX.classList.toggle('put', !isCall);
-    JUSTIFICATION_BOX.classList.toggle('call', isCall);
-    JUSTIFICATION_BOX.classList.toggle('put', !isCall);
-    JUSTIFICATION_BOX.style.borderTopColor = color;
-    
-    // Atualização dos Detalhes
-    CONFIDENCE_TEXT.innerHTML = `<span style="color: ${color};">${signalData.confidence}%</span>`;
-    STRATEGY_TEXT.textContent = signalData.strategy_used;
-    INDICATOR_TEXT.textContent = signalData.indicator_status;
-    JUSTIFICATION_TEXT.textContent = signalData.justification;
-
-    // Atualização dos Tempos
-    ENTRY_TIME.textContent = signalData.entry_time;
-    EXIT_TIME.textContent = signalData.exit_time;
-}
-
-// --- CHECK DE STATUS PRINCIPAL ---
-
-async function checkBotStatusAndLogs() {
-    try {
-        const response = await fetch('/status');
-        const data = await response.json();
-        
-        // 1. Atualiza Status
-        const status = data.status;
-        BOT_STATUS_TEXT.textContent = status;
-        START_BTN.disabled = (status === 'ON');
-        STOP_BTN.disabled = (status === 'OFF');
-        
-        // 2. Atualiza Logs (Rolagem automática)
-        const logsHtml = data.logs.join('\n');
-        const shouldScroll = LOG_AREA.scrollTop + LOG_AREA.clientHeight === LOG_AREA.scrollHeight;
-        LOG_AREA.textContent = logsHtml;
-        if (shouldScroll || data.logs.length === 1) {
-            LOG_AREA.scrollTop = LOG_AREA.scrollHeight;
+    function getDirectionClass(direction) {
+        switch (direction) {
+            case 'CALL':
+                return 'direction-call';
+            case 'PUT':
+                return 'direction-put';
+            default:
+                return 'direction-neutral';
         }
-
-        // 3. Renderiza o Sinal
-        renderFinalSignal(data.signal_data);
-
-    } catch (error) {
-        // Ocorre se o Render estiver a dormir ou a iniciar
-        BOT_STATUS_TEXT.textContent = 'ERRO DE CONEXÃO / SERVIDOR OFFLINE';
-        console.error('Erro ao buscar status:', error);
     }
-}
 
-// Inicia a verificação de status a cada 1 segundo
-window.onload = () => {
-    checkTokenAndDisplay();
-    // Inicia a verificação de status independentemente de o token estar salvo
-    statusInterval = setInterval(checkBotStatusAndLogs, 1000);
-};
 
-window.onbeforeunload = () => {
-    clearInterval(statusInterval);
-};
+    // --- EVENT LISTENERS ---
+
+    startBotButton.addEventListener('click', () => {
+        // Envia o token que foi lido no saveTokenButton
+        controlBot('start');
+    });
+
+    stopBotButton.addEventListener('click', () => {
+        controlBot('stop');
+    });
+
+    // Iniciar a busca de status a cada segundo
+    setInterval(fetchStatus, 1000);
+});
