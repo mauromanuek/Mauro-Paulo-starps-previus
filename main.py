@@ -177,7 +177,15 @@ def fetch_candle_data(ws, symbol, granularity=300):
     df.ta.stoch(k=14, d=3, append=True)
     
     # Padrões de Candlestick
-    df.ta.cdl_hammer(append=True)
+    # ----------------------------------------------------------------------
+    # CORREÇÃO DO HAMMER: Usamos try/except para lidar com versões diferentes do pandas-ta
+    try:
+        df.ta.cdl_hammer(append=True)
+    except AttributeError:
+        add_log("AVISO: cdl_hammer direto falhou. Usando cdl_pattern genérico para Hammer.")
+        df.ta.cdl_pattern(name="hammer", append=True)
+    # ----------------------------------------------------------------------
+    
     df.ta.cdl_engulfing(append=True)
     df.ta.cdl_shootingstar(append=True)
 
@@ -324,4 +332,3 @@ def get_status():
 if __name__ == '__main__':
     add_log("Servidor Flask inicializado. (Lembre-se de usar Gunicorn no Render!)")
     app.run(debug=True, use_reloader=False)
-
