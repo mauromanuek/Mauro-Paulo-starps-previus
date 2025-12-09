@@ -1,289 +1,204 @@
-# deriv_client.py
+# deriv_client.py - Versão FINAL E ESTÁVEL: Baseada em Velas (OHLC)
+
 import asyncio
 import json
-import websockets
+import websockets 
+from typing import Optional, Dict, Any, TYPE_CHECKING
 import time
-from collections import deque
-from typing import Optional, Callable, Deque, Dict, Any
 
-DERIV_APP_ID = 114910
-WS_URL = f"wss://ws.derivws.com/websockets/v3?app_id={DERIV_APP_ID}"
+# --- IMPORTS OBRIGATÓRIOS ---
+from strategy import ticks_history, MIN_TICKS_REQUIRED, generate_signal, MAX_TICK_HISTORY
 
-DEFAULT_GRANULARITY = 60  # seconds
-HISTORY_CANDLES = 500     # quantas velas manter por ativo
+if TYPE_CHECKING:
+    from bots_manager import BotsManager 
 
+# --- CONFIGURAÇÃO (SEU APP ID) ---
+DERIV_APP_ID = 114910 
+# ---
 
-class Candle:
-    def __init__(self, open_p: float, high: float, low: float, close: float, start_ts: int):
-        self.open = float(open_p)
-        self.high = float(high)
-        self.low = float(low)
-        self.close = float(close)
-        self.start_ts = int(start_ts)
-
-    def to_dict(self):
-        return {
-            "open": self.open,
-            "high": self.high,
-            "low": self.low,
-            "close": self.close,
-            "start_ts": self.start_ts
-        }
-
+WS_URL = f"wss://ws.binaryws.com/websockets/v3?app_id={DERIV_APP_ID}" 
+CANDLE_GRANULARITY = 60 # 1 Minuto
 
 class DerivClient:
-    def __init__(self, app_id: Optional[int] = None):
-        self.app_id = app_id or DERIV_APP_ID
-        self.ws_url = f"wss://ws.derivws.com/websockets/v3?app_id={self.app_id}"
+    
+    def __init__(self, token: str, bots_manager: 'BotsManager'): 
+        self.token = token
+        self.bots_manager = bots_manager
         self.ws: Optional[websockets.WebSocketClientProtocol] = None
         self.is_connected = False
-        self.authorized = False
-        self.token: Optional[str] = None
+        self.connected = False 
+        self.authorized = False 
+        self.history_loaded = False  # FLAG CRÍTICA
+        self.account_info = {"balance": 0.0, "account_type": "demo"}
+        self.symbol = "" 
+        self.candles_subscription_id: Optional[str] = None
+        self.last_processed_candle_time = 0 
 
-        # callbacks set by main.py
-        self.on_tick: Optional[Callable[[dict], None]] = None
-        self.on_candle: Optional[Callable[[str, int, Dict[str, Any]], None]] = None
-        self.on_history_ready: Optional[Callable[[str, int], None]] = None
+    # --- FUNÇÕES CORE ---
 
-        # stores
-        # candles_store[symbol][gran] -> deque[Candle]
-        self.candles_store: Dict[str, Dict[int, Deque[Candle]]] = {}
-        # builder state for symbol->gran
-        self.build_candle: Dict[str, Dict[int, Dict[str, Any]]] = {}
-        # last tick
-        self.last_tick: Dict[str, float] = {}
+    async def connect_and_subscribe(self, symbol: str):
+        await self.connect()
+        await asyncio.sleep(1) 
+        
+        if self.authorized: 
+            await self.subscribe_candles(symbol) # 👈 CRÍTICO: CHAMA AS VELAS
+            
+            timeout = 20
+            start_time = time.time()
+            print("[Deriv] Aguardando o histórico inicial de velas...")
+            
+            listener_task = asyncio.create_task(self.run_listener())
+            
+            while not self.history_loaded and time.time() - start_time < timeout:
+                await asyncio.sleep(0.5)
 
-        self._listener_task: Optional[asyncio.Task] = None
+            if self.history_loaded:
+                print("✅ Histórico carregado. O bot está PRONTO.")
+            else:
+                print(f"❌ Falha no carregamento do histórico inicial (Timeout de {timeout}s).")
+                listener_task.cancel()
+                await self.stop()
+        else:
+            await self.stop()
 
-    # ------------- connection & auth -------------
-    async def connect(self, token: str):
-        if self.is_connected:
-            return
-        self.token = token
+    async def connect(self):
+        if self.is_connected: return
         try:
-            self.ws = await websockets.connect(self.ws_url)
+            self.ws = await websockets.connect(WS_URL)
             self.is_connected = True
-            await self._authorize()
-            if self.authorized:
-                self._listener_task = asyncio.create_task(self._listener_loop())
-                print("[DerivClient] Conectado, autorizado e listener iniciado.")
-            else:
-                print("[DerivClient] Conexão falhou por problemas de autorização.")
-                await self.ws.close()
+            self.connected = True
+            print("[Deriv] Conectado ao Deriv WebSocket.")
+            await self.ws.send(json.dumps({"authorize": self.token}))
+            
+            auth_response_str = await asyncio.wait_for(self.ws.recv(), timeout=5)
+            auth_response = json.loads(auth_response_str)
+
+            if auth_response.get("error"):
+                print(f"❌ Erro de Autenticação: {auth_response['error']['message']}")
+                self.authorized = False
                 self.is_connected = False
-        except Exception as e:
-            print("[DerivClient] Erro ao conectar:", e)
+                return
+
+            self.authorized = True
+            print("✅ Autenticação bem-sucedida.")
+            await self.get_account_info() 
+            
+        except websockets.ConnectionClosed as e:
+            print(f"❌ Erro de Conexão: O WebSocket foi fechado. Código: {e.code}. Verifique o token e a rede.")
             self.is_connected = False
-
-    async def _authorize(self):
-        """Tenta autorizar a sessão com o token fornecido."""
-        self.authorized = False
-        if not self.ws or not self.token:
-            print("[DerivClient] Erro: WS ou token ausente para autorização.")
-            return
-
-        await self.ws.send(json.dumps({"authorize": self.token}))
-        print("[DerivClient] Enviando requisição de autorização...")
-
-        try:
-            # Espera pela resposta de autorização por até 10 segundos
-            resp = await asyncio.wait_for(self.ws.recv(), timeout=10)
-            j = json.loads(resp)
-
-            if j.get("msg_type") == "authorize" and j.get("authorize"):
-                # Autorização bem-sucedida
-                self.authorized = True
-                client_id = j['authorize'].get('client_id')
-                print(f"[DerivClient] Autorizado com sucesso. Client ID: {client_id}")
+            self.connected = False
             
-            elif j.get("error"):
-                # Captura erros de token inválido, permissões, etc.
-                error_code = j['error']['code']
-                error_msg = j['error']['message']
-                print(f"[DerivClient] ERRO de autorização: [{error_code}] {error_msg}")
-            
-            else:
-                # Caso a resposta seja inesperada
-                print("[DerivClient] Resposta authorize inesperada:", j)
-
         except asyncio.TimeoutError:
-            print("[DerivClient] Timeout: Não recebeu resposta de autorização em 10s.")
+            print("❌ Erro de Conexão: Timeout ao esperar pela resposta de autorização (5s).")
+            self.is_connected = False
+            self.connected = False
+
         except Exception as e:
-            print(f"[DerivClient] authorize erro geral: {e}")
+            print(f"❌ Erro geral ao conectar ao Deriv: {e}")
+            self.is_connected = False
+            self.connected = False
 
-    # ------------- subscriptions -------------
-    async def subscribe_ticks(self, symbol: str):
-        if not self.is_connected or not self.authorized or not self.ws:
-            raise RuntimeError("Não conectado ou não autorizado")
-        await self.ws.send(json.dumps({"ticks": symbol, "subscribe": 1}))
-        print(f"[DerivClient] Subscrito ticks: {symbol}")
+    async def subscribe_candles(self, symbol: str):
+        """Subscreve as velas (OHLC) para um ativo com 1 minuto de granularidade."""
+        if not self.is_connected: return
+        self.symbol = symbol
+        try:
+            await self.ws.send(json.dumps({"forget_all": "candles"}))
+            await self.ws.send(json.dumps({
+                "ticks_history": symbol,
+                "end": "latest",
+                "start": 1,
+                "count": MAX_TICK_HISTORY,
+                "subscribe": 1,
+                "style": "candles", # 👈 CRÍTICO: Garante que está a pedir velas
+                "granularity": CANDLE_GRANULARITY 
+            }))
+            print(f"Subscrito aos dados de Velas de 1 Minuto para {symbol}")
+        except Exception as e:
+            print(f"❌ Erro ao subscrever velas: {e}")
 
-    async def subscribe_candles_history(self, symbol: str, granularity: int = DEFAULT_GRANULARITY, count: int = 150):
-        if not self.is_connected or not self.authorized or not self.ws:
-            raise RuntimeError("Não conectado ou não autorizado")
-        body = {
-            "ticks_history": symbol,
-            "style": "candles",
-            "granularity": granularity,
-            "count": count,
-            "end": "latest",
-            "subscribe": 1
-        }
-        await self.ws.send(json.dumps(body))
-        print(f"[DerivClient] Solicitado histórico de candles {symbol} gran={granularity} count={count}")
-
-    # ------------- listener -------------
-    async def _listener_loop(self):
-        assert self.ws
-        while self.is_connected:
+    async def run_listener(self):
+        while self.is_connected and self.ws:
             try:
-                raw = await self.ws.recv()
-                j = json.loads(raw)
+                response_str = await asyncio.wait_for(self.ws.recv(), timeout=30) 
+                response = json.loads(response_str)
                 
-                if j.get("tick"):
-                    await self._process_tick(j["tick"])
-                elif j.get("ohlc"):
-                    await self._process_official_candle(j["ohlc"])
-                elif j.get("candles"):
-                    await self._process_history_candles(j)
-                elif j.get("msg_type") == "balance":
-                    # Opcional: propagar saldo ou outras mensagens
-                    pass
-                elif j.get("error"):
-                    # Captura erros assíncronos (e.g., erro de subscrição)
-                    print(f"[DerivClient] ERRO assíncrono: {j['error'].get('message')}")
+                # Processa a nova vela fechada
+                if response.get('ohlc'):
+                    await self.handle_candle_update(response)
+                # Processa o histórico inicial (o grande pacote)
+                elif response.get('candles'):
+                    self.handle_history_response(response) 
+                elif response.get("msg_type") == "balance":
+                     if response.get('balance'):
+                        self.account_info['balance'] = response['balance'].get('balance', 0.0)
 
-            except websockets.ConnectionClosed:
-                print("[DerivClient] Websocket fechado pelo servidor.")
+            except asyncio.TimeoutError:
+                await self.ws.send(json.dumps({"ping": 1}))
+                continue
+            except websockets.ConnectionClosedOK:
+                print("[Deriv] Conexão fechada de forma limpa.")
                 self.is_connected = False
+                self.connected = False
                 break
             except Exception as e:
-                print("[DerivClient] Erro no listener:", e)
-                await asyncio.sleep(0.5)
-                continue
+                print(f"[Deriv] Conexão fechada inesperadamente no listener: {e}")
+                self.is_connected = False
+                self.connected = False
+                break
+                
+    def handle_history_response(self, response: Dict[str, Any]):
+        """Define a flag CRÍTICA como True."""
+        global ticks_history
+        history = response.get('candles', [])
+        
+        if history:
+            ticks_history.clear()
+            ticks_history.extend([float(c.get('close')) for c in history])
+            
+            if history:
+                 self.last_processed_candle_time = history[-1].get('open_time', 0)
+            
+            self.history_loaded = True # 👈 A SOLUÇÃO: A flag só é True aqui
+            print(f"✅ Histórico de velas de 1m carregado: {len(ticks_history)} preços de fecho.")
+    
+    # ... (Resto das funções omitido por brevidade)
+    async def handle_candle_update(self, response: Dict[str, Any]):
+        global ticks_history
+        candle_data = response.get('ohlc', {})
+        if candle_data.get('is_closed') == 1 and self.history_loaded: 
+            candle_time = candle_data.get('open_time', 0) 
+            if candle_time <= self.last_processed_candle_time:
+                 return 
+            closed_price = candle_data.get('close')
+            if closed_price and self.symbol:
+                price_float = float(closed_price)
+                ticks_history.append(price_float)
+                if len(ticks_history) > MAX_TICK_HISTORY:
+                    del ticks_history[0] 
+                self.last_processed_candle_time = candle_time
+                if len(ticks_history) >= MIN_TICKS_REQUIRED:
+                    signal = generate_signal(self.symbol, "1m") 
+                    if signal and signal['action'] != 'NEUTRO': 
+                        print(f"=== NOVO SINAL ({signal['tf']}) ===")
+                        print(f"Ação: {signal['action']} | Prob: {signal['probability']:.2f} | Razão: {signal['reason']}")
+                        asyncio.create_task(self.bots_manager.process_signal(signal)) # Use create_task para evitar bloqueio
 
-    # ------------- ticks -> build candles -------------
-    async def _process_tick(self, tick: dict):
-        symbol = tick.get("symbol")
-        if symbol is None:
-            return
-        quote = float(tick.get("quote"))
-        epoch = int(tick.get("epoch"))
-
-        self.last_tick[symbol] = quote
-        if self.on_tick:
-            try:
-                self.on_tick({"symbol": symbol, "quote": quote, "epoch": epoch})
-            except Exception:
-                pass
-
-        if symbol not in self.build_candle:
-            return
-
-        for gran, state in list(self.build_candle[symbol].items()):
-            start_ts = (epoch // gran) * gran
-            if state["start_ts"] is None:
-                state["start_ts"] = start_ts
-                state["open"] = quote
-                state["high"] = quote
-                state["low"] = quote
-                state["close"] = quote
-            elif start_ts != state["start_ts"]:
-                # commit closed candle
-                closed = Candle(state["open"], state["high"], state["low"], state["close"], state["start_ts"])
-                await self._commit_candle(symbol, gran, closed)
-                # start new
-                state["start_ts"] = start_ts
-                state["open"] = quote
-                state["high"] = quote
-                state["low"] = quote
-                state["close"] = quote
-            else:
-                # update current
-                state["close"] = quote
-                if quote > state["high"]:
-                    state["high"] = quote
-                if quote < state["low"]:
-                    state["low"] = quote
-
-    async def _commit_candle(self, symbol: str, gran: int, candle: Candle):
-        store = self.candles_store.setdefault(symbol, {})
-        dq = store.setdefault(gran, deque(maxlen=HISTORY_CANDLES))
-        if dq and dq[-1].start_ts >= candle.start_ts:
-            return
-        dq.append(candle)
-        if self.on_candle:
-            try:
-                self.on_candle(symbol, gran, candle.to_dict())
-            except Exception:
-                pass
-
-    # ------------- official candles & history -------------
-    async def _process_official_candle(self, ohlc: dict):
-        symbol = ohlc.get("symbol")
-        gran = int(ohlc.get("granularity", DEFAULT_GRANULARITY))
-        start_ts = int(ohlc.get("open_time"))
-        close = float(ohlc.get("close"))
-        high = float(ohlc.get("high"))
-        low = float(ohlc.get("low"))
-        open_p = float(ohlc.get("open"))
-        candle = Candle(open_p, high, low, close, start_ts)
-        await self._commit_candle(symbol, gran, candle)
-
-    async def _process_history_candles(self, response: dict):
-        symbol = response.get("symbol") or response.get("echo_req", {}).get("ticks_history")
-        gran = int(response.get("echo_req", {}).get("granularity", DEFAULT_GRANULARITY))
-        data = response.get("candles", [])
-        if not data:
-            return
-        store = self.candles_store.setdefault(symbol, {})
-        dq = store.setdefault(gran, deque(maxlen=HISTORY_CANDLES))
-        dq.clear()
-        for c in data:
-            try:
-                open_p = float(c.get("open"))
-                high = float(c.get("high"))
-                low = float(c.get("low"))
-                close = float(c.get("close"))
-                start_ts = int(c.get("open_time"))
-                dq.append(Candle(open_p, high, low, close, start_ts))
-            except Exception:
-                continue
-        if self.on_history_ready:
-            try:
-                self.on_history_ready(symbol, gran)
-            except Exception:
-                pass
-
-    # ------------- helpers -------------
-    def get_latest_candles(self, symbol: str, gran: int, count: int = 200):
-        store = self.candles_store.get(symbol, {})
-        dq = store.get(gran, deque())
-        return [c.to_dict() for c in list(dq)[-count:]]
-
-    def get_last_tick(self, symbol: str):
-        return {"symbol": symbol, "quote": self.last_tick.get(symbol)}
-
-    def ensure_candle_builder(self, symbol: str, gran: int = DEFAULT_GRANULARITY):
-        self.build_candle.setdefault(symbol, {})
-        self.build_candle[symbol].setdefault(gran, {
-            "start_ts": None,
-            "open": None,
-            "high": None,
-            "low": None,
-            "close": None
-        })
-        self.candles_store.setdefault(symbol, {})
-        self.candles_store[symbol].setdefault(gran, deque(maxlen=HISTORY_CANDLES))
-
-    # ------------- shutdown -------------
-    async def stop(self):
-        self.is_connected = False
-        if self._listener_task:
-            self._listener_task.cancel()
+    async def get_account_info(self):
+        if not self.authorized or not self.is_connected: return
         try:
+            await self.ws.send(json.dumps({"balance": 1})) 
+        except Exception as e:
+            print(f"[ERRO] Falha ao buscar informações da conta: {e}")
+
+    async def stop(self):
+        try:
+            self.is_connected = False
+            self.connected = False
+            self.authorized = False
+            self.history_loaded = False
             if self.ws:
                 await self.ws.close()
         except:
             pass
-        print("[DerivClient] Stopped.")
+        print("[Deriv] Cliente parado.")
