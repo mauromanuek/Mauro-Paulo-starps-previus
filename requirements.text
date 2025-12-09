@@ -1,0 +1,5 @@
+Flask
+websocket-client
+pandas
+pandas-ta
+gunicorn
