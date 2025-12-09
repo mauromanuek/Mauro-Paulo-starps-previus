@@ -64,37 +64,63 @@ class DerivClient:
             self.ws = await websockets.connect(self.ws_url)
             self.is_connected = True
             await self._authorize()
-            self._listener_task = asyncio.create_task(self._listener_loop())
-            print("[DerivClient] conectado e listener iniciado.")
+            if self.authorized:
+                self._listener_task = asyncio.create_task(self._listener_loop())
+                print("[DerivClient] Conectado, autorizado e listener iniciado.")
+            else:
+                print("[DerivClient] Conexão falhou por problemas de autorização.")
+                await self.ws.close()
+                self.is_connected = False
         except Exception as e:
-            print("[DerivClient] erro conectar:", e)
+            print("[DerivClient] Erro ao conectar:", e)
             self.is_connected = False
 
     async def _authorize(self):
+        """Tenta autorizar a sessão com o token fornecido."""
+        self.authorized = False
         if not self.ws or not self.token:
-            raise RuntimeError("WS ou token ausente")
+            print("[DerivClient] Erro: WS ou token ausente para autorização.")
+            return
+
         await self.ws.send(json.dumps({"authorize": self.token}))
+        print("[DerivClient] Enviando requisição de autorização...")
+
         try:
-            resp = await asyncio.wait_for(self.ws.recv(), timeout=5)
+            # Espera pela resposta de autorização por até 10 segundos
+            resp = await asyncio.wait_for(self.ws.recv(), timeout=10)
             j = json.loads(resp)
+
             if j.get("msg_type") == "authorize" and j.get("authorize"):
+                # Autorização bem-sucedida
                 self.authorized = True
-                print("[DerivClient] autorizado com sucesso.")
+                client_id = j['authorize'].get('client_id')
+                print(f"[DerivClient] Autorizado com sucesso. Client ID: {client_id}")
+            
+            elif j.get("error"):
+                # Captura erros de token inválido, permissões, etc.
+                error_code = j['error']['code']
+                error_msg = j['error']['message']
+                print(f"[DerivClient] ERRO de autorização: [{error_code}] {error_msg}")
+            
             else:
-                print("[DerivClient] resposta authorize:", j)
+                # Caso a resposta seja inesperada
+                print("[DerivClient] Resposta authorize inesperada:", j)
+
+        except asyncio.TimeoutError:
+            print("[DerivClient] Timeout: Não recebeu resposta de autorização em 10s.")
         except Exception as e:
-            print("[DerivClient] authorize timeout/erro:", e)
+            print(f"[DerivClient] authorize erro geral: {e}")
 
     # ------------- subscriptions -------------
     async def subscribe_ticks(self, symbol: str):
-        if not self.is_connected or not self.ws:
-            raise RuntimeError("Não conectado")
+        if not self.is_connected or not self.authorized or not self.ws:
+            raise RuntimeError("Não conectado ou não autorizado")
         await self.ws.send(json.dumps({"ticks": symbol, "subscribe": 1}))
-        print(f"[DerivClient] subscrito ticks: {symbol}")
+        print(f"[DerivClient] Subscrito ticks: {symbol}")
 
     async def subscribe_candles_history(self, symbol: str, granularity: int = DEFAULT_GRANULARITY, count: int = 150):
-        if not self.is_connected or not self.ws:
-            raise RuntimeError("Não conectado")
+        if not self.is_connected or not self.authorized or not self.ws:
+            raise RuntimeError("Não conectado ou não autorizado")
         body = {
             "ticks_history": symbol,
             "style": "candles",
@@ -104,7 +130,7 @@ class DerivClient:
             "subscribe": 1
         }
         await self.ws.send(json.dumps(body))
-        print(f"[DerivClient] solicitado histórico de candles {symbol} gran={granularity} count={count}")
+        print(f"[DerivClient] Solicitado histórico de candles {symbol} gran={granularity} count={count}")
 
     # ------------- listener -------------
     async def _listener_loop(self):
@@ -113,6 +139,7 @@ class DerivClient:
             try:
                 raw = await self.ws.recv()
                 j = json.loads(raw)
+                
                 if j.get("tick"):
                     await self._process_tick(j["tick"])
                 elif j.get("ohlc"):
@@ -120,14 +147,18 @@ class DerivClient:
                 elif j.get("candles"):
                     await self._process_history_candles(j)
                 elif j.get("msg_type") == "balance":
-                    # optional: propagate balance
+                    # Opcional: propagar saldo ou outras mensagens
                     pass
+                elif j.get("error"):
+                    # Captura erros assíncronos (e.g., erro de subscrição)
+                    print(f"[DerivClient] ERRO assíncrono: {j['error'].get('message')}")
+
             except websockets.ConnectionClosed:
-                print("[DerivClient] websocket fechado")
+                print("[DerivClient] Websocket fechado pelo servidor.")
                 self.is_connected = False
                 break
             except Exception as e:
-                print("[DerivClient] erro listener:", e)
+                print("[DerivClient] Erro no listener:", e)
                 await asyncio.sleep(0.5)
                 continue
 
@@ -255,4 +286,4 @@ class DerivClient:
                 await self.ws.close()
         except:
             pass
-        print("[DerivClient] stopped.")
+        print("[DerivClient] Stopped.")
