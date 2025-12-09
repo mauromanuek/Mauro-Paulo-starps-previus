@@ -30,6 +30,7 @@ class DerivClient:
         self.is_connected = False
         self.connected = False 
         self.authorized = False 
+        self.history_loaded = False  # <--- NOVA FLAG CRÍTICA
         self.account_info = {"balance": 0.0, "account_type": "demo"}
         self.symbol = "" 
         self.candles_subscription_id: Optional[str] = None
@@ -45,7 +46,26 @@ class DerivClient:
         
         if self.authorized: 
             await self.subscribe_candles(symbol)
-            await self.run_listener()
+            
+            # NOVO: Espera pelo carregamento do histórico antes de iniciar o listener
+            # (O listener é quem processa a resposta do histórico, por isso esta espera é crucial)
+            timeout = 15 # 15 segundos para carregar o histórico
+            start_time = time.time()
+            print("[Deriv] Aguardando o histórico inicial de velas...")
+            
+            # Inicia o listener em background para receber o histórico
+            listener_task = asyncio.create_task(self.run_listener())
+            
+            while not self.history_loaded and time.time() - start_time < timeout:
+                await asyncio.sleep(0.5)
+
+            if self.history_loaded:
+                print("✅ Histórico carregado. O bot está PRONTO.")
+                # O listener já está a correr e a processar dados
+            else:
+                print("❌ Falha no carregamento do histórico inicial (Timeout).")
+                listener_task.cancel()
+                await self.stop()
         else:
             await self.stop()
 
@@ -115,6 +135,7 @@ class DerivClient:
         """Loop principal para escutar mensagens do WebSocket."""
         while self.is_connected and self.ws:
             try:
+                # O timeout aqui é grande para dar tempo ao histórico de chegar
                 response_str = await asyncio.wait_for(self.ws.recv(), timeout=30) 
                 response = json.loads(response_str)
                 
@@ -123,7 +144,7 @@ class DerivClient:
                 elif response.get('ohlc'):
                     await self.handle_candle_update(response)
                 elif response.get('candles'):
-                    self.handle_history_response(response)
+                    self.handle_history_response(response) # <-- Trata o histórico
                 elif response.get('msg_type') == 'candles':
                     self.candles_subscription_id = response.get('subscription', {}).get('id')
                 elif response.get('msg_type') == 'ping':
@@ -147,19 +168,19 @@ class DerivClient:
                 break
                 
     def handle_history_response(self, response: Dict[str, Any]):
-        """Processa o histórico inicial de velas."""
+        """Processa o histórico inicial de velas e define a flag de carregamento."""
         global ticks_history
         history = response.get('candles', [])
         
         if history:
             ticks_history.clear()
-            # O histórico de velas precisa dos dados completos para o cálculo de RSI/ADX/BB
             ticks_history.extend([float(c.get('close')) for c in history])
             
-            # Captura o tempo da última vela histórica para evitar duplicação
             if history:
                  self.last_processed_candle_time = history[-1].get('open_time', 0)
             
+            # --- ATUALIZAÇÃO CRÍTICA ---
+            self.history_loaded = True 
             print(f"✅ Histórico de velas de 1m carregado: {len(ticks_history)} preços de fecho.")
     
     async def handle_candle_update(self, response: Dict[str, Any]):
@@ -170,7 +191,7 @@ class DerivClient:
 
         candle_data = response.get('ohlc', {})
         
-        if candle_data.get('is_closed') == 1:
+        if candle_data.get('is_closed') == 1 and self.history_loaded: # <-- SÓ ANALISA SE O HISTÓRICO JÁ FOI CARREGADO
             
             candle_time = candle_data.get('open_time', 0) 
             
@@ -192,17 +213,17 @@ class DerivClient:
                 self.last_processed_candle_time = candle_time
                 
                 if len(ticks_history) >= MIN_TICKS_REQUIRED:
+                    # Agora, esta chamada é segura porque o histórico está completo
                     signal = generate_signal(self.symbol, "1m") 
                     
-                    if signal and signal['action'] != 'NEUTRO': # Ignora sinais neutros para não poluir o log
+                    if signal and signal['action'] != 'NEUTRO': 
                         print(f"=== NOVO SINAL ({signal['tf']}) ===")
                         print(f"Ação: {signal['action']} | Prob: {signal['probability']:.2f} | Razão: {signal['reason']}")
                         print(f"Estado: {signal['explanation']}")
                         print("===================================")
                         await self.bots_manager.process_signal(signal)
                     elif signal:
-                        # Log discreto para o estado neutro
-                        pass 
+                        pass # Log discreto para o estado neutro
                         
     async def get_account_info(self):
         """Busca o saldo e tipo de conta."""
@@ -218,6 +239,7 @@ class DerivClient:
             self.is_connected = False
             self.connected = False
             self.authorized = False
+            self.history_loaded = False
             if self.ws:
                 await self.ws.close()
         except:
