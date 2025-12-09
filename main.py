@@ -63,6 +63,23 @@ def connect_ws(url, api_token):
     
     return ws
 
+# --- NOVO AUXILIAR PARA CORRIGIR ERROS DE INDICADORES ---
+def safe_candlestick_ta(df, pattern_name, log_func):
+    """Tenta calcular um padrão de candlestick usando o método direto; se falhar, usa o método genérico."""
+    
+    # Tenta usar o método direto (ex: df.ta.cdl_hammer)
+    try:
+        # Usa getattr para chamar df.ta.cdl_[pattern_name] de forma dinâmica
+        getattr(df.ta, f'cdl_{pattern_name}')(append=True)
+    except AttributeError:
+        # Se falhar, usa o método genérico (ex: df.ta.cdl_pattern(name="hammer"))
+        log_func(f"AVISO: cdl_{pattern_name} direto falhou. Usando cdl_pattern genérico.")
+        df.ta.cdl_pattern(name=pattern_name, append=True)
+    except Exception as e:
+        log_func(f"AVISO CRÍTICO: Falha desconhecida ao calcular {pattern_name}: {e}")
+# --- FIM DO NOVO AUXILIAR ---
+
+
 # --- ESTRATÉGIA: CONFIRMAÇÃO DE PADRÕES E S/R (Implementação do Livro) ---
 
 def check_confirmation(df, current_close):
@@ -80,6 +97,8 @@ def check_confirmation(df, current_close):
     is_near_support = (current_close - recent_low) / current_low < SR_TOLERANCE
 
     # 2. Detecção de Padrões de Candlestick
+    # Nota: Assumimos que as colunas (CDL_HAMMER, CDL_ENGULFING, etc.) existem
+    # devido à correção em fetch_candle_data.
     is_bullish_pattern = (df['CDL_HAMMER'].iloc[-1] > 0) or (df['CDL_ENGULFING'].iloc[-1] > 0)
     is_bearish_pattern = (df['CDL_SHOOTINGSTAR'].iloc[-1] < 0) or (df['CDL_ENGULFING'].iloc[-1] < 0)
 
@@ -176,18 +195,10 @@ def fetch_candle_data(ws, symbol, granularity=300):
     df.ta.adx(length=14, append=True)
     df.ta.stoch(k=14, d=3, append=True)
     
-    # Padrões de Candlestick
-    # ----------------------------------------------------------------------
-    # CORREÇÃO DO HAMMER: Usamos try/except para lidar com versões diferentes do pandas-ta
-    try:
-        df.ta.cdl_hammer(append=True)
-    except AttributeError:
-        add_log("AVISO: cdl_hammer direto falhou. Usando cdl_pattern genérico para Hammer.")
-        df.ta.cdl_pattern(name="hammer", append=True)
-    # ----------------------------------------------------------------------
-    
-    df.ta.cdl_engulfing(append=True)
-    df.ta.cdl_shootingstar(append=True)
+    # Padrões de Candlestick (AGORA USANDO FUNÇÃO AUXILIAR CORRIGIDA)
+    safe_candlestick_ta(df, "hammer", add_log)
+    safe_candlestick_ta(df, "engulfing", add_log)
+    safe_candlestick_ta(df, "shootingstar", add_log)
 
     trend, justification, confidence, indicator_status, strategy_used = strategy_selection_engine(
         df, granularity // 60)
