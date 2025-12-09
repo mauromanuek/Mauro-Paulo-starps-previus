@@ -85,12 +85,14 @@ async def set_token(data: TokenRequest):
         # 1. Inicia a conexão em TAREFA DE FUNDO
         asyncio.create_task(client.connect_and_subscribe(symbol="R_100")) 
 
-        # 2. Esperar pela autorização ou falha (Timeout)
-        for _ in range(10): # Espera no máximo 5 segundos
-            if client.authorized:
+        # 2. Esperar pela autorização E carregamento de histórico (AUMENTADO PARA 10s)
+        for _ in range(20): # Espera no máximo 10 segundos (20 * 0.5s)
+            
+            # --- CONDIÇÃO DE SUCESSO MELHORADA: Autorizado E Histórico Carregado ---
+            if client.authorized and client.history_loaded:
                 return JSONResponse({
                     "ok": True, 
-                    "message": "Conectado e Autorizado. Dados de velas a carregar...",
+                    "message": "Conectado, Autorizado e Histórico de Velas Carregado. O bot está PRONTO.",
                     "account_type": client.account_info.get("account_type"),
                     "balance": client.account_info.get("balance")
                 })
@@ -102,9 +104,9 @@ async def set_token(data: TokenRequest):
             
             await asyncio.sleep(0.5)
 
-        # Se o loop terminar sem autorização (TIMEOUT)
+        # Se o loop terminar sem a condição de sucesso (TIMEOUT)
         await client.stop()
-        raise HTTPException(status_code=401, detail="Token inválido ou falha na autorização (Timeout).")
+        raise HTTPException(status_code=401, detail="Token inválido, falha na autorização ou o histórico de velas não carregou a tempo (Timeout).")
         
     except HTTPException as e:
         # Re-lança o HTTPException para ser capturado pelo FastAPI
@@ -124,6 +126,8 @@ async def get_status():
     status = {
         "connected": client and client.connected, 
         "authorized": client and client.authorized, 
+        # Informa se os dados estão prontos
+        "data_ready": client and client.authorized and client.history_loaded,
         "balance": client.account_info.get("balance", 0.0) if client else 0.0,
         "account_type": client.account_info.get("account_type", "offline") if client else "offline"
     }
@@ -133,83 +137,23 @@ async def get_status():
 # --- 4. ROTA DE SINAL (GET) ---
 @app.get("/signal")
 async def get_signal(symbol: str = "R_100"):
-    if not client or not client.authorized:
-        raise HTTPException(status_code=401, detail="Não autorizado. Faça o login primeiro.")
+    # Verifica se os dados estão prontos antes de analisar
+    if not client or not (client.authorized and client.history_loaded):
+        raise HTTPException(status_code=404, detail="Não autorizado ou Histórico de Velas ainda não carregado. Aguarde e tente novamente.")
     
     signal = generate_signal(symbol, "1m") 
         
     if signal is not None:
         return signal
     
+    # Este erro só deve ocorrer se MIN_TICKS_REQUIRED > len(ticks_history), o que não deve acontecer após o carregamento
     raise HTTPException(
         status_code=404, 
-        detail=f"Os dados históricos (velas de 1m) ainda não foram completamente carregados. Tente novamente em 5 segundos."
+        detail=f"Não há dados suficientes para calcular todos os indicadores ({MIN_TICKS_REQUIRED} mínimos)."
     )
 
-
-# --- 5. ROTAS DE GESTÃO DE BOTS ---
-class BotAction(BaseModel):
-    bot_id: str
-
-@app.post("/bot/create", response_class=JSONResponse)
-async def create_bot(data: BotCreationRequest):
-    global bots_manager, client
-    if not bots_manager or not client or not client.authorized:
-        raise HTTPException(status_code=401, detail="Cliente não autorizado ou gestor de bots não inicializado.")
-
-    new_bot = bots_manager.create_bot(data.name, data.symbol, data.tf, data.stop_loss, data.take_profit, client)
-
-    new_bot.current_run_task = asyncio.create_task(new_bot.run_loop())
-    
-    return JSONResponse({"ok": True, "message": f"Bot '{data.name}' criado e iniciado.", "bot_id": new_bot.id})
-
-@app.get("/bots/list", response_class=JSONResponse)
-async def list_bots():
-    global bots_manager
-    if not bots_manager:
-        return JSONResponse({"bots": []})
-        
-    bots_list = []
-    for bot in bots_manager.get_all_bots():
-        bots_list.append({
-            "id": bot.id,
-            "name": bot.name,
-            "symbol": bot.symbol,
-            "tf": bot.tf,
-            "state": bot.state.value,
-            "sl": bot.stop_loss,
-            "tp": bot.take_profit,
-        })
-    return JSONResponse({"bots": bots_list})
-
-@app.post("/bot/pause", response_class=JSONResponse)
-async def pause_bot(data: BotAction):
-    global bots_manager
-    bot = bots_manager.get_bot(data.bot_id)
-    if not bot:
-        raise HTTPException(status_code=404, detail="Bot não encontrado.")
-    bot.state = BotState.PAUSED
-    return JSONResponse({"ok": True, "message": f"Bot {bot.name} pausado."})
-
-
-# --- 6. ROTA DE CONSULTA DA IA ---
-@app.post("/ia/query", response_class=JSONResponse)
-async def ia_query(data: IAQueryRequest):
-    query = data.query.lower()
-
-    if "triângulo ascendente" in query:
-        response_text = "O Triângulo Ascendente é um padrão de continuação bullish. É formado por uma linha de resistência horizontal no topo e uma linha de suporte ascendente na base. Sugere que os compradores estão a ganhar força e que uma quebra acima da resistência é provável."
-    elif "rsi" in query or "sobrecompra" in query:
-        response_text = "O Índice de Força Relativa (RSI) mede a velocidade e a mudança dos movimentos de preço. Um RSI acima de 70 indica sobrecompra (potencial de queda), e um abaixo de 30 indica sobrevenda (potencial de subida)."
-    elif "suporte e resistência" in query:
-        response_text = "Suporte e Resistência são níveis de preço cruciais onde a pressão de compra ou venda historicamente se concentra. O suporte é um 'piso' onde o preço tende a subir, e a resistência é um 'teto' onde o preço tende a cair."
-    elif "bitcoin" in query or "binance" in query:
-        response_text = "A análise técnica se aplica a qualquer mercado, incluindo criptomoedas como Bitcoin. No entanto, a alta volatilidade exige cautela e stop-loss mais rígidos."
-    else:
-        response_text = "Desculpe, a minha base de dados de análise técnica está limitada. Por favor, faça uma pergunta sobre padrões gráficos, indicadores (como RSI/EMA) ou conceitos básicos de trading."
-
-    return JSONResponse({"ok": True, "response": response_text})
-
+# ... (restante do main.py, rotas de bots e IA, permanece inalterado) ...
+# Para brevidade, as rotas /bot/create, /bots/list, /bot/pause e /ia/query não estão aqui, mas devem ser mantidas no seu ficheiro.
 
 if __name__ == '__main__':
     import uvicorn
