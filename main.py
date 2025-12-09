@@ -1,456 +1,327 @@
-import websocket
-import json
+import os
 import threading
+import json
 import time
+from datetime import datetime, timedelta
+from flask import Flask, render_template, request, jsonify
+from websocket import create_connection
 import pandas as pd
 import pandas_ta as ta
-import os # Necessário para ler a porta do Render (PORT)
-from flask import Flask, render_template, request, jsonify
-from waitress import serve # Necessário para rodar no Render
+import numpy as np
 
-# --- CONFIGURAÇÃO DO FLASK E VARIÁVEIS GLOBAIS ---
+# --- CONFIGURAÇÕES DE APLICAÇÃO ---
+MY_APP_ID = 114910 
+FIXED_TRADE_DURATION_SECONDS = 300 # 5 minutos
+MAX_LOG_SIZE = 50 
+S_R_LOOKBACK = 20 # Velas para identificar Suporte/Resistência
+
+# --- VARIÁVEIS GLOBAIS DE ESTADO ---
 app = Flask(__name__)
-
-# URL da API WebSocket da Deriv/Binary
-WS_URL = "wss://ws.binaryws.com/websockets/v3?app_id=1089" 
-MY_APP_ID = 114910
 BOT_STATUS = "OFF"
-API_TOKEN = None
-GRANULARITY_SECONDS = 300  # 5 minutos
+BOT_THREAD = None
+LOG_MESSAGES = [] 
 
-# Dados de controlo de estado
-current_asset = None
-current_mode = None
-latest_signal = {
-    "status": "AGUARDANDO",
-    "direction": "NEUTRA",
-    "confidence": 0,
-    "justification": "Aguardando autenticação e início do ciclo de análise.",
-    "timing": "",
-    "logs": []
+# Estrutura do Sinal Final
+FINAL_SIGNAL_DATA = {
+    'direction': 'AGUARDANDO', 
+    'trend': 'Análise de Velas', 
+    'entry_time': '--:--:--', 
+    'exit_time': '--:--:--',
+    'confidence': 0,
+    'indicator_status': 'ADX: --, EMA: --, Stoch: --',
+    'justification': 'O bot está inativo ou a aguardar a análise inicial de mercado.',
+    'strategy_used': 'Nenhuma',
+    'tf': '5m'
 }
 
-# --- FUNÇÕES DE LÓGICA DE TRADING ---
+# --- FUNÇÕES DE UTENSÍLIO E LOGS ---
 
-def log_message(message):
-    """Adiciona uma mensagem aos logs de atividade do frontend."""
-    timestamp = time.strftime("[%H:%M:%S]")
-    full_message = f"{timestamp} {message}"
+def add_log(message):
+    """Adiciona uma mensagem à lista global de logs (Render/Frontend)."""
+    global LOG_MESSAGES
+    timestamp = time.strftime('%H:%M:%S')
+    log_entry = f"[{timestamp}] {message}"
+    LOG_MESSAGES.append(log_entry)
+    if len(LOG_MESSAGES) > MAX_LOG_SIZE:
+        LOG_MESSAGES.pop(0)
+    print(log_entry) 
+
+def update_signal_data(data):
+    """Atualiza a variável global do sinal com segurança."""
+    global FINAL_SIGNAL_DATA
+    FINAL_SIGNAL_DATA.update(data)
+
+def connect_ws(url, api_token):
+    """Cria e autentica a conexão WebSocket usando o token fornecido pelo frontend."""
+    ws = create_connection(url)
     
-    # Adiciona ao início da lista (logs mais novos primeiro)
-    latest_signal['logs'].insert(0, full_message)
-    # Limita o número de logs
-    if len(latest_signal['logs']) > 50:
-        latest_signal['logs'].pop()
-
-def check_stochastic_crossover(df):
-    """Verifica condições de sobrevenda/sobrecompra e cruzamento do Stochastic (14, 3, 3)."""
-    stoch = df.ta.stoch(k=14, d=3, smooth_k=3, append=True)
-    k_line = stoch.iloc[:, 0].dropna()
-    d_line = stoch.iloc[:, 1].dropna()
-
-    if k_line.empty or d_line.empty:
-        return "NEUTRA", 0, "Stochastic não pôde ser calculado (dados insuficientes)."
-
-    k_now = k_line.iloc[-1]
-    d_now = d_line.iloc[-1]
-    k_prev = k_line.iloc[-2]
-    d_prev = d_line.iloc[-2]
-
-    confidence = 0
-    justification = "Nenhuma condição extrema ou cruzamento detectado pelo Stochastic."
-
-    # 1. Sobrecompra (PUT)
-    if k_now > 80 and d_now > 80:
-        if k_now < d_now and k_prev > d_prev:
-            confidence = 85
-            justification = f"Stochastic (K={k_now:.2f}, D={d_now:.2f}) em **SOBRECOMPRA** e K cruzou D para baixo. Sinal de **PUT**."
-            return "PUT", confidence, justification
+    ws.send(json.dumps({"authorize": api_token})) 
+    auth_response = json.loads(ws.recv())
     
-    # 2. Sobrevenda (CALL)
-    if k_now < 20 and d_now < 20:
-        if k_now > d_now and k_prev < d_prev:
-            confidence = 85
-            justification = f"Stochastic (K={k_now:.2f}, D={d_now:.2f}) em **SOBREVENDA** e K cruzou D para cima. Sinal de **CALL**."
-            return "CALL", confidence, justification
-
-    # 3. Cruzamento Simples
-    if k_now > d_now and k_prev < d_prev:
-        return "CALL", 60, f"Stochastic K ({k_now:.2f}) cruzou D ({d_now:.2f}) para cima. Sinal de CALL (Tendência Fraca)."
-    elif k_now < d_now and k_prev > d_prev:
-        return "PUT", 60, f"Stochastic K ({k_now:.2f}) cruzou D ({d_now:.2f}) para baixo. Sinal de PUT (Tendência Fraca)."
+    if auth_response.get('error'):
+        raise Exception(f"Erro de Autenticação: {auth_response['error']['message']}")
     
-    return "NEUTRA", confidence, justification
+    return ws
 
-def check_adx_trend(df):
-    """Verifica a força da tendência usando ADX (14) e a direção usando +DI/-DI."""
-    adx = df.ta.adx(length=14, append=True)
+# --- ESTRATÉGIA: CONFIRMAÇÃO DE PADRÕES E S/R (Implementação do Livro) ---
+
+def check_confirmation(df, current_close):
+    """
+    Verifica se há padrões de candlestick de reversão E se o preço está próximo 
+    de um Suporte ou Resistência recente (baseado nas últimas S_R_LOOKBACK velas).
+    """
     
-    adx_line = adx.iloc[:, 0].dropna()
-    pos_di = adx.iloc[:, 1].dropna()
-    neg_di = adx.iloc[:, 2].dropna()
-
-    if adx_line.empty:
-        return "NEUTRA", 0, "ADX não pôde ser calculado (dados insuficientes)."
+    # 1. Identificação Simples de S/R (Max/Min)
+    recent_high = df['High'].iloc[-S_R_LOOKBACK:].max()
+    recent_low = df['Low'].iloc[-S_R_LOOKBACK:].min()
     
-    adx_now = adx_line.iloc[-1]
-    pos_di_now = pos_di.iloc[-1]
-    neg_di_now = neg_di.iloc[-1]
+    SR_TOLERANCE = 0.0005 # 0.05% de tolerância
+    is_near_resistance = (recent_high - current_close) / recent_high < SR_TOLERANCE
+    is_near_support = (current_close - recent_low) / current_low < SR_TOLERANCE
 
-    confidence = 0
-    justification = "Nenhuma tendência forte detectada pelo ADX."
-    direction = "NEUTRA"
+    # 2. Detecção de Padrões de Candlestick
+    is_bullish_pattern = (df['CDL_HAMMER'].iloc[-1] > 0) or (df['CDL_ENGULFING'].iloc[-1] > 0)
+    is_bearish_pattern = (df['CDL_SHOOTINGSTAR'].iloc[-1] < 0) or (df['CDL_ENGULFING'].iloc[-1] < 0)
 
-    if adx_now > 30: # Tendência forte
-        if pos_di_now > neg_di_now:
-            confidence = 90
-            direction = "CALL"
-            justification = f"ADX está em **{adx_now:.2f} (Forte Tendência de ALTA)**. (+DI > -DI)."
-        elif neg_di_now > pos_di_now:
-            confidence = 90
-            direction = "PUT"
-            justification = f"ADX está em **{adx_now:.2f} (Forte Tendência de BAIXA)**. (-DI > +DI)."
-    elif adx_now > 20: # Tendência moderada
-        if pos_di_now > neg_di_now:
+    # 3. Formação da Justificativa
+    confirmation_bullish, confirmation_bearish = "", ""
+    
+    if is_near_support and is_bullish_pattern:
+        confirmation_bullish = "Forte: Martelo/Engolfo Bullish na Zona de Suporte."
+    elif is_near_support:
+        confirmation_bullish = "Suporte: Preço na Zona de Suporte Recente."
+        
+    if is_near_resistance and is_bearish_pattern:
+        confirmation_bearish = "Forte: Estrela Cadente/Engolfo Bearish na Zona de Resistência."
+    elif is_near_resistance:
+        confirmation_bearish = "Resistência: Preço na Zona de Resistência Recente."
+
+    return confirmation_bullish, confirmation_bearish, recent_low, recent_high
+
+# --- ESTRATÉGIA: MOTOR DE SELEÇÃO E DECISÃO ---
+
+def strategy_selection_engine(df, granularity_minutes):
+    """
+    Analisa o contexto (ADX), escolhe a estratégia e busca confirmação S/R/Candle.
+    """
+    # 1. Obter valores recentes
+    current_adx = df['ADX_14'].iloc[-1]
+    current_close = df['Close'].iloc[-1]
+    current_ema = df['EMA_10'].iloc[-1]
+    current_stoch_k = df['STOCHk_14_3_3'].iloc[-1]
+    
+    # Status dos Indicadores
+    indicator_status = f"ADX: {current_adx:.2f}, EMA(10): {current_ema:.4f}, Stoch K: {current_stoch_k:.2f}"
+    
+    # Obter Confirmação de S/R e Padrões
+    conf_call, conf_put, recent_low, recent_high = check_confirmation(df, current_close)
+    
+    # Preparação da Decisão
+    trend, confidence, strategy_used = "NEUTRA", 40, "Análise de Contexto"
+    justification = "O mercado está em consolidação e sem sinais claros de extremos. Aguardando novo contexto."
+
+    # --- DECISÃO DE CONTEXTO ---
+    
+    if current_adx > 30: # Tendência Forte (Trend-Following)
+        strategy_used = "Acompanhamento de Tendência (EMA Breakout)"
+        
+        if current_close > current_ema and df['Close'].iloc[-2] > df['EMA_10'].iloc[-2]:
+            trend = "CALL"
             confidence = 75
-            direction = "CALL"
-            justification = f"ADX está em **{adx_now:.2f} (Tendência Moderada de ALTA)**."
-        elif neg_di_now > pos_di_now:
+            justification = f"TENDÊNCIA FORTE (ADX {current_adx:.2f}). O Preço está acima da EMA (10), indicando continuidade de ALTA. CONFIRMAÇÃO: {conf_call if conf_call else 'Nenhuma'}"
+            if conf_call: confidence += 10
+
+        elif current_close < current_ema and df['Close'].iloc[-2] < df['EMA_10'].iloc[-2]:
+            trend = "PUT"
             confidence = 75
-            direction = "PUT"
-            justification = f"ADX está em **{adx_now:.2f} (Tendência Moderada de BAIXA)**."
-    else:
-        justification = f"ADX está em {adx_now:.2f}. Mercado lateral ou fraco. Aguardando tendência."
+            justification = f"TENDÊNCIA FORTE (ADX {current_adx:.2f}). O Preço está abaixo da EMA (10), indicando continuidade de BAIXA. CONFIRMAÇÃO: {conf_put if conf_put else 'Nenhuma'}"
+            if conf_put: confidence += 10
 
-    return direction, confidence, justification
+    elif current_adx < 25: # Consolidação (Reversão de Extremos)
+        strategy_used = "Reversão de Extremos (Stochastic Oscillator)"
 
-def check_support_resistance(df, candle_time):
-    """Verifica se o preço atual está próximo de um Suporte ou Resistência (S/R) de 50 velas."""
-    
-    CURRENT_PRICE = df['Close'].iloc[-1]
-    S_R_LOOKBACK = 50
-    TOLERANCE_PERCENT = 0.001
-    TOLERANCE_VALUE = CURRENT_PRICE * TOLERANCE_PERCENT
+        if current_stoch_k > 80 and conf_put:
+            trend = "PUT"
+            confidence = 85
+            justification = f"CONSOLIDAÇÃO (ADX {current_adx:.2f}). O Stochastic está em SOBRECOMPRA (>80). CONFIRMAÇÃO: {conf_put} - indicando reversão iminente."
 
-    MAX_HIGH = df['High'].iloc[-S_R_LOOKBACK:-1].max()
-    MIN_LOW = df['Low'].iloc[-S_R_LOOKBACK:-1].min()
+        elif current_stoch_k < 20 and conf_call:
+            trend = "CALL"
+            confidence = 85
+            justification = f"CONSOLIDAÇÃO (ADX {current_adx:.2f}). O Stochastic está em SOBREVENDA (<20). CONFIRMAÇÃO: {conf_call} - indicando reversão iminente."
         
-    confidence = 0
-    direction = "NEUTRA"
-    justification = "Preço distante de Suporte ou Resistência."
+    return trend, justification, confidence, indicator_status, strategy_used
 
-    # 1. Preço próximo de Resistência (Sinal de PUT)
-    if (MAX_HIGH - CURRENT_PRICE) <= TOLERANCE_VALUE and CURRENT_PRICE > MAX_HIGH:
-        confidence = 90
-        direction = "PUT"
-        justification = f"Preço rompeu a **RESISTÊNCIA** ({MAX_HIGH:.4f}). Possível sinal de PUT (Pullback/Reversão)."
-    elif (MAX_HIGH - CURRENT_PRICE) <= TOLERANCE_VALUE:
-        confidence = 80
-        direction = "PUT"
-        justification = f"Preço próximo da **RESISTÊNCIA** ({MAX_HIGH:.4f}). Possível sinal de PUT (Reversão)."
-
-    # 2. Preço próximo de Suporte (Sinal de CALL)
-    if (CURRENT_PRICE - MIN_LOW) <= TOLERANCE_VALUE and CURRENT_PRICE < MIN_LOW:
-        confidence = 90
-        direction = "CALL"
-        justification = f"Preço rompeu o **SUPORTE** ({MIN_LOW:.4f}). Possível sinal de CALL (Pullback/Reversão)."
-    elif (CURRENT_PRICE - MIN_LOW) <= TOLERANCE_VALUE:
-        confidence = 80
-        direction = "CALL"
-        justification = f"Preço próximo do **SUPORTE** ({MIN_LOW:.4f}). Possível sinal de CALL (Reversão)."
-
-    return direction, confidence, justification
-
-def check_candlestick_pattern(df):
-    """Verifica padrões de Candlestick de Reversão (Martelo, Engolfo)."""
+def fetch_candle_data(ws, symbol, granularity=300):
+    """Solicita, analisa (EMA/ADX/Stoch), determina a Tendência e a Estratégia."""
+    add_log(f"SOLICITANDO CANDLES de {granularity//60}m para análise de tendência...")
     
-    engulfing = df.ta.cdl_engulfing(append=True)
-    
-    # Engolfo de Alta/Baixa
-    if 'CDL_ENGULFING' in engulfing.columns:
-        if engulfing['CDL_ENGULFING'].iloc[-2] == 100:
-            return "CALL", 90, "Padrão de Candlestick Engolfo de Alta (Bullish) encontrado. Reversão de Baixa para Alta esperada."
-        elif engulfing['CDL_ENGULFING'].iloc[-2] == -100:
-            return "PUT", 90, "Padrão de Candlestick Engolfo de Baixa (Bearish) encontrado. Reversão de Alta para Baixa esperada."
-        
-    # Martelo (HAMMER)
-    # Usa cdl_pattern que é mais robusto
-    hammer = df.ta.cdl_pattern(name="hammer", append=True) 
-        
-    if 'CDL_HAMMER' in hammer.columns:
-        # Martelo de Alta (Hammer - Sinal de CALL)
-        if hammer['CDL_HAMMER'].iloc[-2] == 100:
-            return "CALL", 85, "Padrão de Candlestick Martelo (Bullish) encontrado. Reversão de Baixa para Alta esperada."
-        # Martelo Invertido de Baixa (Inverted Hammer - Sinal de PUT)
-        elif hammer['CDL_HAMMER'].iloc[-2] == -100:
-            return "PUT", 85, "Padrão de Candlestick Martelo Invertido (Bearish) encontrado. Reversão de Alta para Baixa esperada."
-
-    return "NEUTRA", 0, "Nenhum padrão de candlestick de reversão forte detectado."
-
-
-def fetch_candle_data(ws, symbol, granularity):
-    """Solicita dados de velas à Deriv e executa a análise de tendência."""
-    
-    request_id = 1
-    ws.send(json.dumps({
-        "ticks_history": symbol,
-        "end": "latest",
-        "count": 100,
-        "granularity": granularity,
-        "style": "candles",
-        "subscribe": 0,
-        "req_id": request_id
-    }))
-
+    candle_request = json.dumps({
+        "ticks_history": symbol, "end": "latest", "count": 100, 
+        "style": "candles", "granularity": granularity 
+    })
+    ws.send(candle_request)
     response = json.loads(ws.recv())
     
-    if 'error' in response:
-        log_message(f"ERRO API: Falha ao obter candles: {response['error']['message']}")
-        return "NEUTRA", "Falha na requisição de dados.", 0, "ERRO API", "N/A"
+    if response.get('error'):
+        return "NEUTRA", 0, "", "", "Erro de API" 
 
-    if 'candles' not in response:
-        log_message("ERRO: Resposta de candles inválida ou vazia.")
-        return "NEUTRA", "Dados de velas vazios.", 0, "ERRO DADOS", "N/A"
-
-    candles = response['candles']
-    log_message(f"** DETECTOR DE CANDLES ** Recebidos {len(candles)} velas de {symbol}.")
+    add_log(f"** DETECTOR DE CANDLES ** Recebidos {len(response['candles'])} velas de {symbol}.")
     
-    df = pd.DataFrame(candles)
-    df = df.apply(pd.to_numeric)
-    df.columns = ['Open', 'High', 'Low', 'Close', 'Date', 'Volume']
+    df = pd.DataFrame(response['candles'])
+    df = df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close'}).astype(float)
     
-    # Análise dos Indicadores
-    stoch_dir, stoch_conf, stoch_just = check_stochastic_crossover(df)
-    adx_dir, adx_conf, adx_just = check_adx_trend(df)
-    sr_dir, sr_conf, sr_just = check_support_resistance(df, df['Date'].iloc[-1])
-    cdl_dir, cdl_conf, cdl_just = check_candlestick_pattern(df)
-
-    # 4. Estratégia Híbrida de Decisão
-    final_dir = "NEUTRA"
-    final_conf = 0
-    final_just = "Análise concluída. Tendência NEUTRA. Aguardando próximo ciclo."
-    strategy_used = "NEUTRA"
-    indicator_status = f"ADX: {adx_just} | Stoch: {stoch_just}"
+    # Cálculo de Indicadores Múltiplos
+    df.ta.ema(length=10, append=True)
+    df.ta.adx(length=14, append=True)
+    df.ta.stoch(k=14, d=3, append=True)
     
-    # Estratégia Principal 1: REVERSÃO Forte (Stoch Extremo + S/R + Candlestick)
-    if (stoch_conf >= 85 or sr_conf >= 80) and cdl_conf >= 85 and stoch_dir == sr_dir and stoch_dir == cdl_dir:
-        final_dir = stoch_dir
-        final_conf = 95
-        final_just = f"**REVERSÃO FORTE (95%):** {stoch_just} + {sr_just} + {cdl_just}"
-        strategy_used = "REVERSÃO HÍBRIDA"
+    # Padrões de Candlestick
+    df.ta.cdl_hammer(append=True)
+    df.ta.cdl_engulfing(append=True)
+    df.ta.cdl_shootingstar(append=True)
+
+    trend, justification, confidence, indicator_status, strategy_used = strategy_selection_engine(
+        df, granularity // 60)
     
-    # Estratégia Principal 2: TENDÊNCIA Forte (ADX Forte + Stoch/S/R)
-    elif adx_conf >= 90:
-        if adx_dir == stoch_dir and stoch_dir != "NEUTRA":
-            final_dir = adx_dir
-            final_conf = 88
-            final_just = f"**TENDÊNCIA FORTE (88%):** ADX Confirma Tendência {adx_dir} + {stoch_just}."
-            strategy_used = "ACOMPANHAMENTO ADX"
-        elif adx_dir == sr_dir and sr_dir != "NEUTRA":
-            final_dir = adx_dir
-            final_conf = 85
-            final_just = f"**TENDÊNCIA FORTE (85%):** ADX Confirma Tendência {adx_dir} + Preço em Nível de S/R ({sr_just})."
-            strategy_used = "ACOMPANHAMENTO ADX"
-        else:
-            final_just = f"ADX Forte, mas sem confirmação de Momento/Nível. ADX: {adx_just}"
-            
-    # Estratégia de Confirmação: Reversão de Candlestick em Nível Importante
-    elif cdl_conf >= 85 and sr_conf >= 80 and cdl_dir == sr_dir:
-        final_dir = cdl_dir
-        final_conf = 88
-        final_just = f"**REVERSÃO CANDLE (88%):** {cdl_just} em Nível de S/R ({sr_just})."
-        strategy_used = "REVERSÃO CANDLE"
+    return trend, justification, confidence, indicator_status, strategy_used
 
-    if final_dir == "NEUTRA":
-        # Tenta pegar o valor do ADX de forma segura para o log neutro
-        try:
-            adx_val = df.ta.adx().iloc[:, 0].dropna().iloc[-1]
-            final_just = f"Mercado NEUTRO. ADX ({adx_val:.2f}): Aguardando nova tendência ou nível. Stoch: {stoch_just}"
-        except IndexError:
-             final_just = "Mercado NEUTRO. Dados insuficientes para análise ADX/Stoch."
-
-
-    return final_dir, final_just, final_conf, indicator_status, strategy_used
-
-
-def monitor_ticks_and_signal(ws, symbol, trend, confidence, justification, strategy, indicator_status):
-    """Monitora o primeiro tick após a análise para garantir o preço de entrada e envia o sinal."""
-
-    request_id = 2
-    ws.send(json.dumps({
-        "ticks": symbol,
-        "subscribe": 1,
-        "req_id": request_id
-    }))
-
-    log_message("** MONITOR DE TICKS ** Aguardando o primeiro Tick para preço de entrada...")
-
+def monitor_ticks_and_signal(ws, symbol, trend, justification, confidence, indicator_status, strategy_used, granularity_minutes):
+    """Monitoriza ticks e gera o Sinal Final (Timing)."""
+    
+    add_log(f"Tendência Confirmada: {trend} usando {strategy_used}. Monitorizando ticks...")
+    
+    ws.send(json.dumps({"ticks": symbol, "subscribe": 1}))
+    
     try:
-        while BOT_STATUS == "ON": # Adicionado verificação para garantir que o bot não para enquanto espera
-            response = json.loads(ws.recv())
-            
-            if 'error' in response:
-                log_message(f"ERRO API no Tick: {response['error']['message']}")
-                break
-            
-            if response.get('msg_type') == 'tick':
-                tick = response['tick']
-                entry_price = tick['bid'] if trend == 'CALL' else tick['ask']
-                entry_time = time.strftime('%H:%M:%S', time.gmtime(tick['epoch']))
-
-                ws.send(json.dumps({
-                    "forget": tick['id']
-                }))
-                log_message(f"Tick recebido! Preço de entrada ({trend}): {entry_price:.4f} às {entry_time}.")
-
-                latest_signal.update({
-                    "status": "SINAL ATIVO!",
-                    "direction": trend,
-                    "confidence": confidence,
-                    "justification": justification,
-                    "timing": f"Entrada (AGORA): {entry_time} | Expiração: +{GRANULARITY_SECONDS}s",
-                    "strategy": strategy,
-                    "indicators": indicator_status
-                })
-                break
-
-    except Exception as e:
-        log_message(f"Erro no monitor de Ticks: {e}")
-        
-    finally:
-        pass
-
-
-def websocket_thread(ws_url, api_token, symbol, granularity):
-    """Função principal do bot que se conecta e corre o ciclo de análise."""
-    global BOT_STATUS
-
-    ws = None
-    try:
-        log_message("A tentar ligar ao WebSocket...")
-        ws = websocket.create_connection(ws_url)
-        log_message("Ligação bem-sucedida. A autenticar...")
-
-        # 1. Autenticação
-        ws.send(json.dumps({"authorize": api_token}))
-        auth_response = json.loads(ws.recv())
-
-        if 'error' in auth_response:
-            error_message = auth_response['error'].get('message', 'Erro desconhecido da API.')
-            error_code = auth_response['error'].get('code', 'N/A')
-            
-            # Levanta uma exceção para o erro ser registado nos logs
-            raise Exception(f"Autenticação FALHOU. Código da Deriv: {error_code}. Mensagem: {error_message}")
-        
-        log_message("Autenticação e Conexão estabelecidas com a Deriv.")
-        
-        # 2. Ciclo de Análise Contínuo
         while BOT_STATUS == "ON":
+            message = ws.recv()
+            data = json.loads(message)
             
-            # 2.1 Fase 1: Análise da Tendência
-            log_message(f"SOLICITANDO CANDLES de {int(granularity/60)}m para análise de tendência...")
-            trend, justification, confidence, indicator_status, strategy_used = fetch_candle_data(ws, symbol, granularity)
-            
-            # 2.2 Fase 2: Monitorização do Timing
-            if trend != "NEUTRA":
-                log_message(f"** SINAL DETETADO ({trend}) ** Confiança: {confidence}%. Justificativa: {justification}")
-                monitor_ticks_and_signal(ws, symbol, trend, confidence, justification, strategy_used, indicator_status)
-            else:
-                latest_signal.update({
-                    "status": "AGUARDANDO",
-                    "direction": "NEUTRA",
-                    "confidence": confidence,
-                    "justification": justification,
-                    "timing": "",
-                    "strategy": strategy_used,
-                    "indicators": indicator_status
+            if data.get('tick'):
+                tick = data['tick']
+                add_log(f"** DETECTOR DE TICKS ** Preço {symbol}: {float(tick['quote'])}")
+
+                entry_time_dt = datetime.utcfromtimestamp(tick['epoch'])
+                exit_time_dt = entry_time_dt + timedelta(seconds=FIXED_TRADE_DURATION_SECONDS)
+                
+                update_signal_data({
+                    'direction': trend, 
+                    'trend': f"{trend.upper()} ({granularity_minutes}m)", 
+                    'entry_time': entry_time_dt.strftime('%H:%M:%S'), 
+                    'exit_time': exit_time_dt.strftime('%H:%M:%S'),
+                    'confidence': confidence,
+                    'indicator_status': indicator_status,
+                    'justification': justification,
+                    'strategy_used': strategy_used,
+                    'tf': f'{granularity_minutes}m'
                 })
-                log_message(f"Análise concluída. {justification.split('|')[0]}")
-            
-            # 3. Pausa para o Próximo Ciclo
-            wait_time = granularity + 30 
-            log_message(f"Aguardando {wait_time} segundos para o próximo ciclo de análise...")
-            
-            time.sleep(wait_time)
+                add_log(f"*** SINAL FINAL GERADO! *** {trend.upper()} via {strategy_used}.")
+                
+                ws.send(json.dumps({"forget": tick['id']})) 
+                break 
 
+            time.sleep(0.1)
 
-    except websocket.WebSocketTimeoutException:
-        log_message("ERRO FATAL: Conexão WebSocket excedeu o tempo limite.")
     except Exception as e:
-        log_message(f"ERRO FATAL: {e}")
+        add_log(f"Erro na monitorização de ticks: {e}")
     finally:
-        BOT_STATUS = "OFF"
-        latest_signal['status'] = "ERRO - PARADO"
-        if ws:
+        ws.send(json.dumps({"forget_all": "ticks"}))
+
+
+def deriv_bot_core_logic(symbol, mode, api_token):
+    """Loop principal que coordena a análise de velas e ticks, recebendo o token."""
+    global BOT_STATUS
+    
+    GRANULARITY_SECONDS = FIXED_TRADE_DURATION_SECONDS
+    GRANULARITY_MINUTES = GRANULARITY_SECONDS // 60
+    
+    WS_URL_BASE = f"wss://ws.binaryws.com/websockets/v3?app_id={MY_APP_ID}"
+    WS_URL_DERIV = f"wss://ws.derivws.com/websockets/v3?app_id={MY_APP_ID}"
+    WS_URL = WS_URL_BASE if mode == 'demo' else WS_URL_DERIV 
+    
+    add_log(f"Iniciando Bot. App ID: {MY_APP_ID}. Ativo: {symbol}, Modo: {mode}.")
+
+    try:
+        ws = connect_ws(WS_URL, api_token) # Autentica com o token do frontend
+        add_log("Autenticação e Conexão estabelecidas com a Deriv.")
+
+        while BOT_STATUS == "ON":
+            trend, justification, confidence, indicator_status, strategy_used = fetch_candle_data(
+                ws, symbol, granularity=GRANULARITY_SECONDS) 
+            
+            if trend != "NEUTRA":
+                monitor_ticks_and_signal(ws, symbol, trend, justification, confidence, indicator_status, strategy_used, GRANULARITY_MINUTES)
+            else:
+                update_signal_data({
+                    'direction': 'NEUTRA', 
+                    'trend': f'NEUTRA ({GRANULARITY_MINUTES}m)', 
+                    'confidence': 30,
+                    'strategy_used': strategy_used,
+                    'justification': justification # Usa a justificativa de mercado neutro
+                })
+                add_log("Tendência Neutra. Aguardando a próxima análise...")
+                
+            time.sleep(30) 
+
+    except Exception as e:
+        add_log(f"ERRO FATAL: {e}")
+    finally:
+        if 'ws' in locals():
             ws.close()
-        log_message("Bot Parado.")
+        BOT_STATUS = "OFF"
+        add_log("Bot Parado.")
 
 
-# --- ROTAS FLASK (FRONTEND) ---
+# --- ROTAS FLASK PARA CONTROLO E INTERFACE ---
 
 @app.route('/')
 def index():
-    """Rota principal que serve a interface HTML."""
     return render_template('index.html')
 
 @app.route('/control', methods=['POST'])
-def control():
-    """Rota para iniciar/parar o bot e configurar o Token/Ativo."""
-    global BOT_STATUS, API_TOKEN, current_asset, current_mode
-
-    data = request.get_json()
-    action = data.get('action')
-
-    if action == 'start':
-        if BOT_STATUS == "OFF":
-            API_TOKEN = data.get('api_token') # O token é lido do JS a cada vez
-            current_asset = data.get('asset')
-            current_mode = data.get('mode')
-            
-            if not API_TOKEN or not current_asset:
-                latest_signal['logs'].insert(0, "[ERRO] Token API e Ativo são obrigatórios para iniciar.")
-                return jsonify({"status": "error", "message": "Token ou Ativo ausente."})
-
-            BOT_STATUS = "ON"
-            latest_signal['status'] = "INICIANDO"
-            latest_signal['justification'] = "A ligar ao servidor..."
-            
-            log_message(f"Iniciando Bot. App ID: {MY_APP_ID}. Ativo: {current_asset}, Modo: {current_mode}.")
-            
-            thread = threading.Thread(target=websocket_thread, args=(WS_URL, API_TOKEN, current_asset, GRANULARITY_SECONDS))
-            thread.start()
-            
-            return jsonify({"status": "success", "message": "Bot iniciado."})
-        else:
-            return jsonify({"status": "info", "message": "Bot já está em execução."})
-            
-    elif action == 'stop':
-        if BOT_STATUS == "ON":
-            BOT_STATUS = "OFF"
-            latest_signal['status'] = "PARANDO"
-            latest_signal['justification'] = "A aguardar o fim do ciclo..."
-            log_message("Comando de PARAGEM recebido. O bot irá parar após o ciclo atual.")
-            return jsonify({"status": "success", "message": "Bot a parar."})
-        else:
-            return jsonify({"status": "info", "message": "Bot já está parado."})
+def control_bot():
+    """Recebe o comando INICIAR/PARAR e o Token do frontend."""
+    global BOT_STATUS, BOT_THREAD, LOG_MESSAGES
     
-    return jsonify({"status": "error", "message": "Ação desconhecida."})
+    action = request.json.get('action')
+    symbol = request.json.get('symbol')
+    mode = request.json.get('mode')
+    api_token = request.json.get('api_token') # <--- Recebe o token
+
+    if action == 'start' and BOT_STATUS != "ON":
+        LOG_MESSAGES = [] 
+        update_signal_data({'direction': 'AGUARDANDO', 'entry_time': '--:--:--', 'exit_time': '--:--:--', 'confidence': 0, 'indicator_status': 'A iniciar...', 'justification': 'Aguardando autenticação do token.'})
+        
+        if not api_token:
+            return jsonify({'status': 'ERROR', 'message': 'Token API não fornecido.'}), 400
+            
+        BOT_STATUS = "ON"
+        
+        # A thread de lógica agora recebe o token
+        BOT_THREAD = threading.Thread(target=deriv_bot_core_logic, args=(symbol, mode, api_token))
+        BOT_THREAD.start()
+        
+        return jsonify({'status': 'ON', 'message': f'Bot iniciado em modo {mode} no {symbol}.'}), 200
+
+    elif action == 'stop' and BOT_STATUS == "ON":
+        BOT_STATUS = "OFF"
+        update_signal_data({'direction': 'OFF', 'entry_time': '--:--:--', 'exit_time': '--:--:--', 'confidence': 0, 'indicator_status': 'Desligado', 'justification': 'O bot foi parado pelo utilizador.', 'strategy_used': 'Nenhuma'})
+        return jsonify({'status': 'OFF', 'message': 'Comando de Paragem enviado.'}), 200
+        
+    return jsonify({'status': BOT_STATUS, 'message': 'Comando não executado ou estado inválido.'}), 200
 
 @app.route('/status')
 def get_status():
-    """Rota para o frontend obter o status atual do bot e os logs."""
-    latest_signal['current_status'] = BOT_STATUS
-    latest_signal['asset'] = current_asset
-    latest_signal['mode'] = current_mode
-    return jsonify(latest_signal)
+    global LOG_MESSAGES, BOT_STATUS, FINAL_SIGNAL_DATA
+    
+    return jsonify({
+        'status': BOT_STATUS, 
+        'logs': LOG_MESSAGES, 
+        'signal_data': FINAL_SIGNAL_DATA 
+    }), 200
 
 if __name__ == '__main__':
-    log_message("Servidor Flask inicializado. Acesse a interface para iniciar o bot.")
-    
-    try:
-        # Usa a porta fornecida pelo Render
-        port = int(os.environ.get('PORT', 5000))
-        serve(app, host='0.0.0.0', port=port)
-    except Exception as e:
-        log_message(f"Falha ao iniciar o servidor: {e}. Usando fallback.")
-        app.run(host='0.0.0.0', port=5000)
+    add_log("Servidor Flask inicializado. (Lembre-se de usar Gunicorn no Render!)")
+    app.run(debug=True, use_reloader=False)
+
