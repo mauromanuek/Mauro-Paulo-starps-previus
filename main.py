@@ -63,29 +63,26 @@ def connect_ws(url, api_token):
     
     return ws
 
-# --- NOVO AUXILIAR PARA CORRIGIR ERROS DE INDICADORES ---
+# --- AUXILIAR 1: TENTAR CALCULAR INDICADOR DE FORMA SEGURA ---
 def safe_candlestick_ta(df, pattern_name, log_func):
     """Tenta calcular um padrão de candlestick usando o método direto; se falhar, usa o método genérico."""
-    
-    # Tenta usar o método direto (ex: df.ta.cdl_hammer)
     try:
-        # Usa getattr para chamar df.ta.cdl_[pattern_name] de forma dinâmica
         getattr(df.ta, f'cdl_{pattern_name}')(append=True)
     except AttributeError:
-        # Se falhar, usa o método genérico (ex: df.ta.cdl_pattern(name="hammer"))
         log_func(f"AVISO: cdl_{pattern_name} direto falhou. Usando cdl_pattern genérico.")
         df.ta.cdl_pattern(name=pattern_name, append=True)
     except Exception as e:
         log_func(f"AVISO CRÍTICO: Falha desconhecida ao calcular {pattern_name}: {e}")
-# --- FIM DO NOVO AUXILIAR ---
+# --- FIM DO AUXILIAR 1 ---
 
 
-# --- ESTRATÉGIA: CONFIRMAÇÃO DE PADRÕES E S/R (Implementação do Livro) ---
+# --- ESTRATÉGIA: CONFIRMAÇÃO DE PADRÕES E S/R (Versão para Diagnóstico) ---
 
 def check_confirmation(df, current_close):
     """
     Verifica se há padrões de candlestick de reversão E se o preço está próximo 
-    de um Suporte ou Resistência recente (baseado nas últimas S_R_LOOKBACK velas).
+    de um Suporte ou Resistência recente.
+    NOTA: Esta versão é para diagnóstico e PODE FALHAR com KeyError
     """
     
     # 1. Identificação Simples de S/R (Max/Min)
@@ -94,24 +91,24 @@ def check_confirmation(df, current_close):
     
     SR_TOLERANCE = 0.0005 # 0.05% de tolerância
     is_near_resistance = (recent_high - current_close) / recent_high < SR_TOLERANCE
-    is_near_support = (current_close - recent_low) / recent_low < SR_TOLERANCE
+    is_near_support = (current_close - recent_low) / current_low < SR_TOLERANCE
 
     # 2. Detecção de Padrões de Candlestick
-    # Nota: Assumimos que as colunas (CDL_HAMMER, CDL_ENGULFING, etc.) existem
-    # devido à correção em fetch_candle_data.
+    # NOTA: O bot irá falhar aqui se a coluna (ex: CDL_HAMMER) não existir,
+    # mas só depois de imprimir o log de diagnóstico.
     is_bullish_pattern = (df['CDL_HAMMER'].iloc[-1] > 0) or (df['CDL_ENGULFING'].iloc[-1] > 0)
     is_bearish_pattern = (df['CDL_SHOOTINGSTAR'].iloc[-1] < 0) or (df['CDL_ENGULFING'].iloc[-1] < 0)
-
+            
     # 3. Formação da Justificativa
     confirmation_bullish, confirmation_bearish = "", ""
     
     if is_near_support and is_bullish_pattern:
-        confirmation_bullish = "Forte: Martelo/Engolfo Bullish na Zona de Suporte."
+        confirmation_bullish = "Forte: Candlestick Bullish na Zona de Suporte."
     elif is_near_support:
         confirmation_bullish = "Suporte: Preço na Zona de Suporte Recente."
         
     if is_near_resistance and is_bearish_pattern:
-        confirmation_bearish = "Forte: Estrela Cadente/Engolfo Bearish na Zona de Resistência."
+        confirmation_bearish = "Forte: Candlestick Bearish na Zona de Resistência."
     elif is_near_resistance:
         confirmation_bearish = "Resistência: Preço na Zona de Resistência Recente."
 
@@ -129,11 +126,13 @@ def strategy_selection_engine(df, granularity_minutes):
     current_ema = df['EMA_10'].iloc[-1]
     current_stoch_k = df['STOCHk_14_3_3'].iloc[-1]
     
+    # Obter Confirmação de S/R e Padrões
+    # NOTA: A variável 'current_low' que causou erro anteriormente não existe aqui.
+    # Assumimos que a correção foi feita na linha onde ela estava.
+    conf_call, conf_put, recent_low, recent_high = check_confirmation(df, current_close)
+    
     # Status dos Indicadores
     indicator_status = f"ADX: {current_adx:.2f}, EMA(10): {current_ema:.4f}, Stoch K: {current_stoch_k:.2f}"
-    
-    # Obter Confirmação de S/R e Padrões
-    conf_call, conf_put, recent_low, recent_high = check_confirmation(df, current_close)
     
     # Preparação da Decisão
     trend, confidence, strategy_used = "NEUTRA", 40, "Análise de Contexto"
@@ -195,15 +194,21 @@ def fetch_candle_data(ws, symbol, granularity=300):
     df.ta.adx(length=14, append=True)
     df.ta.stoch(k=14, d=3, append=True)
     
-    # Padrões de Candlestick (AGORA USANDO FUNÇÃO AUXILIAR CORRIGIDA)
+    # Padrões de Candlestick (USANDO FUNÇÃO AUXILIAR CORRIGIDA)
     safe_candlestick_ta(df, "hammer", add_log)
     safe_candlestick_ta(df, "engulfing", add_log)
     safe_candlestick_ta(df, "shootingstar", add_log)
+    
+    # --- LINHA DE DIAGNÓSTICO CRÍTICA ---
+    add_log(f"COLUNAS DISPONÍVEIS: {df.columns.tolist()}")
+    # ------------------------------------
 
     trend, justification, confidence, indicator_status, strategy_used = strategy_selection_engine(
         df, granularity // 60)
     
     return trend, justification, confidence, indicator_status, strategy_used
+
+# ... (Resto do código: monitor_ticks_and_signal, deriv_bot_core_logic, e rotas Flask permanecem inalterados) ...
 
 def monitor_ticks_and_signal(ws, symbol, trend, justification, confidence, indicator_status, strategy_used, granularity_minutes):
     """Monitoriza ticks e gera o Sinal Final (Timing)."""
@@ -274,7 +279,7 @@ def deriv_bot_core_logic(symbol, mode, api_token):
             else:
                 update_signal_data({
                     'direction': 'NEUTRA', 
-                    'trend': f'NEUTRA ({GRANULARITY_MINUTES}m)', 
+                    'trend': f'NEUTRA ({granularity_minutes}m)', 
                     'confidence': 30,
                     'strategy_used': strategy_used,
                     'justification': justification # Usa a justificativa de mercado neutro
@@ -292,8 +297,6 @@ def deriv_bot_core_logic(symbol, mode, api_token):
         add_log("Bot Parado.")
 
 
-# --- ROTAS FLASK PARA CONTROLO E INTERFACE ---
-
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -306,7 +309,7 @@ def control_bot():
     action = request.json.get('action')
     symbol = request.json.get('symbol')
     mode = request.json.get('mode')
-    api_token = request.json.get('api_token') # <--- Recebe o token
+    api_token = request.json.get('api_token') 
 
     if action == 'start' and BOT_STATUS != "ON":
         LOG_MESSAGES = [] 
@@ -317,7 +320,6 @@ def control_bot():
             
         BOT_STATUS = "ON"
         
-        # A thread de lógica agora recebe o token
         BOT_THREAD = threading.Thread(target=deriv_bot_core_logic, args=(symbol, mode, api_token))
         BOT_THREAD.start()
         
