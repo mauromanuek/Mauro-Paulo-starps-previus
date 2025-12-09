@@ -3,3 +3,4 @@ websocket-client
 pandas
 pandas-ta
 gunicorn
+waitress
