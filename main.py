@@ -4,18 +4,19 @@ import threading
 import time
 import pandas as pd
 import pandas_ta as ta
+import os # Necessário para ler a porta do Render (PORT)
 from flask import Flask, render_template, request, jsonify
+from waitress import serve # Necessário para rodar no Render
 
 # --- CONFIGURAÇÃO DO FLASK E VARIÁVEIS GLOBAIS ---
 app = Flask(__name__)
 
 # URL da API WebSocket da Deriv/Binary
-WS_URL = "wss://ws.binaryws.com/websockets/v3?app_id=1089" # Usaremos a URL padrão da Binary, que funciona para Deriv
+WS_URL = "wss://ws.binaryws.com/websockets/v3?app_id=1089" 
 MY_APP_ID = 114910
 BOT_STATUS = "OFF"
 API_TOKEN = None
-GRANULARITY_SECONDS = 300  # 300 segundos = 5 minutos (Período de análise)
-# Mude para 60 se quiser ciclos de 1 minuto, mas 5m é mais estável para análise profissional.
+GRANULARITY_SECONDS = 300  # 5 minutos
 
 # Dados de controlo de estado
 current_asset = None
@@ -44,14 +45,7 @@ def log_message(message):
 
 def check_stochastic_crossover(df):
     """Verifica condições de sobrevenda/sobrecompra e cruzamento do Stochastic (14, 3, 3)."""
-    # Definições: Stochastic K=14, D=3, Suavização=3 (padrão)
-    # Sobrevenda: K < 20
-    # Sobrecompra: K > 80
-    
-    # Calcular Stochastic
     stoch = df.ta.stoch(k=14, d=3, smooth_k=3, append=True)
-    
-    # Nomes das colunas geradas (podem variar, mas geralmente são STOCHk e STOCHd)
     k_line = stoch.iloc[:, 0].dropna()
     d_line = stoch.iloc[:, 1].dropna()
 
@@ -66,21 +60,21 @@ def check_stochastic_crossover(df):
     confidence = 0
     justification = "Nenhuma condição extrema ou cruzamento detectado pelo Stochastic."
 
-    # 1. Sobrecompra
+    # 1. Sobrecompra (PUT)
     if k_now > 80 and d_now > 80:
         if k_now < d_now and k_prev > d_prev:
             confidence = 85
             justification = f"Stochastic (K={k_now:.2f}, D={d_now:.2f}) em **SOBRECOMPRA** e K cruzou D para baixo. Sinal de **PUT**."
             return "PUT", confidence, justification
     
-    # 2. Sobrevenda
+    # 2. Sobrevenda (CALL)
     if k_now < 20 and d_now < 20:
         if k_now > d_now and k_prev < d_prev:
             confidence = 85
             justification = f"Stochastic (K={k_now:.2f}, D={d_now:.2f}) em **SOBREVENDA** e K cruzou D para cima. Sinal de **CALL**."
             return "CALL", confidence, justification
 
-    # 3. Cruzamento Simples (Não extremo)
+    # 3. Cruzamento Simples
     if k_now > d_now and k_prev < d_prev:
         return "CALL", 60, f"Stochastic K ({k_now:.2f}) cruzou D ({d_now:.2f}) para cima. Sinal de CALL (Tendência Fraca)."
     elif k_now < d_now and k_prev > d_prev:
@@ -90,12 +84,8 @@ def check_stochastic_crossover(df):
 
 def check_adx_trend(df):
     """Verifica a força da tendência usando ADX (14) e a direção usando +DI/-DI."""
-    # ADX: 14 períodos
-    # Tendência forte > 25
-    
     adx = df.ta.adx(length=14, append=True)
     
-    # Nomes das colunas
     adx_line = adx.iloc[:, 0].dropna()
     pos_di = adx.iloc[:, 1].dropna()
     neg_di = adx.iloc[:, 2].dropna()
@@ -137,27 +127,13 @@ def check_adx_trend(df):
 def check_support_resistance(df, candle_time):
     """Verifica se o preço atual está próximo de um Suporte ou Resistência (S/R) de 50 velas."""
     
-    CLOSE_PRICES = df['Close']
-    CURRENT_PRICE = CLOSE_PRICES.iloc[-1]
-    
-    # Parâmetros: olha para 50 velas anteriores.
+    CURRENT_PRICE = df['Close'].iloc[-1]
     S_R_LOOKBACK = 50
-    # Tolerância: S/R está ativa se o preço estiver dentro de 0.1% do nível.
     TOLERANCE_PERCENT = 0.001
     TOLERANCE_VALUE = CURRENT_PRICE * TOLERANCE_PERCENT
 
-    # Níveis de S/R são calculados como o máximo e mínimo de um intervalo móvel
-    SR = df.ta.pivots(pivot='high', left=1, right=1, ignore_near=TOLERANCE_VALUE, append=True)
-    
-    # Se SR for um DataFrame, tenta extrair os máximos/mínimos para S/R
-    if isinstance(SR, pd.DataFrame):
-        # Simplificação: Usar o máximo e mínimo das últimas 50 velas como S/R primário
-        MAX_HIGH = df['High'].iloc[-S_R_LOOKBACK:-1].max()
-        MIN_LOW = df['Low'].iloc[-S_R_LOOKBACK:-1].min()
-    else:
-        # Se pandas-ta não funcionar, usa o cálculo manual
-        MAX_HIGH = df['High'].iloc[-S_R_LOOKBACK:-1].max()
-        MIN_LOW = df['Low'].iloc[-S_R_LOOKBACK:-1].min()
+    MAX_HIGH = df['High'].iloc[-S_R_LOOKBACK:-1].max()
+    MIN_LOW = df['Low'].iloc[-S_R_LOOKBACK:-1].min()
         
     confidence = 0
     direction = "NEUTRA"
@@ -188,32 +164,26 @@ def check_support_resistance(df, candle_time):
 def check_candlestick_pattern(df):
     """Verifica padrões de Candlestick de Reversão (Martelo, Engolfo)."""
     
-    # Padrão Engolfo (Bullish Engulfing / Bearish Engulfing)
     engulfing = df.ta.cdl_engulfing(append=True)
     
-    # Engolfo de Alta (Bullish Engulfing) - Reversão de Baixa para Alta
-    if 'CDL_ENGULFING' in engulfing.columns and engulfing['CDL_ENGULFING'].iloc[-2] == 100:
-        return "CALL", 90, "Padrão de Candlestick Engolfo de Alta (Bullish) encontrado. Reversão de Baixa para Alta esperada."
-    # Engolfo de Baixa (Bearish Engulfing) - Reversão de Alta para Baixa
-    elif 'CDL_ENGULFING' in engulfing.columns and engulfing['CDL_ENGULFING'].iloc[-2] == -100:
-        return "PUT", 90, "Padrão de Candlestick Engolfo de Baixa (Bearish) encontrado. Reversão de Alta para Baixa esperada."
+    # Engolfo de Alta/Baixa
+    if 'CDL_ENGULFING' in engulfing.columns:
+        if engulfing['CDL_ENGULFING'].iloc[-2] == 100:
+            return "CALL", 90, "Padrão de Candlestick Engolfo de Alta (Bullish) encontrado. Reversão de Baixa para Alta esperada."
+        elif engulfing['CDL_ENGULFING'].iloc[-2] == -100:
+            return "PUT", 90, "Padrão de Candlestick Engolfo de Baixa (Bearish) encontrado. Reversão de Alta para Baixa esperada."
         
-    # --- CORREÇÃO APLICADA PARA RESOLVER O ERRO 'cdl_hammer' ---
     # Martelo (HAMMER)
-    try:
-        # Tenta o método cdl_pattern para maior compatibilidade TA-Lib (Nome TA-Lib é 'HIMMER')
-        hammer = df.ta.cdl_pattern(name="hammer", append=True) 
-    except AttributeError:
-        # Se falhar, tenta o método direto (depende da versão do pandas-ta/TA-Lib)
-        hammer = df.ta.cdl_hammer()
+    # Usa cdl_pattern que é mais robusto
+    hammer = df.ta.cdl_pattern(name="hammer", append=True) 
         
-    # Martelo de Alta (Hammer - Sinal de CALL)
-    if 'CDL_HAMMER' in hammer.columns and hammer['CDL_HAMMER'].iloc[-2] == 100:
-        return "CALL", 85, "Padrão de Candlestick Martelo (Bullish) encontrado. Reversão de Baixa para Alta esperada."
-    # Martelo Invertido de Baixa (Inverted Hammer - Sinal de PUT)
-    elif 'CDL_HAMMER' in hammer.columns and hammer['CDL_HAMMER'].iloc[-2] == -100:
-        return "PUT", 85, "Padrão de Candlestick Martelo Invertido (Bearish) encontrado. Reversão de Alta para Baixa esperada."
-    # -------------------------------------------------------------
+    if 'CDL_HAMMER' in hammer.columns:
+        # Martelo de Alta (Hammer - Sinal de CALL)
+        if hammer['CDL_HAMMER'].iloc[-2] == 100:
+            return "CALL", 85, "Padrão de Candlestick Martelo (Bullish) encontrado. Reversão de Baixa para Alta esperada."
+        # Martelo Invertido de Baixa (Inverted Hammer - Sinal de PUT)
+        elif hammer['CDL_HAMMER'].iloc[-2] == -100:
+            return "PUT", 85, "Padrão de Candlestick Martelo Invertido (Bearish) encontrado. Reversão de Alta para Baixa esperada."
 
     return "NEUTRA", 0, "Nenhum padrão de candlestick de reversão forte detectado."
 
@@ -221,17 +191,14 @@ def check_candlestick_pattern(df):
 def fetch_candle_data(ws, symbol, granularity):
     """Solicita dados de velas à Deriv e executa a análise de tendência."""
     
-    # 1. Enviar pedido de velas
-    request_id = 1  # ID de subscrição simples
-    
-    # Requisitar 100 velas (necessário para ADX e S/R)
+    request_id = 1
     ws.send(json.dumps({
         "ticks_history": symbol,
         "end": "latest",
         "count": 100,
         "granularity": granularity,
         "style": "candles",
-        "subscribe": 0,  # Não subscrever, apenas um pedido único
+        "subscribe": 0,
         "req_id": request_id
     }))
 
@@ -245,35 +212,20 @@ def fetch_candle_data(ws, symbol, granularity):
         log_message("ERRO: Resposta de candles inválida ou vazia.")
         return "NEUTRA", "Dados de velas vazios.", 0, "ERRO DADOS", "N/A"
 
-    # 2. Processamento dos dados
     candles = response['candles']
     log_message(f"** DETECTOR DE CANDLES ** Recebidos {len(candles)} velas de {symbol}.")
     
     df = pd.DataFrame(candles)
-    df['open'] = pd.to_numeric(df['open'])
-    df['high'] = pd.to_numeric(df['high'])
-    df['low'] = pd.to_numeric(df['low'])
-    df['close'] = pd.to_numeric(df['close'])
-    df['epoch'] = pd.to_numeric(df['epoch'])
-    
+    df = df.apply(pd.to_numeric)
     df.columns = ['Open', 'High', 'Low', 'Close', 'Date', 'Volume']
     
-    # 3. Análise dos Indicadores (Estrutura Híbrida)
-    
-    # a. Stochastic (Indicador de Momento/Reversão)
+    # Análise dos Indicadores
     stoch_dir, stoch_conf, stoch_just = check_stochastic_crossover(df)
-
-    # b. ADX (+DI/-DI) (Indicador de Tendência/Força)
     adx_dir, adx_conf, adx_just = check_adx_trend(df)
-    
-    # c. Suporte/Resistência (Indicador de Nível/Barreira)
     sr_dir, sr_conf, sr_just = check_support_resistance(df, df['Date'].iloc[-1])
-    
-    # d. Candlestick (Confirmação de Reversão)
     cdl_dir, cdl_conf, cdl_just = check_candlestick_pattern(df)
 
     # 4. Estratégia Híbrida de Decisão
-    
     final_dir = "NEUTRA"
     final_conf = 0
     final_just = "Análise concluída. Tendência NEUTRA. Aguardando próximo ciclo."
@@ -309,10 +261,14 @@ def fetch_candle_data(ws, symbol, granularity):
         final_just = f"**REVERSÃO CANDLE (88%):** {cdl_just} em Nível de S/R ({sr_just})."
         strategy_used = "REVERSÃO CANDLE"
 
-    # Se a direção final for NEUTRA, mas houver alguma informação importante
-    if final_dir == "NEUTRA" and final_just == "Análise concluída. Tendência NEUTRA. Aguardando próximo ciclo.":
-        # Se for neutra, apenas indica o estado do ADX (Tendência/Lateral)
-        final_just = f"Mercado NEUTRO. ADX ({adx_now:.2f}): Aguardando nova tendência ou nível. Stoch: {stoch_just}"
+    if final_dir == "NEUTRA":
+        # Tenta pegar o valor do ADX de forma segura para o log neutro
+        try:
+            adx_val = df.ta.adx().iloc[:, 0].dropna().iloc[-1]
+            final_just = f"Mercado NEUTRO. ADX ({adx_val:.2f}): Aguardando nova tendência ou nível. Stoch: {stoch_just}"
+        except IndexError:
+             final_just = "Mercado NEUTRO. Dados insuficientes para análise ADX/Stoch."
+
 
     return final_dir, final_just, final_conf, indicator_status, strategy_used
 
@@ -320,7 +276,6 @@ def fetch_candle_data(ws, symbol, granularity):
 def monitor_ticks_and_signal(ws, symbol, trend, confidence, justification, strategy, indicator_status):
     """Monitora o primeiro tick após a análise para garantir o preço de entrada e envia o sinal."""
 
-    # 1. Enviar pedido de subscrição de ticks
     request_id = 2
     ws.send(json.dumps({
         "ticks": symbol,
@@ -331,8 +286,7 @@ def monitor_ticks_and_signal(ws, symbol, trend, confidence, justification, strat
     log_message("** MONITOR DE TICKS ** Aguardando o primeiro Tick para preço de entrada...")
 
     try:
-        # Loop para esperar pelo primeiro tick
-        while True:
+        while BOT_STATUS == "ON": # Adicionado verificação para garantir que o bot não para enquanto espera
             response = json.loads(ws.recv())
             
             if 'error' in response:
@@ -344,13 +298,11 @@ def monitor_ticks_and_signal(ws, symbol, trend, confidence, justification, strat
                 entry_price = tick['bid'] if trend == 'CALL' else tick['ask']
                 entry_time = time.strftime('%H:%M:%S', time.gmtime(tick['epoch']))
 
-                # 2. Desativa a subscrição de ticks (apenas precisamos do primeiro)
                 ws.send(json.dumps({
                     "forget": tick['id']
                 }))
                 log_message(f"Tick recebido! Preço de entrada ({trend}): {entry_price:.4f} às {entry_time}.")
 
-                # 3. Atualizar o Sinal no Frontend
                 latest_signal.update({
                     "status": "SINAL ATIVO!",
                     "direction": trend,
@@ -360,15 +312,14 @@ def monitor_ticks_and_signal(ws, symbol, trend, confidence, justification, strat
                     "strategy": strategy,
                     "indicators": indicator_status
                 })
-                # O sinal foi enviado, sai do monitor
                 break
 
     except Exception as e:
         log_message(f"Erro no monitor de Ticks: {e}")
         
     finally:
-        # Se saiu do loop, o sinal foi enviado ou houve um erro.
         pass
+
 
 def websocket_thread(ws_url, api_token, symbol, granularity):
     """Função principal do bot que se conecta e corre o ciclo de análise."""
@@ -385,24 +336,26 @@ def websocket_thread(ws_url, api_token, symbol, granularity):
         auth_response = json.loads(ws.recv())
 
         if 'error' in auth_response:
-            raise Exception(f"Erro de Autenticação: {auth_response['error']['message']}")
+            error_message = auth_response['error'].get('message', 'Erro desconhecido da API.')
+            error_code = auth_response['error'].get('code', 'N/A')
+            
+            # Levanta uma exceção para o erro ser registado nos logs
+            raise Exception(f"Autenticação FALHOU. Código da Deriv: {error_code}. Mensagem: {error_message}")
         
         log_message("Autenticação e Conexão estabelecidas com a Deriv.")
         
         # 2. Ciclo de Análise Contínuo
         while BOT_STATUS == "ON":
             
-            # 2.1 Fase 1: Análise da Tendência (Lê os Candles)
+            # 2.1 Fase 1: Análise da Tendência
             log_message(f"SOLICITANDO CANDLES de {int(granularity/60)}m para análise de tendência...")
             trend, justification, confidence, indicator_status, strategy_used = fetch_candle_data(ws, symbol, granularity)
             
-            # 2.2 Fase 2: Monitorização do Timing (Lê os Ticks)
+            # 2.2 Fase 2: Monitorização do Timing
             if trend != "NEUTRA":
                 log_message(f"** SINAL DETETADO ({trend}) ** Confiança: {confidence}%. Justificativa: {justification}")
                 monitor_ticks_and_signal(ws, symbol, trend, confidence, justification, strategy_used, indicator_status)
-                # Mantém o sinal ativo no painel até o próximo ciclo
             else:
-                # Atualizar o status NEUTRO no frontend
                 latest_signal.update({
                     "status": "AGUARDANDO",
                     "direction": "NEUTRA",
@@ -414,7 +367,7 @@ def websocket_thread(ws_url, api_token, symbol, granularity):
                 })
                 log_message(f"Análise concluída. {justification.split('|')[0]}")
             
-            # 3. Pausa para o Próximo Ciclo (Espera o tempo da vela + 30 segundos)
+            # 3. Pausa para o Próximo Ciclo
             wait_time = granularity + 30 
             log_message(f"Aguardando {wait_time} segundos para o próximo ciclo de análise...")
             
@@ -450,7 +403,7 @@ def control():
 
     if action == 'start':
         if BOT_STATUS == "OFF":
-            API_TOKEN = data.get('api_token')
+            API_TOKEN = data.get('api_token') # O token é lido do JS a cada vez
             current_asset = data.get('asset')
             current_mode = data.get('mode')
             
@@ -458,14 +411,12 @@ def control():
                 latest_signal['logs'].insert(0, "[ERRO] Token API e Ativo são obrigatórios para iniciar.")
                 return jsonify({"status": "error", "message": "Token ou Ativo ausente."})
 
-            # Atualiza o status e inicia o thread do bot
             BOT_STATUS = "ON"
             latest_signal['status'] = "INICIANDO"
             latest_signal['justification'] = "A ligar ao servidor..."
             
             log_message(f"Iniciando Bot. App ID: {MY_APP_ID}. Ativo: {current_asset}, Modo: {current_mode}.")
             
-            # Inicia o ciclo do bot numa nova thread para não bloquear o servidor web
             thread = threading.Thread(target=websocket_thread, args=(WS_URL, API_TOKEN, current_asset, GRANULARITY_SECONDS))
             thread.start()
             
@@ -495,13 +446,11 @@ def get_status():
 
 if __name__ == '__main__':
     log_message("Servidor Flask inicializado. Acesse a interface para iniciar o bot.")
-    # Render usa a porta fornecida pela variável de ambiente PORT
-    # localmente, pode usar a 5000
-    from waitress import serve
+    
     try:
-        # Tenta usar a porta fornecida pelo Render, se existir
+        # Usa a porta fornecida pelo Render
         port = int(os.environ.get('PORT', 5000))
         serve(app, host='0.0.0.0', port=port)
-    except Exception:
-        # Se for um ambiente local sem 'serve' ou 'PORT', usa o Flask debug server
+    except Exception as e:
+        log_message(f"Falha ao iniciar o servidor: {e}. Usando fallback.")
         app.run(host='0.0.0.0', port=5000)
