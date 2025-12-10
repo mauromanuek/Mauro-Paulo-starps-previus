@@ -91,7 +91,7 @@ def check_confirmation(df, current_close):
     
     SR_TOLERANCE = 0.0005 # 0.05% de tolerância
     is_near_resistance = (recent_high - current_close) / recent_high < SR_TOLERANCE
-    is_near_support = (current_close - recent_low) / current_low < SR_TOLERANCE
+    is_near_support = (current_close - recent_low) / recent_low < SR_TOLERANCE
 
     # 2. Detecção de Padrões de Candlestick
     # NOTA: O bot irá falhar aqui se a coluna (ex: CDL_HAMMER) não existir,
