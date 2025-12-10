@@ -55,7 +55,10 @@ def connect_ws(url, api_token):
     """Cria e autentica a conexão WebSocket usando o token fornecido pelo frontend."""
     ws = create_connection(url)
     
-    ws.send(json.dumps({"authorize": api_token})) 
+    # CORREÇÃO: Usa .strip() para limpar o token e evitar erros de validação
+    cleaned_token = api_token.strip() 
+    
+    ws.send(json.dumps({"authorize": cleaned_token})) 
     auth_response = json.loads(ws.recv())
     
     if auth_response.get('error'):
@@ -63,7 +66,7 @@ def connect_ws(url, api_token):
     
     return ws
 
-# --- LÓGICA DE DETECÇÃO DE CANDLESTICK (Substitui o pandas-ta para padrões) ---
+# --- LÓGICA DE DETECÇÃO DE CANDLESTICK ---
 
 def detect_candlestick_pattern(df):
     """
@@ -72,67 +75,49 @@ def detect_candlestick_pattern(df):
     Retorna 100 para Bullish Forte, -100 para Bearish Forte, 0 caso contrário.
     """
     
-    # É necessário pelo menos 2 velas para o Engolfo e para referências de preço
-    if len(df) < 2:
-        return 0
+    if len(df) < 2: return 0
         
-    c = df.iloc[-1] # Vela Atual (Current)
-    p = df.iloc[-2] # Vela Anterior (Previous)
+    c = df.iloc[-1] 
+    p = df.iloc[-2] 
     
-    # Cálculo do Range e Corpo
     range_c = c['High'] - c['Low']
     body_c = abs(c['Close'] - c['Open'])
 
-    # Evita divisão por zero e velas não-significativas
-    if range_c == 0 or range_c < 0.00001:
-        return 0
+    if range_c == 0 or range_c < 0.00001: return 0
 
-    # Critério comum: Corpo deve ser pequeno em relação ao range total da vela
     is_small_body = body_c < 0.3 * range_c
     
     # --- 1. MARTELO (BULLISH HAMMER) ---
     lower_shadow_c = min(c['Open'], c['Close']) - c['Low']
     is_hammer = is_small_body and (lower_shadow_c > 2 * body_c)
-
-    if is_hammer:
-        return 100 
+    if is_hammer: return 100 
 
     # --- 2. ESTRELA CADENTE (BEARISH SHOOTING STAR) ---
     upper_shadow_c = c['High'] - max(c['Open'], c['Close'])
     is_shooting_star = is_small_body and (upper_shadow_c > 2 * body_c)
-
-    if is_shooting_star:
-        return -100 
+    if is_shooting_star: return -100 
 
     # --- 3. ENGOLFO (BULLISH/BEARISH ENGULFING) ---
     range_p = p['High'] - p['Low']
     
-    # Engolfo de Baixa (Bearish Engulfing): Vela vermelha que engole a verde anterior
     is_bear_engulf = (c['Close'] < c['Open']) and (p['Close'] > p['Open']) and \
                      (c['Open'] > p['Close']) and (c['Close'] < p['Open']) and \
                      (body_c > range_p)
 
-    # Engolfo de Alta (Bullish Engulfing): Vela verde que engole a vermelha anterior
     is_bull_engulf = (c['Close'] > c['Open']) and (p['Close'] < p['Open']) and \
                      (c['Open'] < p['Close']) and (c['Close'] > p['Open']) and \
                      (body_c > range_p)
 
-    if is_bear_engulf:
-        return -100
-    if is_bull_engulf:
-        return 100
+    if is_bear_engulf: return -100
+    if is_bull_engulf: return 100
 
     return 0 
 
 # --- ESTRATÉGIA: CONFIRMAÇÃO DE PADRÕES E S/R ---
 
 def check_confirmation(df, current_close):
-    """
-    Verifica se há padrões de candlestick de reversão E se o preço está próximo 
-    de um Suporte ou Resistência recente.
-    """
+    """Verifica padrões de candlestick de reversão e proximidade de S/R."""
     
-    # 1. Identificação Simples de S/R (Max/Min)
     recent_high = df['High'].iloc[-S_R_LOOKBACK:].max()
     recent_low = df['Low'].iloc[-S_R_LOOKBACK:].min()
     
@@ -140,13 +125,10 @@ def check_confirmation(df, current_close):
     is_near_resistance = (recent_high - current_close) / recent_high < SR_TOLERANCE
     is_near_support = (current_close - recent_low) / recent_low < SR_TOLERANCE
 
-    # 2. Detecção de Padrões de Candlestick (Detecção Interna confiável)
     pattern_val = detect_candlestick_pattern(df) 
-
     is_bullish_pattern = (pattern_val > 0)
     is_bearish_pattern = (pattern_val < 0)
             
-    # 3. Formação da Justificativa
     confirmation_bullish, confirmation_bearish = "", ""
     
     if is_near_support and is_bullish_pattern:
@@ -164,41 +146,33 @@ def check_confirmation(df, current_close):
 # --- ESTRATÉGIA: MOTOR DE SELEÇÃO E DECISÃO ---
 
 def strategy_selection_engine(df, granularity_minutes):
-    """
-    Analisa o contexto (ADX), escolhe a estratégia e busca confirmação S/R/Candle.
-    """
-    # 1. Obter valores recentes
+    """Analisa o contexto (ADX), escolhe a estratégia e busca confirmação S/R/Candle."""
+    
     current_adx = df['ADX_14'].iloc[-1]
     current_close = df['Close'].iloc[-1]
     current_ema = df['EMA_10'].iloc[-1]
     current_stoch_k = df['STOCHk_14_3_3'].iloc[-1]
     
-    # Obter Confirmação de S/R e Padrões
     conf_call, conf_put, recent_low, recent_high = check_confirmation(df, current_close)
     
-    # Status dos Indicadores
     indicator_status = f"ADX: {current_adx:.2f}, EMA(10): {current_ema:.4f}, Stoch K: {current_stoch_k:.2f}"
     
-    # Preparação da Decisão
     trend, confidence, strategy_used = "NEUTRA", 40, "Análise de Contexto"
-    # **A correção do 'current_low' está implicitamente resolvida, pois usamos 'recent_low' e 'current_close'**
     justification = "O mercado está em consolidação e sem sinais claros de extremos. Aguardando novo contexto."
 
-    # --- DECISÃO DE CONTEXTO ---
-    
     if current_adx > 30: # Tendência Forte (Trend-Following)
         strategy_used = "Acompanhamento de Tendência (EMA Breakout)"
         
         if current_close > current_ema and df['Close'].iloc[-2] > df['EMA_10'].iloc[-2]:
             trend = "CALL"
             confidence = 75
-            justification = f"TENDÊNCIA FORTE (ADX {current_adx:.2f}). O Preço está acima da EMA (10), indicando continuidade de ALTA. CONFIRMAÇÃO: {conf_call if conf_call else 'Nenhuma'}"
+            justification = f"TENDÊNCIA FORTE (ADX {current_adx:.2f}). Preço acima da EMA. CONFIRMAÇÃO: {conf_call if conf_call else 'Nenhuma'}"
             if conf_call: confidence += 10
 
         elif current_close < current_ema and df['Close'].iloc[-2] < df['EMA_10'].iloc[-2]:
             trend = "PUT"
             confidence = 75
-            justification = f"TENDÊNCIA FORTE (ADX {current_adx:.2f}). O Preço está abaixo da EMA (10), indicando continuidade de BAIXA. CONFIRMAÇÃO: {conf_put if conf_put else 'Nenhuma'}"
+            justification = f"TENDÊNCIA FORTE (ADX {current_adx:.2f}). Preço abaixo da EMA. CONFIRMAÇÃO: {conf_put if conf_put else 'Nenhuma'}"
             if conf_put: confidence += 10
 
     elif current_adx < 25: # Consolidação (Reversão de Extremos)
@@ -207,12 +181,12 @@ def strategy_selection_engine(df, granularity_minutes):
         if current_stoch_k > 80 and conf_put:
             trend = "PUT"
             confidence = 85
-            justification = f"CONSOLIDAÇÃO (ADX {current_adx:.2f}). O Stochastic está em SOBRECOMPRA (>80). CONFIRMAÇÃO: {conf_put} - indicando reversão iminente."
+            justification = f"CONSOLIDAÇÃO (ADX {current_adx:.2f}). Stochastic em SOBRECOMPRA (>80). CONFIRMAÇÃO: {conf_put}."
 
         elif current_stoch_k < 20 and conf_call:
             trend = "CALL"
             confidence = 85
-            justification = f"CONSOLIDAÇÃO (ADX {current_adx:.2f}). O Stochastic está em SOBREVENDA (<20). CONFIRMAÇÃO: {conf_call} - indicando reversão iminente."
+            justification = f"CONSOLIDAÇÃO (ADX {current_adx:.2f}). Stochastic em SOBREVENDA (<20). CONFIRMAÇÃO: {conf_call}."
         
     return trend, justification, confidence, indicator_status, strategy_used
 
@@ -227,22 +201,28 @@ def fetch_candle_data(ws, symbol, granularity=300):
     ws.send(candle_request)
     response = json.loads(ws.recv())
     
+    # 1. VERIFICAÇÃO DE ERRO DA API
     if response.get('error'):
-        return "NEUTRA", 0, "", "", "Erro de API" 
+        error_msg = response['error'].get('message', 'Erro de API desconhecido')
+        add_log(f"ERRO API (Candles): {error_msg}")
+        return "NEUTRA", 0, "Erro de API ao buscar velas", "ADX: --", "Erro de API" 
 
+    # 2. VERIFICAÇÃO ROBUSTA DA CHAVE 'CANDLES' (Evita KeyError: 'candles')
+    if response.get('msg_type') != 'history' or 'candles' not in response:
+        add_log(f"AVISO: Resposta de velas inesperada. Tipo de mensagem: {response.get('msg_type')}. Pulando análise.")
+        return "NEUTRA", 0, "Resposta de velas incompleta", "ADX: --", "Falha de Dados" 
+
+    
     add_log(f"** DETECTOR DE CANDLES ** Recebidos {len(response['candles'])} velas de {symbol}.")
     
     df = pd.DataFrame(response['candles'])
     df = df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close'}).astype(float)
     
-    # Cálculo de Indicadores Múltiplos (Pandas-TA ainda é usado aqui, pois é rápido e funciona)
+    # Cálculo de Indicadores Múltiplos
     df.ta.ema(length=10, append=True)
     df.ta.adx(length=14, append=True)
     df.ta.stoch(k=14, d=3, append=True)
     
-    # *** O CALCULO DE CANDLESTICK DO PANDAS-TA FOI REMOVIDO DAQUI ***
-    # *** Ele é agora feito internamente na função detect_candlestick_pattern(df) ***
-
     trend, justification, confidence, indicator_status, strategy_used = strategy_selection_engine(
         df, granularity // 60)
     
@@ -288,11 +268,15 @@ def monitor_ticks_and_signal(ws, symbol, trend, justification, confidence, indic
     except Exception as e:
         add_log(f"Erro na monitorização de ticks: {e}")
     finally:
+        # Garante que todas as subscrições pendentes sejam removidas
         ws.send(json.dumps({"forget_all": "ticks"}))
 
 
 def deriv_bot_core_logic(symbol, mode, api_token):
-    """Loop principal que coordena a análise de velas e ticks, recebendo o token."""
+    """
+    Loop principal que coordena a análise de velas e ticks.
+    NOTA: A conexão é feita e fechada em CADA ciclo para resolver o erro 'candles'.
+    """
     global BOT_STATUS
     
     GRANULARITY_SECONDS = FIXED_TRADE_DURATION_SECONDS
@@ -300,37 +284,50 @@ def deriv_bot_core_logic(symbol, mode, api_token):
     
     WS_URL_BASE = f"wss://ws.binaryws.com/websockets/v3?app_id={MY_APP_ID}"
     WS_URL_DERIV = f"wss://ws.derivws.com/websockets/v3?app_id={MY_APP_ID}"
-    WS_URL = WS_URL_BASE if mode == 'demo' else WS_URL_DERIV 
+    
+    # CORREÇÃO: Usa sempre o URL da Deriv para máxima compatibilidade com tokens novos
+    WS_URL = WS_URL_DERIV 
     
     add_log(f"Iniciando Bot. App ID: {MY_APP_ID}. Ativo: {symbol}, Modo: {mode}.")
 
     try:
-        ws = connect_ws(WS_URL, api_token) # Autentica com o token do frontend
-        add_log("Autenticação e Conexão estabelecidas com a Deriv.")
-
         while BOT_STATUS == "ON":
-            trend, justification, confidence, indicator_status, strategy_used = fetch_candle_data(
-                ws, symbol, granularity=GRANULARITY_SECONDS) 
-            
-            if trend != "NEUTRA":
-                monitor_ticks_and_signal(ws, symbol, trend, justification, confidence, indicator_status, strategy_used, GRANULARITY_MINUTES)
-            else:
-                update_signal_data({
-                    'direction': 'NEUTRA', 
-                    'trend': f'NEUTRA ({granularity_minutes}m)', 
-                    'confidence': 30,
-                    'strategy_used': strategy_used,
-                    'justification': justification # Usa a justificativa de mercado neutro
-                })
-                add_log("Tendência Neutra. Aguardando a próxima análise...")
+            ws = None # Inicia a conexão como None
+            try:
+                # 1. CONEXÃO E AUTENTICAÇÃO LIMPA EM CADA CICLO
+                ws = connect_ws(WS_URL, api_token) 
+                add_log("Conexão estabelecida e autenticada para o ciclo de análise.")
+
+                # 2. ANÁLISE E SINAL
+                trend, justification, confidence, indicator_status, strategy_used = fetch_candle_data(
+                    ws, symbol, granularity=GRANULARITY_SECONDS) 
                 
-            time.sleep(30) 
+                if trend != "NEUTRA":
+                    monitor_ticks_and_signal(ws, symbol, trend, justification, confidence, indicator_status, strategy_used, GRANULARITY_MINUTES)
+                else:
+                    update_signal_data({
+                        'direction': 'NEUTRA', 
+                        'trend': f'NEUTRA ({granularity_minutes}m)', 
+                        'confidence': 30,
+                        'strategy_used': strategy_used,
+                        'justification': justification 
+                    })
+                    add_log("Tendência Neutra. Aguardando a próxima análise...")
+                
+                time.sleep(30) # Espera antes de iniciar o próximo ciclo com nova conexão
+
+            except Exception as e:
+                add_log(f"ERRO NO CICLO: {e}")
+                time.sleep(10) # Espera mais antes de tentar o próximo ciclo se houver erro
+            finally:
+                if ws:
+                    ws.close() # GARANTE O FECHO DA CONEXÃO NO FIM DE CADA CICLO
+                    add_log("Conexão fechada para o próximo ciclo.")
+
 
     except Exception as e:
-        add_log(f"ERRO FATAL: {e}")
+        add_log(f"ERRO FATAL (Global): {e}")
     finally:
-        if 'ws' in locals():
-            ws.close()
         BOT_STATUS = "OFF"
         add_log("Bot Parado.")
 
