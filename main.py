@@ -192,7 +192,8 @@ def strategy_selection_engine(df, granularity_minutes):
 
 def fetch_candle_data(ws, symbol, granularity=300):
     """Solicita, analisa (EMA/ADX/Stoch), determina a Tendência e a Estratégia."""
-    add_log(f"SOLICITANDO CANDLES de {granularity//60}m para análise de tendência...")
+    granularity_minutes = granularity // 60 # Define a variável aqui para ser usada no log
+    add_log(f"SOLICITANDO CANDLES de {granularity_minutes}m para análise de tendência...")
     
     candle_request = json.dumps({
         "ticks_history": symbol, "end": "latest", "count": 100, 
@@ -207,8 +208,9 @@ def fetch_candle_data(ws, symbol, granularity=300):
         add_log(f"ERRO API (Candles): {error_msg}")
         return "NEUTRA", 0, "Erro de API ao buscar velas", "ADX: --", "Erro de API" 
 
-    # 2. VERIFICAÇÃO ROBUSTA DA CHAVE 'CANDLES' (Evita KeyError: 'candles')
-    if response.get('msg_type') != 'history' or 'candles' not in response:
+    # 2. CORREÇÃO: Aceita 'history' OU 'candles' como tipo de mensagem se a chave 'candles' existir
+    # Isto resolve o problema da mensagem de AVISO no seu log: 'Tipo de mensagem: candles'
+    if 'candles' not in response or (response.get('msg_type') != 'history' and response.get('msg_type') != 'candles'):
         add_log(f"AVISO: Resposta de velas inesperada. Tipo de mensagem: {response.get('msg_type')}. Pulando análise.")
         return "NEUTRA", 0, "Resposta de velas incompleta", "ADX: --", "Falha de Dados" 
 
@@ -224,7 +226,7 @@ def fetch_candle_data(ws, symbol, granularity=300):
     df.ta.stoch(k=14, d=3, append=True)
     
     trend, justification, confidence, indicator_status, strategy_used = strategy_selection_engine(
-        df, granularity // 60)
+        df, granularity_minutes)
     
     return trend, justification, confidence, indicator_status, strategy_used
 
@@ -279,8 +281,9 @@ def deriv_bot_core_logic(symbol, mode, api_token):
     """
     global BOT_STATUS
     
+    # CORREÇÃO: Variáveis de tempo definidas no escopo principal da função
     GRANULARITY_SECONDS = FIXED_TRADE_DURATION_SECONDS
-    GRANULARITY_MINUTES = GRANULARITY_SECONDS // 60
+    GRANULARITY_MINUTES = GRANULARITY_SECONDS // 60 
     
     WS_URL_BASE = f"wss://ws.binaryws.com/websockets/v3?app_id={MY_APP_ID}"
     WS_URL_DERIV = f"wss://ws.derivws.com/websockets/v3?app_id={MY_APP_ID}"
@@ -305,9 +308,10 @@ def deriv_bot_core_logic(symbol, mode, api_token):
                 if trend != "NEUTRA":
                     monitor_ticks_and_signal(ws, symbol, trend, justification, confidence, indicator_status, strategy_used, GRANULARITY_MINUTES)
                 else:
+                    # CORREÇÃO: granularity_minutes está definido aqui!
                     update_signal_data({
                         'direction': 'NEUTRA', 
-                        'trend': f'NEUTRA ({granularity_minutes}m)', 
+                        'trend': f'NEUTRA ({GRANULARITY_MINUTES}m)', 
                         'confidence': 30,
                         'strategy_used': strategy_used,
                         'justification': justification 
