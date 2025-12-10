@@ -55,10 +55,7 @@ def connect_ws(url, api_token):
     """Cria e autentica a conexão WebSocket usando o token fornecido pelo frontend."""
     ws = create_connection(url)
     
-    # Adiciona .strip() para remover espaços invisíveis que causam erros de validação
-    cleaned_token = api_token.strip() 
-    
-    ws.send(json.dumps({"authorize": cleaned_token})) 
+    ws.send(json.dumps({"authorize": api_token})) 
     auth_response = json.loads(ws.recv())
     
     if auth_response.get('error'):
@@ -66,7 +63,7 @@ def connect_ws(url, api_token):
     
     return ws
 
-# --- LÓGICA DE DETECÇÃO DE CANDLESTICK (DETECÇÃO INTERNA) ---
+# --- LÓGICA DE DETECÇÃO DE CANDLESTICK (Substitui o pandas-ta para padrões) ---
 
 def detect_candlestick_pattern(df):
     """
@@ -75,18 +72,22 @@ def detect_candlestick_pattern(df):
     Retorna 100 para Bullish Forte, -100 para Bearish Forte, 0 caso contrário.
     """
     
+    # É necessário pelo menos 2 velas para o Engolfo e para referências de preço
     if len(df) < 2:
         return 0
         
     c = df.iloc[-1] # Vela Atual (Current)
     p = df.iloc[-2] # Vela Anterior (Previous)
     
+    # Cálculo do Range e Corpo
     range_c = c['High'] - c['Low']
     body_c = abs(c['Close'] - c['Open'])
 
+    # Evita divisão por zero e velas não-significativas
     if range_c == 0 or range_c < 0.00001:
         return 0
 
+    # Critério comum: Corpo deve ser pequeno em relação ao range total da vela
     is_small_body = body_c < 0.3 * range_c
     
     # --- 1. MARTELO (BULLISH HAMMER) ---
@@ -139,7 +140,7 @@ def check_confirmation(df, current_close):
     is_near_resistance = (recent_high - current_close) / recent_high < SR_TOLERANCE
     is_near_support = (current_close - recent_low) / recent_low < SR_TOLERANCE
 
-    # 2. Detecção de Padrões de Candlestick (Detecção Interna)
+    # 2. Detecção de Padrões de Candlestick (Detecção Interna confiável)
     pattern_val = detect_candlestick_pattern(df) 
 
     is_bullish_pattern = (pattern_val > 0)
@@ -180,6 +181,7 @@ def strategy_selection_engine(df, granularity_minutes):
     
     # Preparação da Decisão
     trend, confidence, strategy_used = "NEUTRA", 40, "Análise de Contexto"
+    # **A correção do 'current_low' está implicitamente resolvida, pois usamos 'recent_low' e 'current_close'**
     justification = "O mercado está em consolidação e sem sinais claros de extremos. Aguardando novo contexto."
 
     # --- DECISÃO DE CONTEXTO ---
@@ -225,28 +227,22 @@ def fetch_candle_data(ws, symbol, granularity=300):
     ws.send(candle_request)
     response = json.loads(ws.recv())
     
-    # 1. VERIFICAÇÃO DE ERRO DA API
     if response.get('error'):
-        error_msg = response['error'].get('message', 'Erro de API desconhecido')
-        add_log(f"ERRO API (Candles): {error_msg}")
-        return "NEUTRA", 0, "Erro de API ao buscar velas", "ADX: --", "Erro de API" 
+        return "NEUTRA", 0, "", "", "Erro de API" 
 
-    # 2. VERIFICAÇÃO ROBUSTA DA CHAVE 'CANDLES'
-    if response.get('msg_type') != 'history' or 'candles' not in response:
-        add_log(f"AVISO: Resposta de velas inesperada. Tipo de mensagem: {response.get('msg_type')}. Pulando análise de velas.")
-        return "NEUTRA", 0, "Resposta de velas incompleta", "ADX: --", "Falha de Dados" 
-
-    
     add_log(f"** DETECTOR DE CANDLES ** Recebidos {len(response['candles'])} velas de {symbol}.")
     
     df = pd.DataFrame(response['candles'])
     df = df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close'}).astype(float)
     
-    # Cálculo de Indicadores Múltiplos
+    # Cálculo de Indicadores Múltiplos (Pandas-TA ainda é usado aqui, pois é rápido e funciona)
     df.ta.ema(length=10, append=True)
     df.ta.adx(length=14, append=True)
     df.ta.stoch(k=14, d=3, append=True)
     
+    # *** O CALCULO DE CANDLESTICK DO PANDAS-TA FOI REMOVIDO DAQUI ***
+    # *** Ele é agora feito internamente na função detect_candlestick_pattern(df) ***
+
     trend, justification, confidence, indicator_status, strategy_used = strategy_selection_engine(
         df, granularity // 60)
     
@@ -302,18 +298,14 @@ def deriv_bot_core_logic(symbol, mode, api_token):
     GRANULARITY_SECONDS = FIXED_TRADE_DURATION_SECONDS
     GRANULARITY_MINUTES = GRANULARITY_SECONDS // 60
     
-    # URLs da API
     WS_URL_BASE = f"wss://ws.binaryws.com/websockets/v3?app_id={MY_APP_ID}"
     WS_URL_DERIV = f"wss://ws.derivws.com/websockets/v3?app_id={MY_APP_ID}"
-    
-    # CORREÇÃO FINAL DE AUTENTICAÇÃO: Usamos o URL da Deriv (Produção) sempre, 
-    # pois tokens novos causam "Sorry, an error occurred" no URL da Binary/Demo.
-    WS_URL = WS_URL_DERIV 
+    WS_URL = WS_URL_BASE if mode == 'demo' else WS_URL_DERIV 
     
     add_log(f"Iniciando Bot. App ID: {MY_APP_ID}. Ativo: {symbol}, Modo: {mode}.")
 
     try:
-        ws = connect_ws(WS_URL, api_token) # Autentica
+        ws = connect_ws(WS_URL, api_token) # Autentica com o token do frontend
         add_log("Autenticação e Conexão estabelecidas com a Deriv.")
 
         while BOT_STATUS == "ON":
@@ -328,7 +320,7 @@ def deriv_bot_core_logic(symbol, mode, api_token):
                     'trend': f'NEUTRA ({granularity_minutes}m)', 
                     'confidence': 30,
                     'strategy_used': strategy_used,
-                    'justification': justification 
+                    'justification': justification # Usa a justificativa de mercado neutro
                 })
                 add_log("Tendência Neutra. Aguardando a próxima análise...")
                 
@@ -347,7 +339,6 @@ def deriv_bot_core_logic(symbol, mode, api_token):
 
 @app.route('/')
 def index():
-    # Certifique-se de que o seu template HTML está na pasta 'templates'
     return render_template('index.html')
 
 @app.route('/control', methods=['POST'])
