@@ -1,6 +1,6 @@
 Flask
 websocket-client
 pandas
-pandas-ta
+pandas-ta==0.2.45b0
 gunicorn
 waitress
