@@ -55,7 +55,10 @@ def connect_ws(url, api_token):
     """Cria e autentica a conexão WebSocket usando o token fornecido pelo frontend."""
     ws = create_connection(url)
     
-    ws.send(json.dumps({"authorize": api_token})) 
+    # Adiciona .strip() para remover espaços invisíveis que causam erros de validação
+    cleaned_token = api_token.strip() 
+    
+    ws.send(json.dumps({"authorize": cleaned_token})) 
     auth_response = json.loads(ws.recv())
     
     if auth_response.get('error'):
@@ -228,7 +231,7 @@ def fetch_candle_data(ws, symbol, granularity=300):
         add_log(f"ERRO API (Candles): {error_msg}")
         return "NEUTRA", 0, "Erro de API ao buscar velas", "ADX: --", "Erro de API" 
 
-    # 2. VERIFICAÇÃO ROBUSTA DA CHAVE 'CANDLES' (Correção do KeyError: 'candles')
+    # 2. VERIFICAÇÃO ROBUSTA DA CHAVE 'CANDLES'
     if response.get('msg_type') != 'history' or 'candles' not in response:
         add_log(f"AVISO: Resposta de velas inesperada. Tipo de mensagem: {response.get('msg_type')}. Pulando análise de velas.")
         return "NEUTRA", 0, "Resposta de velas incompleta", "ADX: --", "Falha de Dados" 
@@ -243,8 +246,6 @@ def fetch_candle_data(ws, symbol, granularity=300):
     df.ta.ema(length=10, append=True)
     df.ta.adx(length=14, append=True)
     df.ta.stoch(k=14, d=3, append=True)
-    
-    # A detecção de Candlestick é feita em 'check_confirmation'
     
     trend, justification, confidence, indicator_status, strategy_used = strategy_selection_engine(
         df, granularity // 60)
@@ -305,8 +306,9 @@ def deriv_bot_core_logic(symbol, mode, api_token):
     WS_URL_BASE = f"wss://ws.binaryws.com/websockets/v3?app_id={MY_APP_ID}"
     WS_URL_DERIV = f"wss://ws.derivws.com/websockets/v3?app_id={MY_APP_ID}"
     
-    # Usa o URL de Deriv (mais comum para tokens) ou Binary (para modo demo)
-    WS_URL = WS_URL_DERIV if mode == 'real' else WS_URL_BASE # Mantemos a distinção para flexibilidade
+    # CORREÇÃO FINAL DE AUTENTICAÇÃO: Usamos o URL da Deriv (Produção) sempre, 
+    # pois tokens novos causam "Sorry, an error occurred" no URL da Binary/Demo.
+    WS_URL = WS_URL_DERIV 
     
     add_log(f"Iniciando Bot. App ID: {MY_APP_ID}. Ativo: {symbol}, Modo: {mode}.")
 
@@ -345,6 +347,7 @@ def deriv_bot_core_logic(symbol, mode, api_token):
 
 @app.route('/')
 def index():
+    # Certifique-se de que o seu template HTML está na pasta 'templates'
     return render_template('index.html')
 
 @app.route('/control', methods=['POST'])
