@@ -63,52 +63,99 @@ def connect_ws(url, api_token):
     
     return ws
 
-# --- AUXILIAR 1: TENTAR CALCULAR INDICADOR DE FORMA SEGURA ---
-def safe_candlestick_ta(df, pattern_name, log_func):
-    """Tenta calcular um padrão de candlestick usando o método direto; se falhar, usa o método genérico."""
-    try:
-        getattr(df.ta, f'cdl_{pattern_name}')(append=True)
-    except AttributeError:
-        log_func(f"AVISO: cdl_{pattern_name} direto falhou. Usando cdl_pattern genérico.")
-        df.ta.cdl_pattern(name=pattern_name, append=True)
-    except Exception as e:
-        log_func(f"AVISO CRÍTICO: Falha desconhecida ao calcular {pattern_name}: {e}")
-# --- FIM DO AUXILIAR 1 ---
+# --- LÓGICA DE DETECÇÃO DE CANDLESTICK (Substitui o pandas-ta para padrões) ---
 
+def detect_candlestick_pattern(df):
+    """
+    Detecta os padrões de candlestick de reversão (Martelo, Estrela Cadente e Engolfo) 
+    usando a lógica OHLC. 
+    Retorna 100 para Bullish Forte, -100 para Bearish Forte, 0 caso contrário.
+    """
+    
+    # É necessário pelo menos 2 velas para o Engolfo e para referências de preço
+    if len(df) < 2:
+        return 0
+        
+    c = df.iloc[-1] # Vela Atual (Current)
+    p = df.iloc[-2] # Vela Anterior (Previous)
+    
+    # Cálculo do Range e Corpo
+    range_c = c['High'] - c['Low']
+    body_c = abs(c['Close'] - c['Open'])
 
-# --- ESTRATÉGIA: CONFIRMAÇÃO DE PADRÕES E S/R (Versão para Diagnóstico) ---
+    # Evita divisão por zero e velas não-significativas
+    if range_c == 0 or range_c < 0.00001:
+        return 0
+
+    # Critério comum: Corpo deve ser pequeno em relação ao range total da vela
+    is_small_body = body_c < 0.3 * range_c
+    
+    # --- 1. MARTELO (BULLISH HAMMER) ---
+    lower_shadow_c = min(c['Open'], c['Close']) - c['Low']
+    is_hammer = is_small_body and (lower_shadow_c > 2 * body_c)
+
+    if is_hammer:
+        return 100 
+
+    # --- 2. ESTRELA CADENTE (BEARISH SHOOTING STAR) ---
+    upper_shadow_c = c['High'] - max(c['Open'], c['Close'])
+    is_shooting_star = is_small_body and (upper_shadow_c > 2 * body_c)
+
+    if is_shooting_star:
+        return -100 
+
+    # --- 3. ENGOLFO (BULLISH/BEARISH ENGULFING) ---
+    range_p = p['High'] - p['Low']
+    
+    # Engolfo de Baixa (Bearish Engulfing): Vela vermelha que engole a verde anterior
+    is_bear_engulf = (c['Close'] < c['Open']) and (p['Close'] > p['Open']) and \
+                     (c['Open'] > p['Close']) and (c['Close'] < p['Open']) and \
+                     (body_c > range_p)
+
+    # Engolfo de Alta (Bullish Engulfing): Vela verde que engole a vermelha anterior
+    is_bull_engulf = (c['Close'] > c['Open']) and (p['Close'] < p['Open']) and \
+                     (c['Open'] < p['Close']) and (c['Close'] > p['Open']) and \
+                     (body_c > range_p)
+
+    if is_bear_engulf:
+        return -100
+    if is_bull_engulf:
+        return 100
+
+    return 0 
+
+# --- ESTRATÉGIA: CONFIRMAÇÃO DE PADRÕES E S/R ---
 
 def check_confirmation(df, current_close):
     """
     Verifica se há padrões de candlestick de reversão E se o preço está próximo 
     de um Suporte ou Resistência recente.
-    NOTA: Esta versão é para diagnóstico e PODE FALHAR com KeyError
     """
     
     # 1. Identificação Simples de S/R (Max/Min)
     recent_high = df['High'].iloc[-S_R_LOOKBACK:].max()
     recent_low = df['Low'].iloc[-S_R_LOOKBACK:].min()
     
-    SR_TOLERANCE = 0.0005 # 0.05% de tolerância
+    SR_TOLERANCE = 0.0005 
     is_near_resistance = (recent_high - current_close) / recent_high < SR_TOLERANCE
     is_near_support = (current_close - recent_low) / recent_low < SR_TOLERANCE
 
-    # 2. Detecção de Padrões de Candlestick
-    # NOTA: O bot irá falhar aqui se a coluna (ex: CDL_HAMMER) não existir,
-    # mas só depois de imprimir o log de diagnóstico.
-    is_bullish_pattern = (df['CDL_HAMMER'].iloc[-1] > 0) or (df['CDL_ENGULFING'].iloc[-1] > 0)
-    is_bearish_pattern = (df['CDL_SHOOTINGSTAR'].iloc[-1] < 0) or (df['CDL_ENGULFING'].iloc[-1] < 0)
+    # 2. Detecção de Padrões de Candlestick (Detecção Interna confiável)
+    pattern_val = detect_candlestick_pattern(df) 
+
+    is_bullish_pattern = (pattern_val > 0)
+    is_bearish_pattern = (pattern_val < 0)
             
     # 3. Formação da Justificativa
     confirmation_bullish, confirmation_bearish = "", ""
     
     if is_near_support and is_bullish_pattern:
-        confirmation_bullish = "Forte: Candlestick Bullish na Zona de Suporte."
+        confirmation_bullish = "Forte: Candlestick Bullish (Reversão) na Zona de Suporte."
     elif is_near_support:
         confirmation_bullish = "Suporte: Preço na Zona de Suporte Recente."
         
     if is_near_resistance and is_bearish_pattern:
-        confirmation_bearish = "Forte: Candlestick Bearish na Zona de Resistência."
+        confirmation_bearish = "Forte: Candlestick Bearish (Reversão) na Zona de Resistência."
     elif is_near_resistance:
         confirmation_bearish = "Resistência: Preço na Zona de Resistência Recente."
 
@@ -127,8 +174,6 @@ def strategy_selection_engine(df, granularity_minutes):
     current_stoch_k = df['STOCHk_14_3_3'].iloc[-1]
     
     # Obter Confirmação de S/R e Padrões
-    # NOTA: A variável 'current_low' que causou erro anteriormente não existe aqui.
-    # Assumimos que a correção foi feita na linha onde ela estava.
     conf_call, conf_put, recent_low, recent_high = check_confirmation(df, current_close)
     
     # Status dos Indicadores
@@ -136,6 +181,7 @@ def strategy_selection_engine(df, granularity_minutes):
     
     # Preparação da Decisão
     trend, confidence, strategy_used = "NEUTRA", 40, "Análise de Contexto"
+    # **A correção do 'current_low' está implicitamente resolvida, pois usamos 'recent_low' e 'current_close'**
     justification = "O mercado está em consolidação e sem sinais claros de extremos. Aguardando novo contexto."
 
     # --- DECISÃO DE CONTEXTO ---
@@ -189,26 +235,18 @@ def fetch_candle_data(ws, symbol, granularity=300):
     df = pd.DataFrame(response['candles'])
     df = df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close'}).astype(float)
     
-    # Cálculo de Indicadores Múltiplos
+    # Cálculo de Indicadores Múltiplos (Pandas-TA ainda é usado aqui, pois é rápido e funciona)
     df.ta.ema(length=10, append=True)
     df.ta.adx(length=14, append=True)
     df.ta.stoch(k=14, d=3, append=True)
     
-    # Padrões de Candlestick (USANDO FUNÇÃO AUXILIAR CORRIGIDA)
-    safe_candlestick_ta(df, "hammer", add_log)
-    safe_candlestick_ta(df, "engulfing", add_log)
-    safe_candlestick_ta(df, "shootingstar", add_log)
-    
-    # --- LINHA DE DIAGNÓSTICO CRÍTICA ---
-    add_log(f"COLUNAS DISPONÍVEIS: {df.columns.tolist()}")
-    # ------------------------------------
+    # *** O CALCULO DE CANDLESTICK DO PANDAS-TA FOI REMOVIDO DAQUI ***
+    # *** Ele é agora feito internamente na função detect_candlestick_pattern(df) ***
 
     trend, justification, confidence, indicator_status, strategy_used = strategy_selection_engine(
         df, granularity // 60)
     
     return trend, justification, confidence, indicator_status, strategy_used
-
-# ... (Resto do código: monitor_ticks_and_signal, deriv_bot_core_logic, e rotas Flask permanecem inalterados) ...
 
 def monitor_ticks_and_signal(ws, symbol, trend, justification, confidence, indicator_status, strategy_used, granularity_minutes):
     """Monitoriza ticks e gera o Sinal Final (Timing)."""
@@ -296,6 +334,8 @@ def deriv_bot_core_logic(symbol, mode, api_token):
         BOT_STATUS = "OFF"
         add_log("Bot Parado.")
 
+
+# --- ROTAS FLASK PARA CONTROLO E INTERFACE ---
 
 @app.route('/')
 def index():
