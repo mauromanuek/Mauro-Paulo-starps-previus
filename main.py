@@ -749,7 +749,7 @@ def control_bot():
             return jsonify({'status': 'ERROR', 'message': 'Token API não fornecido.'}), 400
         
         # Simples check de validade do token
-        if len(api_token.strip()) < 40: 
+        if len(api_token.strip()) < 10: 
             return jsonify({'status': 'ERROR', 'message': 'Token API inválido (muito curto).'}), 400
             
         BOT_STATUS = "ON"
