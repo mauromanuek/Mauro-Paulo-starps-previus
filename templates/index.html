@@ -2,222 +2,101 @@
 <html lang="pt">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RobotMagic Pro - Sniper Edition</title>
+    <title>RobotMagic Sniper v2.5</title>
     <style>
-        /* Estilo Dark - Estética Deriv/TradingView */
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #0e1117;
-            color: #d1d1d1;
-            margin: 0;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            transition: background 0.5s, border 0.5s;
-        }
-        .container { width: 100%; max-width: 900px; }
-        .card {
-            background-color: #1c1f24;
-            border-radius: 12px;
-            padding: 25px;
-            margin-bottom: 20px;
-            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
-            border: 1px solid #2d333b;
-        }
-        h1, h2, h3 { color: #ffffff; margin-top: 0; }
-        
-        /* Cronômetro e Alertas */
-        .timer-container { text-align: center; border-bottom: 2px solid #3b82f6; padding-bottom: 10px; }
-        #candle-countdown {
-            font-size: 4em;
-            font-weight: bold;
-            color: #fbbf24;
-            text-shadow: 0 0 10px rgba(251, 191, 36, 0.3);
-        }
-
-        /* Status e Inputs */
-        input, select, button {
-            padding: 12px;
-            border-radius: 6px;
-            border: 1px solid #30363d;
-            background-color: #0d1117;
-            color: white;
-            font-size: 14px;
-        }
-        button { cursor: pointer; font-weight: bold; transition: 0.3s; border: none; }
-        .btn-start { background-color: #238636; width: 120px; }
-        .btn-start:hover { background-color: #2ea043; }
-        .btn-stop { background-color: #da3633; width: 120px; }
-        .btn-stop:hover { background-color: #f85149; }
-
-        /* Sinalização */
-        #signal-header-box {
-            padding: 20px;
-            border-radius: 8px;
-            text-align: center;
-            margin-bottom: 15px;
-            background-color: #374151;
-            transition: 0.5s;
-        }
-        #main-direction-text { font-size: 2.2em; margin: 0; font-weight: 800; letter-spacing: 2px; }
-        
-        .sniper-mode {
-            border: 10px solid #fbbf24 !important;
-            box-shadow: 0 0 30px rgba(251, 191, 36, 0.5);
-        }
-
-        #log-area {
-            background-color: #000;
-            color: #00ff00;
-            padding: 15px;
-            font-family: 'Courier New', monospace;
-            height: 180px;
-            overflow-y: auto;
-            border-radius: 5px;
-            font-size: 13px;
-            white-space: pre-wrap;
-        }
+        body { background: #0e1117; color: #fff; font-family: sans-serif; text-align: center; transition: 0.5s; margin: 0; padding: 20px; }
+        .card { background: #1c1f24; padding: 20px; border-radius: 12px; margin: 10px auto; max-width: 700px; border: 1px solid #2d333b; }
+        #countdown { font-size: 4em; color: #fbbf24; font-weight: bold; }
+        .signal-header { font-size: 2.5em; font-weight: 800; padding: 20px; border-radius: 8px; margin: 15px 0; }
+        .btn { padding: 15px 30px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; margin: 5px; }
+        #log-area { background: #000; color: #00ff41; padding: 15px; height: 150px; overflow-y: auto; text-align: left; font-family: monospace; border-radius: 5px; }
+        /* Modo Sniper */
+        .sniper-active { border: 12px solid #fbbf24 !important; box-shadow: 0 0 40px #fbbf24; background: #2b2100 !important; }
     </style>
 </head>
 <body>
-    <audio id="alertSound" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg"></audio>
+    <audio id="beep" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg"></audio>
 
-    <div class="container">
-        <div class="card timer-container">
-            <h3>FECHAMENTO DA VELA (5M)</h3>
-            <div id="candle-countdown">00:00</div>
-            <p id="timer-info">Prepare-se para o sinal nos últimos segundos</p>
+    <div class="card">
+        <h3>FECHAMENTO (5M)</h3>
+        <div id="countdown">00:00</div>
+    </div>
+
+    <div class="card">
+        <input type="text" id="token" placeholder="API Token Deriv" style="padding: 12px; width: 60%; border-radius: 5px; border: none;">
+        <br><br>
+        <button class="btn" style="background: #10b981; color: white;" onclick="start('start')">LIGAR SNIPER</button>
+        <button class="btn" style="background: #ef4444; color: white;" onclick="start('stop')">PARAR</button>
+    </div>
+
+    <div id="main-card" class="card">
+        <div id="signal-box" class="signal-header">AGUARDANDO...</div>
+        <p id="justification" style="font-size: 1.2em;">O bot analisará Sniper e Fluxo simultaneamente.</p>
+        <div style="display: flex; justify-content: space-around; font-weight: bold; color: #fbbf24;">
+            <div>Confiança: <span id="conf">0</span>%</div>
+            <div>Estratégia: <span id="strat">--</span></div>
         </div>
+    </div>
 
-        <div class="card">
-            <div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
-                <input type="text" id="api-token-input" placeholder="Seu Token Deriv (Admin)">
-                <select id="symbol-select">
-                    <option value="R_100">Volatility 100</option>
-                    <option value="R_75">Volatility 75</option>
-                    <option value="R_50">Volatility 50</option>
-                    <option value="R_25">Volatility 25</option>
-                    <option value="R_10">Volatility 10</option>
-                </select>
-                <button class="btn-start" id="start-bot-btn" onclick="controlBot('start')">LIGAR SNIPER</button>
-                <button class="btn-stop" id="stop-bot-btn" onclick="controlBot('stop')">PARAR</button>
-            </div>
-            <p style="text-align: center; margin-top: 15px;">Status do Servidor: <strong id="bot-status-text">OFF</strong></p>
-        </div>
-
-        <div class="card" id="signal-display-card">
-            <div id="signal-header-box">
-                <h1 id="main-direction-text">AGUARDANDO ANALISE...</h1>
-            </div>
-
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; text-align: center;">
-                <div class="card" style="background: #252a31;">
-                    <p>Confiança</p>
-                    <h2 id="confidence-text">--%</h2>
-                </div>
-                <div class="card" style="background: #252a31;">
-                    <p>Estratégia</p>
-                    <h2 id="strategy-text">Nenhuma</h2>
-                </div>
-            </div>
-
-            <div id="justification-box" style="padding: 15px; background: #0d1117; border-radius: 8px;">
-                <h4 style="color: #fbbf24; margin-top: 0;">JUSTIFICATIVA (PORQUÊ CLICAR):</h4>
-                <p id="justification-text">Inicie o bot para análise multifuncional de fluxo e rejeição.</p>
-                <p id="indicator-status-text" style="font-size: 0.85em; color: #888; border-top: 1px solid #333; padding-top: 5px;"></p>
-            </div>
-
-            <div style="margin-top: 15px; display: flex; justify-content: space-between; font-size: 0.9em;">
-                <span>ENTRADA: <strong id="signal-entry-time">--:--:--</strong></span>
-                <span>EXPIRAÇÃO: <strong id="signal-exit-time">--:--:--</strong></span>
-            </div>
-        </div>
-
-        <div class="card">
-            <h3>LOGS DE ATIVIDADE</h3>
-            <pre id="log-area">Aguardando dados do servidor...</pre>
-        </div>
+    <div class="card">
+        <h4>Logs do Sistema</h4>
+        <pre id="log-area">Aguardando comando...</pre>
     </div>
 
     <script>
         let confidence = 0;
-        const alertSound = document.getElementById('alertSound');
+        const beep = document.getElementById('beep');
 
-        // CRONÔMETRO SINCRONIZADO 5M
-        function updateTimer() {
+        // Cronómetro
+        setInterval(() => {
             const now = new Date();
-            const min = now.getUTCMinutes();
-            const sec = now.getUTCSeconds();
-            const remMin = 4 - (min % 5);
-            const remSec = 59 - sec;
-            
-            document.getElementById('candle-countdown').innerText = 
-                `${remMin.toString().padStart(2,'0')}:${remSec.toString().padStart(2,'0')}`;
-            
-            // TOCAR ALERTA NO FINAL DA VELA (Se houver sinal com confiança > 80)
-            if (remMin === 0 && remSec <= 2 && confidence >= 80) {
-                alertSound.play();
-            }
-        }
-        setInterval(updateTimer, 1000);
+            const rm = 4 - (now.getUTCMinutes() % 5);
+            const rs = 59 - now.getUTCSeconds();
+            document.getElementById('countdown').innerText = `${rm}:${rs.toString().padStart(2, '0')}`;
+            // Beep nos últimos 2 segundos se houver sinal forte
+            if (rm === 0 && rs <= 2 && confidence >= 85) beep.play().catch(()=>{});
+        }, 1000);
 
-        // FUNÇÃO DE CONTROLE
-        async function controlBot(action) {
-            const token = document.getElementById('api-token-input').value;
-            const symbol = document.getElementById('symbol-select').value;
-            
-            try {
-                const res = await fetch('/control', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({action: action, symbol: symbol, api_token: token})
-                });
-                const data = await res.json();
-                document.getElementById('bot-status-text').innerText = data.status;
-            } catch(e) { console.error("Erro ao enviar comando."); }
+        async function start(action) {
+            beep.play().catch(()=>{}); // Desbloqueia áudio no navegador
+            const t = document.getElementById('token').value;
+            await fetch('/control', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({action: action, symbol: 'R_100', api_token: t})
+            });
         }
 
-        // POLLING DE STATUS (Atualiza a cada 2 segundos)
-        async function poll() {
+        async function update() {
             try {
                 const res = await fetch('/status');
                 const data = await res.json();
                 const sig = data.signal_data;
                 confidence = sig.confidence;
 
-                // Logs
                 document.getElementById('log-area').innerText = data.logs.join('\n');
-                document.getElementById('bot-status-text').innerText = data.status;
-
-                // UI do Sinal
-                const box = document.getElementById('signal-header-box');
-                const card = document.getElementById('signal-display-card');
+                document.getElementById('log-area').scrollTop = 99999;
                 
-                document.getElementById('main-direction-text').innerText = sig.direction;
-                document.getElementById('confidence-text').innerText = sig.confidence + '%';
-                document.getElementById('strategy-text').innerText = sig.strategy_used;
-                document.getElementById('justification-text').innerText = sig.justification;
-                document.getElementById('indicator-status-text').innerText = sig.indicator_status;
-                document.getElementById('signal-entry-time').innerText = sig.entry_time;
-                document.getElementById('signal-exit-time').innerText = sig.exit_time;
+                const box = document.getElementById('signal-box');
+                const card = document.getElementById('main-card');
 
-                // Cores e Efeito Sniper
-                if(sig.direction === 'CALL') box.style.background = '#059669';
-                else if(sig.direction === 'PUT') box.style.background = '#dc2626';
-                else box.style.background = '#374151';
+                box.innerText = sig.direction;
+                document.getElementById('justification').innerText = sig.justification;
+                document.getElementById('conf').innerText = sig.confidence;
+                document.getElementById('strat').innerText = sig.strategy_used;
 
-                if(sig.confidence >= 98) {
-                    card.classList.add('sniper-mode');
-                    document.body.style.background = '#1a1405';
-                } else {
-                    card.classList.remove('sniper-mode');
-                    document.body.style.background = '#0e1117';
-                }
-            } catch(e) { console.error("Falha ao buscar status do servidor."); }
+                // Cores Vibrantes
+                if(sig.direction === 'CALL') box.style.background = '#00ff41', box.style.color = '#000';
+                else if(sig.direction === 'PUT') box.style.background = '#ff0000', box.style.color = '#fff';
+                else box.style.background = '#374151', box.style.color = '#fff';
+
+                // Modo Sniper (Visual Ouro)
+                if(sig.confidence >= 98) card.classList.add('sniper-active'), document.body.style.background = '#1a1405';
+                else card.classList.remove('sniper-active'), document.body.style.background = '#0e1117';
+
+            } catch(e){}
         }
-        setInterval(poll, 2000);
+        setInterval(update, 2000);
     </script>
 </body>
 </html>
