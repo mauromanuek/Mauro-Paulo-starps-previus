@@ -21,13 +21,11 @@ LOG_MESSAGES = []
 CURRENT_SYMBOL = "R_100" 
 
 FINAL_SIGNAL_DATA = {
-    'direction': 'AGUARDANDO', 
-    'confidence': 0,
-    'indicator_status': 'EMA: --, RSI: --, ATR: --',
-    'justification': 'O bot está a analisar o fluxo das velas...',
+    'direction': 'AGUARDANDO', 'confidence': 0,
+    'indicator_status': 'Aguardando dados...',
+    'justification': 'Inicie o bot para análise.',
     'strategy_used': 'Nenhuma',
-    'entry_time': '--:--:--',
-    'exit_time': '--:--:--'
+    'entry_time': '--:--:--', 'exit_time': '--:--:--'
 }
 
 def add_log(message):
@@ -38,7 +36,6 @@ def add_log(message):
     if len(LOG_MESSAGES) > MAX_LOG_SIZE: LOG_MESSAGES.pop(0)
 
 def calculate_indicators(df):
-    # Indicadores para Certeza Absoluta
     df['EMA_10'] = df['Close'].ewm(span=10, adjust=False).mean()
     delta = df['Close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
@@ -56,39 +53,41 @@ def strategy_selection_engine(df):
     total_range = c['High'] - c['Low']
     upper_wick = c['High'] - max(c['Open'], c['Close'])
     lower_wick = min(c['Open'], c['Close']) - c['Low']
-    
-    status = f"RSI: {c['RSI']:.2f} | BBU: {c['BBU']:.2f} | Corpo: {body:.2f}"
+    status = f"RSI: {c['RSI']:.2f} | BBU: {c['BBU']:.2f}"
 
-    # 1. ESTRATÉGIA SNIPER (CERTEZA 99%)
+    # SNIPER (99%)
     if c['RSI'] > 80 and c['Close'] >= c['BBU'] and upper_wick > (body * 0.8):
-        return "PUT", "⚠️ SNIPER: Rejeição institucional extrema detectada. Certeza de queda iminente.", 99, "Sniper Reversal", status
-    
+        return "PUT", "⚠️ SNIPER: Rejeição institucional no topo. 99% de certeza de queda.", 99, "Sniper Reversal", status
     if c['RSI'] < 20 and c['Close'] <= c['BBL'] and lower_wick > (body * 0.8):
-        return "CALL", "⚠️ SNIPER: Suporte institucional atingido com forte pavio de rejeição. Certeza de ALTA.", 99, "Sniper Reversal", status
+        return "CALL", "⚠️ SNIPER: Suporte extremo com pavio longo. 99% de certeza de alta.", 99, "Sniper Reversal", status
 
-    # 2. ESTRATÉGIA DE FLUXO (85%) - PREDIÇÃO DA PRÓXIMA VELA
+    # FLUXO (85%)
     if body > (total_range * 0.75):
         if c['Close'] > c['Open'] and c['Close'] > c['EMA_10']:
-            return "CALL", "FLUXO: Vela de força compradora sem resistência. Próxima vela: ALTA.", 85, "Momentum Flow", status
+            return "CALL", "FLUXO: Próxima vela deve seguir a alta.", 85, "Momentum Flow", status
         if c['Close'] < c['Open'] and c['Close'] < c['EMA_10']:
-            return "PUT", "FLUXO: Pressão vendedora dominante. Próxima vela: BAIXA.", 85, "Momentum Flow", status
+            return "PUT", "FLUXO: Próxima vela deve seguir a baixa.", 85, "Momentum Flow", status
 
-    return "NEUTRA", "Mercado em consolidação. Aguardando sinal de alta probabilidade...", 0, "Nenhuma", status
+    return "NEUTRA", "Mercado lateral. Aguardando confluência...", 0, "Nenhuma", status
 
 def deriv_bot_core_logic(symbol, api_token):
-    global BOT_STATUS, FINAL_SIGNAL_DATA
-    while BOT_STATUS == "ON":
-        try:
-            ws = create_connection(DERIV_URL)
-            ws.send(json.dumps({"authorize": api_token}))
-            auth = json.loads(ws.recv())
-            if "error" in auth:
-                add_log("Erro: Token Inválido")
-                break
+    global BOT_STATUS
+    add_log("🔄 A tentar conectar à Deriv...")
+    try:
+        ws = create_connection(DERIV_URL)
+        ws.send(json.dumps({"authorize": api_token}))
+        auth = json.loads(ws.recv())
+        
+        if "error" in auth:
+            add_log(f"❌ ERRO: Token Inválido! {auth['error']['message']}")
+            BOT_STATUS = "OFF"
+            return
 
+        add_log("✅ CONECTADO COM SUCESSO! Motor Sniper/Fluxo Ativo.")
+        
+        while BOT_STATUS == "ON":
             ws.send(json.dumps({"ticks_history": symbol, "end": "latest", "count": 100, "style": "candles", "granularity": 300}))
             data = json.loads(ws.recv())
-
             if "candles" in data:
                 df = pd.DataFrame(data['candles']).rename(columns={'open':'Open','high':'High','low':'Low','close':'Close'})
                 df = calculate_indicators(df)
@@ -101,12 +100,12 @@ def deriv_bot_core_logic(symbol, api_token):
                     'entry_time': now.strftime('%H:%M:%S'),
                     'exit_time': (now + timedelta(minutes=5)).strftime('%H:%M:%S')
                 })
-                add_log(f"Análise: {dir} | Confiança: {conf}%")
-            ws.close()
-            time.sleep(15) 
-        except Exception as e:
-            add_log(f"Erro de Conexão: {e}")
-            time.sleep(10)
+                if dir != "NEUTRA": add_log(f"Sinal: {dir} ({conf}%) - {strat}")
+            time.sleep(20)
+        ws.close()
+    except Exception as e:
+        add_log(f"Erro Crítico: {e}")
+        BOT_STATUS = "OFF"
 
 @app.route('/')
 def index(): return render_template('index.html')
@@ -116,9 +115,10 @@ def control():
     global BOT_STATUS, BOT_THREAD
     data = request.json
     if data['action'] == 'start':
-        BOT_STATUS = "ON"
-        BOT_THREAD = threading.Thread(target=deriv_bot_core_logic, args=(data['symbol'], data['api_token']))
-        BOT_THREAD.start()
+        if BOT_STATUS == "OFF":
+            BOT_STATUS = "ON"
+            BOT_THREAD = threading.Thread(target=deriv_bot_core_logic, args=(data['symbol'], data['api_token']))
+            BOT_THREAD.start()
     else: BOT_STATUS = "OFF"
     return jsonify({'status': BOT_STATUS})
 
