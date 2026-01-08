@@ -1,0 +1,9 @@
+# Ignorar arquivos de configuração com senhas
+config.py
+.env
+
+# Ignorar pastas temporárias do Python
+__pycache__/
+*.pyc
+.pytest_cache
+venv/
