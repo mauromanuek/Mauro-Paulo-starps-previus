@@ -1,28 +1,35 @@
-:root { --bg: #0b0c11; --side: #12141d; --accent: #ff4400; }
-body, html { margin: 0; padding: 0; height: 100%; background: var(--bg); color: white; font-family: sans-serif; overflow: hidden; }
+:root { --bg: #0a0b10; --side: #12141d; --accent: #ff4400; }
+body, html { margin: 0; padding: 0; height: 100%; background: var(--bg); color: white; overflow: hidden; font-family: sans-serif; }
 
 .view { display: none; height: 100%; }
 .view.active { display: block; }
 
-header { height: 60px; background: var(--side); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid #222; }
+header { height: 60px; background: var(--side); display: flex; justify-content: space-between; align-items: center; padding: 0 20px; border-bottom: 1px solid #222; }
+.badge { background: #333; padding: 5px 10px; border-radius: 4px; font-size: 12px; border: 1px solid var(--accent); }
 
-.main-wrapper { display: flex; height: calc(100% - 60px); position: relative; }
+.wrapper { display: flex; height: calc(100% - 60px); position: relative; }
 
-/* SIDEBAR DESLIZANTE */
+/* MENU LATERAL */
 #sidebar { 
     width: 250px; background: var(--side); height: 100%; position: absolute; 
     left: -250px; transition: 0.3s; z-index: 100; border-right: 1px solid #222; 
 }
 #sidebar.active { left: 0; }
-.nav-section { padding: 20px 20px 5px; color: #555; font-size: 11px; }
-#sidebar li { padding: 15px 20px; cursor: pointer; border-bottom: 1px solid #1a1a1a; list-style: none; }
-#sidebar li:hover { color: var(--accent); background: #1a1a1a; }
+.nav-title { padding: 20px 20px 5px; font-size: 11px; color: #555; }
+#sidebar ul { list-style: none; padding: 0; }
+#sidebar li { padding: 15px 20px; cursor: pointer; border-bottom: 1px solid #1a1a1a; }
+#sidebar li:hover { background: #1a1a1a; color: var(--accent); }
 
-/* GRÁFICO E IA */
-.trading-area { flex-grow: 1; display: flex; flex-direction: column; width: 100%; }
-.ia-status-bar { display: flex; background: #12141d; padding: 10px; gap: 20px; border-bottom: 1px solid #222; font-size: 13px; }
-#chart-widget-container { flex-grow: 1; width: 100%; background: #000; }
+/* CONTEÚDO E GRÁFICO GIGANTE */
+.main-content { flex-grow: 1; display: flex; flex-direction: column; width: 100%; }
+.app-screen { display: none; height: 100%; width: 100%; flex-direction: column; }
+.app-screen.active { display: flex; }
 
-.login-card { width: 320px; margin: 150px auto; background: var(--side); padding: 40px; border-radius: 8px; text-align: center; }
-input { width: 90%; padding: 12px; margin-bottom: 20px; background: #000; border: 1px solid #333; color: white; }
-button { width: 100%; padding: 12px; background: var(--accent); color: white; border: none; font-weight: bold; cursor: pointer; }
+.signal-bar { display: grid; grid-template-columns: 1fr 1fr 2fr; background: #12141d; padding: 10px; border-bottom: 1px solid #222; }
+.sig-box { border-right: 1px solid #222; padding-left: 15px; }
+
+.full-chart { flex-grow: 1; width: 100%; background: #000; }
+
+/* ESTILOS TELAS EXTRAS */
+.centered-info, .trade-container { padding: 50px; text-align: center; }
+.confirm-btn { background: #00ff88; color: black; padding: 15px 30px; border: none; font-weight: bold; cursor: pointer; }
