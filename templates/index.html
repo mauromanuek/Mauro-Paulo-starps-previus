@@ -3,98 +3,114 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Previus-Starps | OS</title>
+    <title>Previus-Starps OS</title>
     <link rel="stylesheet" href="/static/style.css">
-    <style>
-        /* Ajustes rápidos de Identidade Visual */
-        :root { --accent-primary: #ff4400; --bg-deriv: #10111a; }
-        body { background-color: var(--bg-deriv); color: #fff; font-family: 'Inter', sans-serif; }
-        .btn-up { background: #00a081; color: white; border: none; padding: 15px; border-radius: 5px; cursor: pointer; font-weight: bold; }
-        .btn-down { background: #ef4444; color: white; border: none; padding: 15px; border-radius: 5px; cursor: pointer; font-weight: bold; }
-    </style>
+    <script src="https://s3.tradingview.com/tv.js"></script>
 </head>
 <body>
-
-    <div id="login-screen" class="view-active">
-        <div style="max-width: 400px; margin: 100px auto; text-align: center; background: #1c1e2c; padding: 30px; border-radius: 10px;">
-            <h1 style="color: var(--accent-primary);">PREVIUS-STARPS</h1>
-            <p>Conecte sua conta Deriv para iniciar</p>
-            <input type="password" id="tokenInput" placeholder="Insira seu Token API" style="width: 90%; padding: 10px; margin: 20px 0; border-radius: 5px; border: 1px solid #333; background: #0e0e15; color: white;">
-            <button onclick="connectBot()" style="width: 95%; padding: 12px; background: var(--accent-primary); border: none; color: white; border-radius: 5px; cursor: pointer; font-weight: bold;">CONECTAR AGORA</button>
-            <p id="statusLabel" style="font-size: 12px; margin-top: 15px; color: #888;"></p>
+    <div id="login-view" class="view active">
+        <div class="login-card">
+            <h1 style="color:#ff4400">PREVIUS-STARPS</h1>
+            <p>Insira o seu Token API da Deriv</p>
+            <input type="password" id="tokenInput" placeholder="Token aqui...">
+            <button onclick="connectToServer()">CONECTAR SISTEMA</button>
+            <p id="status-msg" style="margin-top:10px; font-size:12px; color:#888"></p>
         </div>
     </div>
 
-    <div id="main-dashboard" style="display: none;">
-        <header style="display: flex; justify-content: space-between; padding: 15px; background: #161722; border-bottom: 1px solid #252736;">
-            <div style="font-weight: bold; color: var(--accent-primary);">PREVIUS-STARPS v1.0</div>
-            <div id="userInfo">Saldo: <span id="balanceDisplay">$0.00</span></div>
+    <div id="dashboard-view" class="view">
+        <header>
+            <div class="header-left">
+                <button class="menu-btn" onclick="toggleMenu()">☰</button>
+                <span class="logo">STARPS OS</span>
+            </div>
+            <div class="header-right">
+                <span id="balance-display">$0.00</span>
+                <span id="type-display" class="badge">DEMO</span>
+            </div>
         </header>
 
-        <div style="display: flex; height: 90vh;">
-            <nav style="width: 200px; background: #161722; border-right: 1px solid #252736; padding: 20px;">
-                <ul style="list-style: none; padding: 0;">
-                    <li style="margin-bottom: 20px; cursor: pointer;">📊 Análise Geral</li>
-                    <li style="margin-bottom: 20px; cursor: pointer; color: var(--accent-primary);">⚡ Trade Rápido</li>
-                    <li style="margin-bottom: 20px; cursor: pointer;">⚙️ Configurações</li>
+        <div class="main-layout">
+            <nav id="sidebar">
+                <ul>
+                    <li class="active">Análise em Tempo Real</li>
+                    <li>Histórico de Sinais</li>
+                    <li>Gestão de Risco</li>
                 </ul>
             </nav>
 
-            <main style="flex-grow: 1; padding: 20px; display: flex; flex-direction: column;">
-                <div id="analysis-box" style="background: #1c1e2c; padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 5px solid var(--accent-primary);">
-                    <h3>IA PREVISÃO: <span id="iaDirection">ANALISANDO...</span></h3>
-                    <p id="iaReason" style="color: #aaa;">Aguardando fluxo de dados dos ticks...</p>
-                    <div style="font-size: 24px; font-weight: bold; color: #00a081;" id="iaProb">--%</div>
+            <section class="content">
+                <div class="analysis-panel">
+                    <div class="signal-info">
+                        <h3>DIREÇÃO IA: <span id="iaAction">ANALISANDO...</span></h3>
+                        <p id="iaReason">A aguardar fluxo de ticks do mercado...</p>
+                    </div>
+                    <div class="signal-prob">
+                        <h2 id="iaProb">--%</h2>
+                        <span>Probabilidade</span>
+                    </div>
                 </div>
 
-                <div style="flex-grow: 1; background: #0e0e15; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
-                    <p style="color: #444;">[ INTEGRAÇÃO TRADINGVIEW AQUI ]</p>
-                </div>
-
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px;">
-                    <button class="btn-up" onclick="confirmTrade('CALL')">COMPRAR (UP)</button>
-                    <button class="btn-down" onclick="confirmTrade('PUT')">VENDER (DOWN)</button>
-                </div>
-            </main>
+                <div id="chart-container"></div>
+            </section>
         </div>
     </div>
 
     <script>
-        async function connectBot() {
-            const token = document.getElementById('tokenInput').value;
-            const status = document.getElementById('statusLabel');
-            status.innerText = "Iniciando conexão segura...";
+        function toggleMenu() { document.getElementById('sidebar').classList.toggle('open'); }
 
-            const response = await fetch('/login', {
+        async function connectToServer() {
+            const token = document.getElementById('tokenInput').value;
+            const status = document.getElementById('status-msg');
+            if(!token) return status.innerText = "Insira um token!";
+
+            status.innerText = "A validar token na Deriv...";
+            
+            const res = await fetch('/login', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({token: token})
             });
+            const data = await res.json();
 
-            const data = await response.json();
             if(data.status === 'success') {
-                document.getElementById('login-screen').style.display = 'none';
-                document.getElementById('main-dashboard').style.display = 'block';
-                startAnalysisLoop();
+                document.getElementById('login-view').classList.remove('active');
+                document.getElementById('dashboard-view').classList.add('active');
+                loadChart();
+                startLiveData();
             } else {
-                status.innerText = "Erro ao conectar. Verifique o Token.";
+                status.innerText = data.message;
             }
         }
 
-        function startAnalysisLoop() {
+        function loadChart() {
+            new TradingView.widget({
+                "autosize": true, "symbol": "DERIV:VOL100", "interval": "1",
+                "timezone": "Etc/UTC", "theme": "dark", "style": "1",
+                "container_id": "chart-container"
+            });
+        }
+
+        function startLiveData() {
+            // Atualiza Saldo
+            setInterval(async () => {
+                const res = await fetch('/account_info');
+                const data = await res.json();
+                document.getElementById('balance-display').innerText = "$" + data.balance.toFixed(2);
+                document.getElementById('type-display').innerText = data.account_type.toUpperCase();
+            }, 4000);
+
+            // Atualiza Sinais
             setInterval(async () => {
                 const res = await fetch('/get_analysis');
                 const data = await res.json();
                 if(data.status === 'active') {
-                    document.getElementById('iaDirection').innerText = data.action;
-                    document.getElementById('iaProb').innerText = data.prob;
+                    document.getElementById('iaAction').innerText = data.action;
+                    document.getElementById('iaProb').innerText = (data.probability * 100).toFixed(0) + "%";
                     document.getElementById('iaReason').innerText = data.reason;
+                    document.getElementById('iaAction').style.color = data.action.includes("CALL") ? "#00ff88" : "#ff3344";
                 }
             }, 2000);
-        }
-
-        function confirmTrade(type) {
-            alert("Operação " + type + " enviada para confirmação manual!");
         }
     </script>
 </body>
