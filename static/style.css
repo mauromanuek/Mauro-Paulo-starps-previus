@@ -1,35 +1,44 @@
-:root { --bg: #0a0b10; --side: #12141d; --accent: #ff4400; }
-body, html { margin: 0; padding: 0; height: 100%; background: var(--bg); color: white; overflow: hidden; font-family: sans-serif; }
+:root { --bg: #0b0c11; --side: #12141d; --accent: #ff4400; --green: #00ff88; --red: #ff3344; }
+body, html { margin: 0; padding: 0; height: 100%; background: var(--bg); color: white; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
 
 .view { display: none; height: 100%; }
 .view.active { display: block; }
 
+/* HEADER */
 header { height: 60px; background: var(--side); display: flex; justify-content: space-between; align-items: center; padding: 0 20px; border-bottom: 1px solid #222; }
-.badge { background: #333; padding: 5px 10px; border-radius: 4px; font-size: 12px; border: 1px solid var(--accent); }
+.badge { background: #333; padding: 4px 10px; border-radius: 4px; font-size: 11px; border: 1px solid var(--accent); }
 
+/* WRAPPER & SIDEBAR */
 .wrapper { display: flex; height: calc(100% - 60px); position: relative; }
-
-/* MENU LATERAL */
 #sidebar { 
-    width: 250px; background: var(--side); height: 100%; position: absolute; 
-    left: -250px; transition: 0.3s; z-index: 100; border-right: 1px solid #222; 
+    width: 260px; background: var(--side); height: 100%; position: absolute; 
+    left: -260px; transition: 0.4s cubic-bezier(0.4, 0, 0.2, 1); z-index: 100; border-right: 1px solid #222; 
 }
 #sidebar.active { left: 0; }
-.nav-title { padding: 20px 20px 5px; font-size: 11px; color: #555; }
-#sidebar ul { list-style: none; padding: 0; }
-#sidebar li { padding: 15px 20px; cursor: pointer; border-bottom: 1px solid #1a1a1a; }
-#sidebar li:hover { background: #1a1a1a; color: var(--accent); }
+.nav-title { padding: 25px 20px 10px; font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: 2px; }
+#sidebar ul { list-style: none; padding: 0; margin: 0; }
+#sidebar li { padding: 15px 25px; cursor: pointer; border-bottom: 1px solid #1a1a1a; transition: 0.2s; }
+#sidebar li:hover { background: #1a1a1a; color: var(--accent); padding-left: 35px; }
 
-/* CONTEÚDO E GRÁFICO GIGANTE */
-.main-content { flex-grow: 1; display: flex; flex-direction: column; width: 100%; }
+/* MAIN CONTENT */
+.main-content { flex-grow: 1; display: flex; flex-direction: column; width: 100%; position: relative; }
 .app-screen { display: none; height: 100%; width: 100%; flex-direction: column; }
 .app-screen.active { display: flex; }
 
-.signal-bar { display: grid; grid-template-columns: 1fr 1fr 2fr; background: #12141d; padding: 10px; border-bottom: 1px solid #222; }
-.sig-box { border-right: 1px solid #222; padding-left: 15px; }
-
+/* COMPONENTES DE TELA */
+.signal-bar { display: grid; grid-template-columns: 1fr 1fr 2fr; background: #12141d; padding: 15px; border-bottom: 1px solid #222; }
+.sig-box { border-right: 1px solid #222; padding-left: 20px; }
 .full-chart { flex-grow: 1; width: 100%; background: #000; }
 
-/* ESTILOS TELAS EXTRAS */
-.centered-info, .trade-container { padding: 50px; text-align: center; }
-.confirm-btn { background: #00ff88; color: black; padding: 15px 30px; border: none; font-weight: bold; cursor: pointer; }
+/* MÓDULO TRADE RÁPIDO */
+.trade-module { padding: 40px; text-align: center; max-width: 600px; margin: auto; }
+.quick-card { background: var(--side); padding: 40px; border-radius: 15px; border: 1px solid #333; }
+#quickSignal { font-size: 24px; font-weight: bold; margin-bottom: 20px; color: var(--accent); }
+.action-buttons { display: flex; gap: 20px; justify-content: center; margin-top: 30px; }
+.btn-buy { background: var(--green); color: black; border: none; padding: 15px 30px; font-weight: bold; cursor: pointer; }
+.btn-sell { background: var(--red); color: white; border: none; padding: 15px 30px; font-weight: bold; cursor: pointer; }
+
+/* GESTÃO DE RISCO */
+.risco-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; padding: 40px; }
+.risco-card { background: var(--side); padding: 20px; border-radius: 8px; text-align: center; }
+.risco-card input { width: 80%; padding: 10px; background: #000; border: 1px solid #333; color: white; margin-top: 10px; }
