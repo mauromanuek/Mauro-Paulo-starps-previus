@@ -1,28 +1,28 @@
-:root { --accent: #ff4400; --bg: #0e0e15; --card: #161720; }
-body { margin: 0; background: var(--bg); color: white; font-family: 'Segoe UI', sans-serif; }
-.view { display: none; height: 100vh; }
+:root { --bg: #0b0c11; --side: #12141d; --accent: #ff4400; }
+body, html { margin: 0; padding: 0; height: 100%; background: var(--bg); color: white; font-family: sans-serif; overflow: hidden; }
+
+.view { display: none; height: 100%; }
 .view.active { display: block; }
 
-/* Menu Lateral */
+header { height: 60px; background: var(--side); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid #222; }
+
+.main-wrapper { display: flex; height: calc(100% - 60px); position: relative; }
+
+/* SIDEBAR DESLIZANTE */
 #sidebar { 
-    position: fixed; left: -250px; top: 60px; width: 200px; height: 100%; 
-    background: var(--card); transition: 0.3s; z-index: 10; border-right: 1px solid #333;
+    width: 250px; background: var(--side); height: 100%; position: absolute; 
+    left: -250px; transition: 0.3s; z-index: 100; border-right: 1px solid #222; 
 }
-#sidebar.open { left: 0; }
-#sidebar ul { list-style: none; padding: 20px; }
-#sidebar li { padding: 15px; cursor: pointer; border-bottom: 1px solid #222; }
-#sidebar li:hover { color: var(--accent); }
+#sidebar.active { left: 0; }
+.nav-section { padding: 20px 20px 5px; color: #555; font-size: 11px; }
+#sidebar li { padding: 15px 20px; cursor: pointer; border-bottom: 1px solid #1a1a1a; list-style: none; }
+#sidebar li:hover { color: var(--accent); background: #1a1a1a; }
 
-/* Header */
-header { height: 60px; background: var(--card); display: flex; align-items: center; padding: 0 20px; justify-content: space-between; border-bottom: 1px solid #333; }
-.menu-btn { background: none; border: none; color: white; font-size: 24px; cursor: pointer; }
+/* GRÁFICO E IA */
+.trading-area { flex-grow: 1; display: flex; flex-direction: column; width: 100%; }
+.ia-status-bar { display: flex; background: #12141d; padding: 10px; gap: 20px; border-bottom: 1px solid #222; font-size: 13px; }
+#chart-widget-container { flex-grow: 1; width: 100%; background: #000; }
 
-/* Dashboard */
-.content { padding: 20px; height: calc(100vh - 100px); }
-.analysis-panel { background: var(--card); padding: 15px; border-radius: 8px; display: flex; justify-content: space-between; margin-bottom: 15px; border-left: 5px solid var(--accent); }
-#chart-container { background: #000; border-radius: 8px; min-height: 400px; }
-
-/* Login */
-.login-card { width: 300px; margin: 100px auto; background: var(--card); padding: 30px; border-radius: 12px; text-align: center; }
-input { width: 90%; padding: 10px; margin-bottom: 20px; background: #000; border: 1px solid #333; color: white; }
-button { width: 100%; padding: 10px; background: var(--accent); border: none; color: white; cursor: pointer; font-weight: bold; }
+.login-card { width: 320px; margin: 150px auto; background: var(--side); padding: 40px; border-radius: 8px; text-align: center; }
+input { width: 90%; padding: 12px; margin-bottom: 20px; background: #000; border: 1px solid #333; color: white; }
+button { width: 100%; padding: 12px; background: var(--accent); color: white; border: none; font-weight: bold; cursor: pointer; }
