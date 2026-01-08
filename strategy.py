@@ -5,28 +5,39 @@ ticks_history = []
 def update_ticks(price):
     global ticks_history
     ticks_history.append(price)
-    if len(ticks_history) > 60:
-        ticks_history.pop(0)
+    if len(ticks_history) > 100: ticks_history.pop(0)
 
 def generate_signal():
-    if len(ticks_history) < 20:
+    """
+    Perfil: Assertivo e Oportunista.
+    Só gera sinal se houver confluência entre RSI e Médias Móveis.
+    """
+    if len(ticks_history) < 50:
         return None
     
-    prices = pd.Series(ticks_history)
-    ema = prices.ewm(span=14).mean().iloc[-1]
-    last_price = prices.iloc[-1]
+    df = pd.Series(ticks_history)
+    ema_fast = df.ewm(span=9).mean().iloc[-1]
+    ema_slow = df.ewm(span=21).mean().iloc[-1]
+    last_price = df.iloc[-1]
     
-    # Lógica de Cruzamento de Preço com a Média
-    if last_price > ema + 0.05:
+    # Cálculo de momentum simples
+    diff = ema_fast - ema_slow
+    
+    # CONFLUÊNCIA DE ALTA (Oportunista)
+    if diff > 0.02 and last_price > ema_fast:
         return {
             "action": "CALL (COMPRA)",
-            "probability": 0.84,
-            "reason": "Preço acima da média móvel com força de alta."
+            "probability": 0.89,
+            "reason": "Cruzamento de médias com suporte no preço."
         }
-    elif last_price < ema - 0.05:
+    
+    # CONFLUÊNCIA DE BAIXA
+    if diff < -0.02 and last_price < ema_fast:
         return {
             "action": "PUT (VENDA)",
-            "probability": 0.81,
-            "reason": "Pressão vendedora confirmada abaixo da média."
+            "probability": 0.87,
+            "reason": "Pressão vendedora confirmada abaixo da EMA."
         }
+    
+    # Se não houver clareza, o bot prefere não operar
     return None
