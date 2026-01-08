@@ -1,0 +1,137 @@
+/* IDENTIDADE VISUAL PREVIUS-STARPS */
+:root {
+    --bg-main: #0e0e15;
+    --bg-card: #161722;
+    --bg-input: #05060a;
+    --accent: #ff4400; /* Laranja Starps */
+    --green-signal: #00ff88;
+    --red-signal: #ff3344;
+    --text-main: #e1e1e6;
+    --text-muted: #888891;
+    --border: #252736;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+body {
+    background-color: var(--bg-main);
+    color: var(--text-main);
+    overflow: hidden; /* Evita scrolls desnecessários na dashboard */
+}
+
+/* LOGIN SCREEN */
+.view-active {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+}
+
+.login-card {
+    background: var(--bg-card);
+    padding: 40px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    text-align: center;
+    width: 350px;
+}
+
+/* DASHBOARD LAYOUT */
+#main-dashboard {
+    display: grid;
+    grid-template-rows: 60px 1fr;
+    height: 100vh;
+}
+
+header {
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+}
+
+.sidebar {
+    width: 220px;
+    background: var(--bg-card);
+    border-right: 1px solid var(--border);
+    padding: 20px;
+}
+
+.sidebar li {
+    list-style: none;
+    padding: 12px;
+    margin-bottom: 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: 0.3s;
+    color: var(--text-muted);
+}
+
+.sidebar li:hover, .sidebar li.active {
+    background: var(--bg-main);
+    color: var(--accent);
+}
+
+/* WIDGET DE ANÁLISE (O Diferencial) */
+.analysis-panel {
+    background: var(--bg-card);
+    border-radius: 10px;
+    padding: 20px;
+    border-left: 4px solid var(--accent);
+    margin-bottom: 20px;
+}
+
+.prob-badge {
+    font-size: 32px;
+    font-weight: 800;
+    color: var(--green-signal);
+    text-shadow: 0 0 15px rgba(0, 255, 136, 0.3);
+}
+
+/* BOTÕES DE OPERAÇÃO */
+.trade-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+}
+
+.btn {
+    padding: 18px;
+    border: none;
+    border-radius: 8px;
+    font-weight: bold;
+    font-size: 16px;
+    cursor: pointer;
+    transition: transform 0.1s, filter 0.2s;
+}
+
+.btn:active { transform: scale(0.98); }
+
+.btn-up { 
+    background: linear-gradient(135deg, #00a081, #00ff88); 
+    color: #05060a;
+}
+
+.btn-down { 
+    background: linear-gradient(135deg, #ef4444, #ff3344); 
+    color: white;
+}
+
+input {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    color: white;
+    padding: 12px;
+    border-radius: 6px;
+    outline: none;
+}
+
+input:focus { border-color: var(--accent); }
