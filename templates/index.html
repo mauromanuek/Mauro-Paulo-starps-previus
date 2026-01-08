@@ -2,204 +2,135 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Previus-Starps OS | Professional Trading</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Previus-Starps OS | Smart Interface</title>
     <link rel="stylesheet" href="/static/style.css">
     <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
 </head>
 <body>
     <div id="login-view" class="view active">
-        <div class="login-card">
-            <h1 style="color:#ff4400">PREVIUS-STARPS</h1>
-            <p>Engenharia Financeira Avançada</p>
+        <div class="glass-card">
+            <h1 class="logo-neon">STARPS <span>PREVIUS</span></h1>
+            <p>SISTEMA DE INTELIGÊNCIA FINANCEIRA</p>
             <input type="password" id="tokenInput" placeholder="Token API Deriv">
-            <button onclick="connect()">CONECTAR AO SERVIDOR</button>
+            <button onclick="connect()" class="btn-glow">ACESSAR TERMINAL</button>
             <p id="status-msg"></p>
         </div>
     </div>
 
     <div id="dashboard-view" class="view">
-        <header>
-            <div class="header-left">
-                <button class="menu-toggle" onclick="toggleMenu()">☰ MENU</button>
-                <span class="brand">STARPS <span style="color:#ff4400">PREVIUS</span></span>
-            </div>
-            <div class="header-right">
-                <span id="balance">$0.00</span>
-                <span id="acc-type" class="badge">DEMO</span>
+        <header class="main-header">
+            <button class="hamburguer" onclick="toggleMenu()">☰</button>
+            <div class="user-info">
+                <span id="balance" class="balance-text">$0.00</span>
+                <span id="acc-type" class="account-badge">DEMO</span>
             </div>
         </header>
 
-        <div class="wrapper">
-            <nav id="sidebar">
-                <div class="nav-title">OPERAÇÕES</div>
-                <ul>
-                    <li onclick="showScreen('analise')">📊 Análise Geral</li>
-                    <li onclick="showScreen('trade-rapido')">⚡ Trade Rápido</li>
-                    <li onclick="showScreen('manual')">🎮 Operação Manual</li>
-                    <li onclick="showScreen('auto')">🤖 Operação Automática</li>
+        <nav id="sidebar" class="sidebar-overlay">
+            <div class="sidebar-content">
+                <div class="sidebar-header">MENU DE OPERAÇÕES</div>
+                <ul class="nav-links">
+                    <li onclick="showScreen('analise')">📊 ANÁLISE GERAL</li>
+                    <li onclick="showScreen('trade-rapido')">⚡ TRADE RÁPIDO</li>
+                    <li onclick="showScreen('config')">⚙️ CONFIGURAÇÕES</li>
+                    <li onclick="emergencyStop()" class="stop-link">🛑 STOP EMERGENCY</li>
                 </ul>
-                <div class="nav-title">FERRAMENTAS</div>
-                <ul>
-                    <li onclick="showScreen('graficos')">📈 Gráficos</li>
-                    <li onclick="showScreen('risco')">🛡️ Gestão de Risco</li>
-                </ul>
-                <div class="nav-title">SEGURANÇA</div>
-                <ul>
-                    <li onclick="emergencyStop()" style="color:#ff3344">🛑 STOP DE EMERGÊNCIA</li>
-                </ul>
-            </nav>
+            </div>
+        </nav>
 
-            <main class="main-content">
-                <div id="screen-analise" class="app-screen active">
-                    <div class="signal-bar">
-                        <div class="sig-box"><small>IA STATUS</small><div id="iaAction">ANALISANDO...</div></div>
-                        <div class="sig-box"><small>CONFIANÇA</small><div id="iaProb">--%</div></div>
-                        <div class="sig-box"><small>ANÁLISE DE FLUXO</small><div id="iaReason">Sincronizando ticks...</div></div>
+        <main class="app-container">
+            <div class="chart-section">
+                <div id="tradingview_widget"></div>
+            </div>
+
+            <div class="decision-panel">
+                <div class="ia-intel">
+                    <div class="intel-header">
+                        <span class="status-dot"></span> IA REAL-TIME ANALYSIS
+                        <span id="iaProb" class="prob-tag">--%</span>
                     </div>
-                    <div id="chart-analise" class="full-chart"></div>
+                    <div id="iaReason" class="reason-text">Aguardando confluência de mercado para emitir sinal...</div>
                 </div>
 
-                <div id="screen-trade-rapido" class="app-screen">
-                    <div class="trade-module">
-                        <div class="quick-header">
-                            <h2>⚡ Trade Rápido Oportunista</h2>
-                            <p>Análise baseada nas últimas 30 velas + Fluxo Instantâneo</p>
-                        </div>
-                        <div class="quick-card">
-                            <div id="quickSignal">AGUARDANDO CONFLUÊNCIA...</div>
-                            <p id="quickDesc">O bot só emitirá sinal quando o mercado estiver claro.</p>
-                            <div class="action-buttons" id="confirmButtons" style="display:none;">
-                                <button class="btn-buy" onclick="executeTrade('CALL')">CONFIRMAR COMPRA</button>
-                                <button class="btn-sell" onclick="executeTrade('PUT')">CONFIRMAR VENDA</button>
-                            </div>
-                        </div>
-                    </div>
+                <div class="action-grid">
+                    <button id="btn-put" class="trade-btn put" onclick="confirmTrade('PUT')">
+                        <span class="btn-label">PUT</span>
+                        <span class="btn-sub">VENDA</span>
+                    </button>
+                    <button id="btn-call" class="trade-btn call" onclick="confirmTrade('CALL')">
+                        <span class="btn-label">CALL</span>
+                        <span class="btn-sub">COMPRA</span>
+                    </button>
                 </div>
-
-                <div id="screen-manual" class="app-screen">
-                    <div class="config-panel">
-                        <h2>Configuração Manual</h2>
-                        <div class="input-group">
-                            <label>Valor da Entrada ($)</label>
-                            <input type="number" id="stake" value="1.00">
-                        </div>
-                        <div class="input-group">
-                            <label>Duração (Ticks)</label>
-                            <input type="number" id="duration" value="5">
-                        </div>
-                        <div class="manual-btns">
-                            <button class="btn-buy">COMPRA (CALL)</button>
-                            <button class="btn-sell">VENDA (PUT)</button>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="screen-auto" class="app-screen">
-                    <div class="auto-panel">
-                        <div class="status-led red"></div>
-                        <h2>BOT AUTOMÁTICO INATIVO</h2>
-                        <p>Ativação requer configuração de Gestão de Risco.</p>
-                        <button class="btn-locked" disabled>ATIVAR ROBÔ</button>
-                    </div>
-                </div>
-
-                <div id="screen-graficos" class="app-screen">
-                    <div id="chart-full" class="full-chart"></div>
-                </div>
-
-                <div id="screen-risco" class="app-screen">
-                    <div class="risco-grid">
-                        <div class="risco-card"><h3>STOP LOSS</h3><input type="number" value="10.00"></div>
-                        <div class="risco-card"><h3>TAKE PROFIT</h3><input type="number" value="20.00"></div>
-                        <div class="risco-card"><h3>MARTINGALE</h3><select><option>Desativado</option><option>1.5x</option><option>2.0x</option></select></div>
-                    </div>
-                    <button class="btn-save">SALVAR CONFIGURAÇÃO</button>
-                </div>
-            </main>
-        </div>
+            </div>
+        </main>
     </div>
 
     <script>
-        function toggleMenu() { document.getElementById('sidebar').classList.toggle('active'); }
-
-        function showScreen(screenId) {
-            document.querySelectorAll('.app-screen').forEach(s => s.classList.remove('active'));
-            const target = document.getElementById('screen-' + screenId);
-            if(target) target.classList.add('active');
-            
-            // Recarrega o gráfico se a tela for de análise ou gráficos
-            if(screenId === 'analise') loadChart('chart-analise');
-            if(screenId === 'graficos') loadChart('chart-full');
-            
-            toggleMenu();
-        }
+        let tvWidget = null;
+        function toggleMenu() { document.getElementById('sidebar').classList.toggle('open'); }
 
         async function connect() {
             const token = document.getElementById('tokenInput').value;
-            if(!token) return;
-            document.getElementById('status-msg').innerText = "Autenticando via APP_ID 114910...";
-
+            const msg = document.getElementById('status-msg');
+            msg.innerText = "Sincronizando APP 114910...";
             const res = await fetch('/login', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({token: token})
             });
             const data = await res.json();
-
             if(data.status === 'success') {
                 document.getElementById('login-view').classList.remove('active');
                 document.getElementById('dashboard-view').classList.add('active');
-                loadChart('chart-analise');
-                startUpdates();
-            } else {
-                document.getElementById('status-msg').innerText = "Erro: Token Inválido.";
-            }
+                initChart();
+                startLoops();
+            } else { msg.innerText = "Falha na Autenticação."; }
         }
 
-        function loadChart(containerId) {
-            new TradingView.widget({
+        function initChart() {
+            tvWidget = new TradingView.widget({
                 "autosize": true,
                 "symbol": "DERIV:VOL100",
                 "interval": "1",
+                "timezone": "Etc/UTC",
                 "theme": "dark",
-                "container_id": containerId
+                "style": "1",
+                "locale": "br",
+                "enable_publishing": false,
+                "hide_top_toolbar": true,
+                "hide_legend": true,
+                "save_image": false,
+                "container_id": "tradingview_widget"
             });
         }
 
-        function startUpdates() {
+        function startLoops() {
             setInterval(async () => {
-                const res = await fetch('/account_info');
-                const data = await res.json();
-                document.getElementById('balance').innerText = "$" + data.balance.toFixed(2);
-                document.getElementById('acc-type').innerText = data.account_type.toUpperCase();
+                const r = await fetch('/account_info');
+                const d = await r.json();
+                document.getElementById('balance').innerText = "$" + (d.balance || 0).toFixed(2);
+                document.getElementById('acc-type').innerText = (d.account_type || "demo").toUpperCase();
             }, 3000);
 
             setInterval(async () => {
-                const res = await fetch('/get_analysis');
-                const data = await res.json();
-                if(data.status === 'active') {
-                    // Update Análise Geral
-                    document.getElementById('iaAction').innerText = data.action;
-                    document.getElementById('iaProb').innerText = (data.probability * 100).toFixed(0) + "%";
-                    document.getElementById('iaReason').innerText = data.reason;
-
-                    // Update Trade Rápido (Somente se probabilidade for alta)
-                    if(data.probability > 0.80) {
-                        document.getElementById('quickSignal').innerText = "SINAL DETECTADO: " + data.action;
-                        document.getElementById('confirmButtons').style.display = "flex";
-                    } else {
-                        document.getElementById('quickSignal').innerText = "AGUARDANDO CONFLUÊNCIA...";
-                        document.getElementById('confirmButtons').style.display = "none";
-                    }
+                const r = await fetch('/get_analysis');
+                const d = await r.json();
+                if(d.status === 'active') {
+                    const reasonEl = document.getElementById('iaReason');
+                    const probEl = document.getElementById('iaProb');
+                    reasonEl.innerText = d.reason;
+                    probEl.innerText = (d.probability * 100).toFixed(0) + "%";
+                    
+                    // Feedback Visual de Intensidade
+                    reasonEl.classList.add('pulse');
+                    setTimeout(() => reasonEl.classList.remove('pulse'), 500);
                 }
             }, 2000);
         }
 
-        function emergencyStop() {
-            alert("STOP DE EMERGÊNCIA ACIONADO!");
-            location.reload();
-        }
+        function emergencyStop() { location.reload(); }
     </script>
 </body>
 </html>
