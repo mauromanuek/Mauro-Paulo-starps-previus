@@ -1,6 +1,8 @@
-Flask
-websocket-client
+fastapi
+uvicorn[standard]
+websockets
+pydantic
 pandas
-pandas-ta
-gunicorn
-waitress
+numpy
+jinja2
+python-multipart
