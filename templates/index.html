@@ -5,26 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Previus-Starps OS</title>
     <link rel="stylesheet" href="/static/style.css">
-    <script src="https://s3.tradingview.com/tv.js"></script>
+    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
 </head>
 <body>
     <div id="login-view" class="view active">
         <div class="login-card">
             <h1 style="color:#ff4400">PREVIUS-STARPS</h1>
-            <p>Insira o seu Token API da Deriv</p>
-            <input type="password" id="tokenInput" placeholder="Token aqui...">
+            <p>Conecte sua conta Deriv</p>
+            <input type="password" id="tokenInput" placeholder="Token API">
             <button onclick="connectToServer()">CONECTAR SISTEMA</button>
-            <p id="status-msg" style="margin-top:10px; font-size:12px; color:#888"></p>
+            <p id="status-msg"></p>
         </div>
     </div>
 
     <div id="dashboard-view" class="view">
         <header>
-            <div class="header-left">
-                <button class="menu-btn" onclick="toggleMenu()">☰</button>
-                <span class="logo">STARPS OS</span>
-            </div>
-            <div class="header-right">
+            <button class="menu-btn" onclick="toggleMenu()">☰</button>
+            <div class="info-bar">
                 <span id="balance-display">$0.00</span>
                 <span id="type-display" class="badge">DEMO</span>
             </div>
@@ -33,39 +30,40 @@
         <div class="main-layout">
             <nav id="sidebar">
                 <ul>
-                    <li class="active">Análise em Tempo Real</li>
-                    <li>Histórico de Sinais</li>
-                    <li>Gestão de Risco</li>
+                    <li onclick="changeTime('1')">Gráfico 1 Min</li>
+                    <li onclick="changeTime('5')">Gráfico 5 Min</li>
+                    <li onclick="changeTime('15')">Gráfico 15 Min</li>
+                    <hr>
+                    <li style="color: #ff4400;">Sair</li>
                 </ul>
             </nav>
 
             <section class="content">
                 <div class="analysis-panel">
                     <div class="signal-info">
-                        <h3>DIREÇÃO IA: <span id="iaAction">ANALISANDO...</span></h3>
-                        <p id="iaReason">A aguardar fluxo de ticks do mercado...</p>
+                        <h3>SINAL IA: <span id="iaAction">ANALISANDO...</span></h3>
+                        <p id="iaReason">Aguardando fluxo de dados...</p>
                     </div>
                     <div class="signal-prob">
                         <h2 id="iaProb">--%</h2>
-                        <span>Probabilidade</span>
                     </div>
                 </div>
 
-                <div id="chart-container"></div>
+                <div id="chart-container" style="height: 100%; width: 100%;"></div>
             </section>
         </div>
     </div>
 
     <script>
+        let currentInterval = "1";
+
         function toggleMenu() { document.getElementById('sidebar').classList.toggle('open'); }
 
         async function connectToServer() {
             const token = document.getElementById('tokenInput').value;
-            const status = document.getElementById('status-msg');
-            if(!token) return status.innerText = "Insira um token!";
+            if(!token) return;
+            document.getElementById('status-msg').innerText = "Validando...";
 
-            status.innerText = "A validar token na Deriv...";
-            
             const res = await fetch('/login', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -76,31 +74,46 @@
             if(data.status === 'success') {
                 document.getElementById('login-view').classList.remove('active');
                 document.getElementById('dashboard-view').classList.add('active');
-                loadChart();
+                loadChart(currentInterval);
                 startLiveData();
             } else {
-                status.innerText = data.message;
+                document.getElementById('status-msg').innerText = "Erro: Token Inválido";
             }
         }
 
-        function loadChart() {
+        // Função para carregar o gráfico corretamente
+        function loadChart(interval) {
             new TradingView.widget({
-                "autosize": true, "symbol": "DERIV:VOL100", "interval": "1",
-                "timezone": "Etc/UTC", "theme": "dark", "style": "1",
+                "width": "100%",
+                "height": "100%",
+                "symbol": "FOREXCOM:SPX500", // Simulação para Volatility (TradingView gratuito não tem R_100 nativo)
+                "interval": interval,
+                "timezone": "Etc/UTC",
+                "theme": "dark",
+                "style": "1",
+                "locale": "br",
+                "toolbar_bg": "#f1f3f6",
+                "enable_publishing": false,
+                "hide_side_toolbar": false,
+                "allow_symbol_change": true,
                 "container_id": "chart-container"
             });
         }
 
+        function changeTime(t) {
+            currentInterval = t;
+            loadChart(t);
+            toggleMenu();
+        }
+
         function startLiveData() {
-            // Atualiza Saldo
             setInterval(async () => {
                 const res = await fetch('/account_info');
                 const data = await res.json();
-                document.getElementById('balance-display').innerText = "$" + data.balance.toFixed(2);
-                document.getElementById('type-display').innerText = data.account_type.toUpperCase();
-            }, 4000);
+                document.getElementById('balance-display').innerText = "$" + (data.balance || 0).toFixed(2);
+                document.getElementById('type-display').innerText = (data.account_type || "demo").toUpperCase();
+            }, 3000);
 
-            // Atualiza Sinais
             setInterval(async () => {
                 const res = await fetch('/get_analysis');
                 const data = await res.json();
