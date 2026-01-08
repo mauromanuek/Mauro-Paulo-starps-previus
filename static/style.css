@@ -1,44 +1,101 @@
-:root { --bg: #0b0c11; --side: #12141d; --accent: #ff4400; --green: #00ff88; --red: #ff3344; }
-body, html { margin: 0; padding: 0; height: 100%; background: var(--bg); color: white; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
+:root {
+    --bg-dark: #050608;
+    --card-glass: rgba(18, 20, 29, 0.85);
+    --accent: #ff4400;
+    --green-neon: #00ff88;
+    --red-neon: #ff3344;
+    --text-main: #e0e0e0;
+}
+
+body, html {
+    margin: 0; padding: 0; height: 100%; width: 100%;
+    background: var(--bg-dark); color: var(--text-main);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    overflow: hidden;
+}
 
 .view { display: none; height: 100%; }
-.view.active { display: block; }
+.view.active { display: flex; flex-direction: column; }
 
 /* HEADER */
-header { height: 60px; background: var(--side); display: flex; justify-content: space-between; align-items: center; padding: 0 20px; border-bottom: 1px solid #222; }
-.badge { background: #333; padding: 4px 10px; border-radius: 4px; font-size: 11px; border: 1px solid var(--accent); }
-
-/* WRAPPER & SIDEBAR */
-.wrapper { display: flex; height: calc(100% - 60px); position: relative; }
-#sidebar { 
-    width: 260px; background: var(--side); height: 100%; position: absolute; 
-    left: -260px; transition: 0.4s cubic-bezier(0.4, 0, 0.2, 1); z-index: 100; border-right: 1px solid #222; 
+.main-header {
+    height: 60px; padding: 0 15px;
+    display: flex; justify-content: space-between; align-items: center;
+    background: rgba(0,0,0,0.5); border-bottom: 1px solid #1a1a1a;
+    z-index: 10;
 }
-#sidebar.active { left: 0; }
-.nav-title { padding: 25px 20px 10px; font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: 2px; }
-#sidebar ul { list-style: none; padding: 0; margin: 0; }
-#sidebar li { padding: 15px 25px; cursor: pointer; border-bottom: 1px solid #1a1a1a; transition: 0.2s; }
-#sidebar li:hover { background: #1a1a1a; color: var(--accent); padding-left: 35px; }
 
-/* MAIN CONTENT */
-.main-content { flex-grow: 1; display: flex; flex-direction: column; width: 100%; position: relative; }
-.app-screen { display: none; height: 100%; width: 100%; flex-direction: column; }
-.app-screen.active { display: flex; }
+.account-badge {
+    background: #1a1a1a; padding: 4px 8px; border-radius: 4px;
+    font-size: 11px; border: 1px solid var(--accent); color: var(--accent);
+}
 
-/* COMPONENTES DE TELA */
-.signal-bar { display: grid; grid-template-columns: 1fr 1fr 2fr; background: #12141d; padding: 15px; border-bottom: 1px solid #222; }
-.sig-box { border-right: 1px solid #222; padding-left: 20px; }
-.full-chart { flex-grow: 1; width: 100%; background: #000; }
+/* APP CONTAINER (MOBILE FIRST) */
+.app-container {
+    flex: 1; display: flex; flex-direction: column;
+    height: calc(100% - 60px);
+}
 
-/* MÓDULO TRADE RÁPIDO */
-.trade-module { padding: 40px; text-align: center; max-width: 600px; margin: auto; }
-.quick-card { background: var(--side); padding: 40px; border-radius: 15px; border: 1px solid #333; }
-#quickSignal { font-size: 24px; font-weight: bold; margin-bottom: 20px; color: var(--accent); }
-.action-buttons { display: flex; gap: 20px; justify-content: center; margin-top: 30px; }
-.btn-buy { background: var(--green); color: black; border: none; padding: 15px 30px; font-weight: bold; cursor: pointer; }
-.btn-sell { background: var(--red); color: white; border: none; padding: 15px 30px; font-weight: bold; cursor: pointer; }
+.chart-section {
+    flex: 1.2; /* Ocupa a maior parte da tela */
+    width: 100%; background: #000;
+}
 
-/* GESTÃO DE RISCO */
-.risco-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; padding: 40px; }
-.risco-card { background: var(--side); padding: 20px; border-radius: 8px; text-align: center; }
-.risco-card input { width: 80%; padding: 10px; background: #000; border: 1px solid #333; color: white; margin-top: 10px; }
+/* DECISION PANEL (MÁQUINA DE RENDA) */
+.decision-panel {
+    flex: 0.8; background: var(--card-glass);
+    border-top: 1px solid #222; padding: 15px;
+    display: flex; flex-direction: column; justify-content: space-around;
+    backdrop-filter: blur(10px);
+}
+
+.ia-intel {
+    background: rgba(0,0,0,0.3); padding: 12px;
+    border-radius: 8px; border-left: 3px solid var(--accent);
+}
+
+.intel-header { font-size: 11px; color: #666; display: flex; align-items: center; gap: 8px; }
+.prob-tag { margin-left: auto; color: var(--accent); font-weight: bold; font-size: 16px; }
+
+.status-dot { width: 8px; height: 8px; background: var(--green-neon); border-radius: 50%; display: inline-block; box-shadow: 0 0 8px var(--green-neon); }
+
+.reason-text { font-size: 14px; margin-top: 5px; line-height: 1.4; font-weight: 300; }
+
+/* BUTTON GRID */
+.action-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 10px;
+}
+
+.trade-btn {
+    border: none; border-radius: 12px; padding: 15px;
+    cursor: pointer; display: flex; flex-direction: column; align-items: center;
+    transition: transform 0.1s active;
+}
+
+.trade-btn:active { transform: scale(0.96); }
+
+.put { background: rgba(255, 51, 68, 0.15); border: 1px solid var(--red-neon); color: var(--red-neon); }
+.call { background: rgba(0, 255, 136, 0.15); border: 1px solid var(--green-neon); color: var(--green-neon); }
+
+.btn-label { font-size: 20px; font-weight: 800; letter-spacing: 1px; }
+.btn-sub { font-size: 10px; opacity: 0.7; font-weight: bold; }
+
+/* SIDEBAR FLUTUANTE */
+.sidebar-overlay {
+    position: fixed; left: -100%; top: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.8); z-index: 1000; transition: 0.3s;
+}
+.sidebar-overlay.open { left: 0; }
+.sidebar-content { width: 70%; height: 100%; background: var(--bg-dark); padding: 30px 20px; }
+.nav-links { list-style: none; padding: 0; margin-top: 40px; }
+.nav-links li { padding: 18px 0; border-bottom: 1px solid #111; font-weight: bold; color: #888; }
+
+/* ANIMAÇÕES */
+@keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+.pulse { animation: pulse 0.5s ease-in-out; }
+
+/* DESKTOP ADJUSTMENTS */
+@media (min-width: 768px) {
+    .app-container { flex-direction: row; }
+    .decision-panel { width: 350px; height: 100%; border-top: none; border-left: 1px solid #222; }
+}
