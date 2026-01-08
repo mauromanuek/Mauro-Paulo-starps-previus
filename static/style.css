@@ -1,137 +1,26 @@
-/* IDENTIDADE VISUAL PREVIUS-STARPS */
-:root {
-    --bg-main: #0e0e15;
-    --bg-card: #161722;
-    --bg-input: #05060a;
-    --accent: #ff4400; /* Laranja Starps */
-    --green-signal: #00ff88;
-    --red-signal: #ff3344;
-    --text-main: #e1e1e6;
-    --text-muted: #888891;
-    --border: #252736;
-}
+:root { --bg: #0b0c11; --card: #161720; --accent: #ff4400; --text: #f0f0f0; }
+body, html { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; height: 100%; overflow: hidden; }
+.view { display: none; height: 100%; }
+.view.active { display: block; }
 
-* {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-}
+/* Login */
+.login-card { width: 320px; margin: 100px auto; background: var(--card); padding: 30px; border-radius: 10px; text-align: center; border: 1px solid #222; }
+input { width: 90%; padding: 12px; margin: 15px 0; background: #000; border: 1px solid #333; color: #fff; }
+button { background: var(--accent); color: #fff; border: none; padding: 12px 25px; cursor: pointer; font-weight: bold; width: 100%; }
 
-body {
-    background-color: var(--bg-main);
-    color: var(--text-main);
-    overflow: hidden; /* Evita scrolls desnecessários na dashboard */
-}
+/* Header */
+header { background: var(--card); padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #222; }
+.badge { background: #333; padding: 4px 8px; border-radius: 4px; font-size: 11px; margin-left: 10px; }
 
-/* LOGIN SCREEN */
-.view-active {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 100vh;
-}
+/* Layout & Menu */
+.main-layout { display: flex; height: calc(100vh - 60px); }
+#sidebar { width: 0; background: var(--card); transition: 0.3s; overflow: hidden; white-space: nowrap; border-right: 0px solid #222; }
+#sidebar.open { width: 220px; border-right: 1px solid #222; }
+#sidebar ul { list-style: none; padding: 20px; }
+#sidebar li { padding: 15px 10px; color: #888; cursor: pointer; }
+#sidebar li.active { color: var(--accent); font-weight: bold; }
 
-.login-card {
-    background: var(--bg-card);
-    padding: 40px;
-    border-radius: 12px;
-    border: 1px solid var(--border);
-    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-    text-align: center;
-    width: 350px;
-}
-
-/* DASHBOARD LAYOUT */
-#main-dashboard {
-    display: grid;
-    grid-template-rows: 60px 1fr;
-    height: 100vh;
-}
-
-header {
-    background: var(--bg-card);
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 20px;
-}
-
-.sidebar {
-    width: 220px;
-    background: var(--bg-card);
-    border-right: 1px solid var(--border);
-    padding: 20px;
-}
-
-.sidebar li {
-    list-style: none;
-    padding: 12px;
-    margin-bottom: 8px;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: 0.3s;
-    color: var(--text-muted);
-}
-
-.sidebar li:hover, .sidebar li.active {
-    background: var(--bg-main);
-    color: var(--accent);
-}
-
-/* WIDGET DE ANÁLISE (O Diferencial) */
-.analysis-panel {
-    background: var(--bg-card);
-    border-radius: 10px;
-    padding: 20px;
-    border-left: 4px solid var(--accent);
-    margin-bottom: 20px;
-}
-
-.prob-badge {
-    font-size: 32px;
-    font-weight: 800;
-    color: var(--green-signal);
-    text-shadow: 0 0 15px rgba(0, 255, 136, 0.3);
-}
-
-/* BOTÕES DE OPERAÇÃO */
-.trade-actions {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 15px;
-}
-
-.btn {
-    padding: 18px;
-    border: none;
-    border-radius: 8px;
-    font-weight: bold;
-    font-size: 16px;
-    cursor: pointer;
-    transition: transform 0.1s, filter 0.2s;
-}
-
-.btn:active { transform: scale(0.98); }
-
-.btn-up { 
-    background: linear-gradient(135deg, #00a081, #00ff88); 
-    color: #05060a;
-}
-
-.btn-down { 
-    background: linear-gradient(135deg, #ef4444, #ff3344); 
-    color: white;
-}
-
-input {
-    background: var(--bg-input);
-    border: 1px solid var(--border);
-    color: white;
-    padding: 12px;
-    border-radius: 6px;
-    outline: none;
-}
-
-input:focus { border-color: var(--accent); }
+/* Content */
+.content { flex-grow: 1; display: flex; flex-direction: column; padding: 15px; }
+.analysis-panel { background: var(--card); padding: 20px; border-radius: 8px; display: flex; justify-content: space-between; margin-bottom: 15px; border-left: 5px solid var(--accent); }
+#chart-container { flex-grow: 1; background: #000; border-radius: 8px; overflow: hidden; }
