@@ -13,6 +13,7 @@ from deriv_client import DerivClient
 app = FastAPI()
 client: Optional[DerivClient] = None
 
+# Montagem de estáticos e templates
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
@@ -27,14 +28,17 @@ async def read_root(request: Request):
 async def login(data: TokenRequest):
     global client
     try:
+        # Inicializa o cliente Deriv com o token fornecido
         client = DerivClient(token=data.token)
         asyncio.create_task(client.start())
-        await asyncio.sleep(4) # Aumentado para dar tempo de autorizar
+        
+        # Espera a autorização do WebSocket
+        await asyncio.sleep(4) 
         if client.authorized:
             return {"status": "success"}
-        return {"status": "error", "message": "Falha na conexão ou Token inválido"}
-    except:
-        return {"status": "error", "message": "Erro interno no servidor"}
+        return {"status": "error", "message": "Falha na autorização"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 @app.get("/account_info")
 async def account_info():
@@ -44,10 +48,12 @@ async def account_info():
 
 @app.get("/get_analysis")
 async def get_analysis():
+    # A lógica de análise reside no strategy.py
     sinal = generate_signal()
     if sinal:
         return {"status": "active", **sinal}
     return {"status": "waiting"}
 
 if __name__ == "__main__":
+    # Rodar o servidor FastAPI
     uvicorn.run(app, host="0.0.0.0", port=10000)
