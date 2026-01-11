@@ -2,216 +2,205 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Previus-Starps | Profissional</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Previus-Starps | OS</title>
     <link rel="stylesheet" href="/static/style.css">
     <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
 </head>
 <body>
-    <div id="toast-area"></div>
+    <div id="toast-container"></div>
+    <div id="menu-overlay" onclick="toggleSidebar()"></div>
 
     <div id="login-view" class="view active">
-        <div class="login-card">
-            <h1 style="color:#ff4400; margin-bottom:5px;">PREVIUS-STARPS</h1>
-            <p style="font-size:12px; opacity:0.6; margin-bottom:20px;">SISTEMA DE ANÁLISE QUANTITATIVA</p>
-            <input type="password" id="tokenInput" placeholder="Token API Deriv">
-            <button class="btn btn-start" style="width:100%" onclick="connect()">ENTRAR NO TERMINAL</button>
-            <p id="login-status" style="margin-top:15px; font-size:11px;"></p>
+        <div class="login-wrapper">
+            <h1 style="color:var(--accent); font-size: 2.5rem;">PREVIUS-STARPS</h1>
+            <p>SISTEMA DE ANÁLISE PROFISSIONAL</p>
+            <div class="login-form">
+                <input type="password" id="tokenInput" placeholder="Insira o seu Token API">
+                <button class="btn btn-start" onclick="connect()">ENTRAR NO TERMINAL</button>
+            </div>
+            <p id="login-status"></p>
         </div>
     </div>
 
     <div id="dashboard-view" class="view">
         <header>
             <button class="menu-btn" onclick="toggleSidebar()">☰</button>
-            <div class="status-indicator">
-                <div id="led" class="led-circle"></div>
-                <span id="led-text">SISTEMA OFFLINE</span>
-            </div>
-            <div class="balance-badge">
+            <div class="logo">PREVIUS-STARPS</div>
+            <div class="account-info">
+                <span id="balance-val">$0.00</span>
                 <small id="acc-type">DEMO</small>
-                <span id="balance">$0.00</span>
             </div>
         </header>
 
         <nav id="sidebar">
-            <div class="sidebar-user">TERMINAL ATIVO</div>
+            <div class="sidebar-header">MENU</div>
             <ul>
-                <li onclick="switchTab('tab-general')">📊 Dashboard Geral</li>
-                <li onclick="switchTab('tab-manual')">🎮 Operar Manual</li>
-                <li onclick="switchTab('tab-auto')">🤖 Operar Automático</li>
-                <li onclick="switchTab('tab-settings')">⚙️ Configurações</li>
+                <li onclick="showLayer('layer-dashboard')">📊 Monitor Principal</li>
+                <li onclick="showLayer('layer-manual')">🎮 Operação Manual</li>
+                <li onclick="showLayer('layer-auto')">🤖 Bot Automático</li>
+                <li onclick="location.reload()" style="color:var(--danger)">🛑 Sair</li>
             </ul>
         </nav>
 
-        <main class="container">
-            <section id="tab-general" class="tab-content active">
-                <div class="card signal-card">
-                    <div class="sig-header">
-                        <span class="badge">SINAL ATUAL</span>
-                        <span id="prob-val" class="prob-text">--%</span>
+        <main class="main-content">
+            <section id="layer-dashboard" class="layer active">
+                <div class="analysis-card">
+                    <div class="sig-row">
+                        <span id="ia-status">ANALISANDO MERCADO...</span>
+                        <span id="ia-prob">--%</span>
                     </div>
-                    <h2 id="ia-action">AGUARDANDO...</h2>
-                    <p id="ia-reason">Inicie o monitoramento para receber sinais.</p>
+                    <h2 id="ia-action">AGUARDANDO</h2>
                 </div>
 
-                <div class="grid-stats">
-                    <div class="mini-card">TENDÊNCIA: <b id="stat-trend">--</b></div>
-                    <div class="mini-card">VOLATILIDADE: <b id="stat-vol">--</b></div>
+                <div class="chart-container-wrapper">
+                    <div id="tradingview_chart"></div>
                 </div>
 
-                <div id="chart-box">
-                    <div id="tv-chart"></div>
-                    <div id="tv-error" class="chart-msg" style="display:none;">
-                        <p>Ativo indisponível no TradingView.</p>
-                        <small>O Bot continua operando normalmente.</small>
-                    </div>
-                </div>
-
-                <div class="actions">
-                    <button id="btn-on" class="btn btn-start" onclick="setBot(true)">ATIVAR BOT</button>
-                    <button id="btn-off" class="btn btn-stop" onclick="setBot(false)" disabled>DESLIGAR BOT</button>
+                <div class="central-control">
+                    <button id="main-toggle-btn" class="btn btn-start" onclick="toggleBotGlobal()">LIGAR BOT</button>
                 </div>
             </section>
 
-            <section id="tab-manual" class="tab-content">
+            <section id="layer-manual" class="layer">
                 <div class="card">
-                    <h3>OPERAÇÃO MANUAL</h3>
-                    <div class="manual-analysis-bar">
-                        <div id="m-indicator">Aguardando Análise...</div>
+                    <h3>TRADE MANUAL / RÁPIDO</h3>
+                    <div class="profit-display">
+                        RESULTADO: <span id="manual-profit">$0.00</span>
                     </div>
-                    <div class="input-group">
-                        <label>Valor da Entrada (USD):</label>
-                        <input type="number" id="m-amount" value="10">
+                    <div class="input-grid">
+                        <div class="input-group">
+                            <label>Valor ($)</label>
+                            <input type="number" id="m-stake" value="10">
+                        </div>
                     </div>
-                    <div class="actions">
-                        <button class="btn btn-start" onclick="trade('CALL')">COMPRAR (CALL)</button>
-                        <button class="btn btn-stop" onclick="trade('PUT')">VENDER (PUT)</button>
+                    <div class="action-buttons">
+                        <button class="btn btn-start" onclick="trade('CALL')">COMPRAR</button>
+                        <button class="btn btn-stop" onclick="trade('PUT')">VENDER</button>
                     </div>
                 </div>
             </section>
 
-            <section id="tab-auto" class="tab-content">
+            <section id="layer-auto" class="layer">
                 <div class="card">
-                    <h3>OPERAÇÃO AUTOMÁTICA</h3>
-                    <p>O sistema executará entradas quando a confiança for >85%.</p>
-                    <div class="auto-status-box">
-                        STATUS: <span id="auto-state-desc">INATIVO</span>
+                    <h3>CONFIGURAÇÕES DO BOT</h3>
+                    <div class="profit-display">
+                        LUCRO ACUMULADO: <span id="auto-profit">$0.00</span>
                     </div>
-                    <button class="btn btn-start" style="width:100%" onclick="setBot(true)">LIGAR AUTOMAÇÃO</button>
+                    <div class="settings-grid">
+                        <div class="input-group">
+                            <label>Stake (Valor)</label>
+                            <input type="number" id="a-stake" value="10">
+                        </div>
+                        <div class="input-group">
+                            <label>Take Profit ($)</label>
+                            <input type="number" id="a-tp" value="50">
+                        </div>
+                        <div class="input-group">
+                            <label>Stop Loss ($)</label>
+                            <input type="number" id="a-sl" value="30">
+                        </div>
+                    </div>
+                    <p style="font-size: 12px; margin-top: 15px; opacity: 0.6;">O bot entrará automaticamente em sinais com confiança acima de 80%.</p>
                 </div>
             </section>
         </main>
     </div>
 
     <script>
-        let isBotOn = false;
+        let botActive = false;
+        let sidebarOpen = false;
 
-        function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); }
-
-        function switchTab(id) {
-            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-            document.getElementById(id).classList.add('active');
-            toggleSidebar();
+        function toggleSidebar() {
+            sidebarOpen = !sidebarOpen;
+            document.getElementById('sidebar').classList.toggle('open', sidebarOpen);
+            document.getElementById('menu-overlay').classList.toggle('active', sidebarOpen);
         }
 
-        function notify(msg, type='info') {
-            const area = document.getElementById('toast-area');
+        function showLayer(id) {
+            document.querySelectorAll('.layer').forEach(l => l.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+            toggleSidebar(); // Fecha automático ao clicar
+        }
+
+        function toggleBotGlobal() {
+            botActive = !botActive;
+            const btn = document.getElementById('main-toggle-btn');
+            if(botActive) {
+                btn.innerText = "DESLIGAR BOT";
+                btn.className = "btn btn-stop";
+                showToast("Sistema de Automação Ativado", "success");
+            } else {
+                btn.innerText = "LIGAR BOT";
+                btn.className = "btn btn-start";
+                showToast("Sistema em Standby", "info");
+            }
+        }
+
+        function showToast(m, t) {
+            const c = document.getElementById('toast-container');
             const toast = document.createElement('div');
-            toast.className = `toast toast-${type}`;
-            toast.innerText = msg;
-            area.appendChild(toast);
+            toast.className = `toast toast-${t}`;
+            toast.innerText = m;
+            c.appendChild(toast);
             setTimeout(() => toast.remove(), 3000);
         }
 
         async function connect() {
-            const token = document.getElementById('tokenInput').value;
-            if(!token) return notify("Insira o token!", "error");
+            const t = document.getElementById('tokenInput').value;
+            if(!t) return showToast("Insira o Token", "error");
             
-            document.getElementById('login-status').innerText = "Autenticando...";
+            document.getElementById('login-status').innerText = "Conectando...";
             const res = await fetch('/login', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({token})
+                body: JSON.stringify({token: t})
             });
             const data = await res.json();
-
+            
             if(data.status === 'success') {
                 document.getElementById('login-view').classList.remove('active');
                 document.getElementById('dashboard-view').classList.add('active');
-                initTV();
-                startLoops();
+                initTradingView();
+                startSync();
             } else {
-                notify(data.message, "error");
-                document.getElementById('login-status').innerText = "Erro ao conectar.";
+                showToast("Erro de Autenticação", "error");
             }
         }
 
-        function initTV() {
+        function initTradingView() {
             new TradingView.widget({
-                "width": "100%", "height": "100%",
-                "symbol": "DERIV:100",
+                "autosize": true,
+                "symbol": "DERIV:R_100",
                 "interval": "1",
+                "timezone": "Etc/UTC",
                 "theme": "dark",
-                "container_id": "tv-chart",
+                "style": "1",
+                "locale": "br",
+                "toolbar_bg": "#f1f3f6",
+                "enable_publishing": false,
                 "hide_side_toolbar": true,
-                "callback": function() {
-                    setTimeout(() => {
-                        if(!document.querySelector('#tv-chart iframe')) 
-                            document.getElementById('tv-error').style.display = 'flex';
-                    }, 3000);
-                }
+                "container_id": "tradingview_chart"
             });
         }
 
-        async function setBot(state) {
-            const res = await fetch(`/toggle_bot?active=${state}`, {method: 'POST'});
-            const data = await res.json();
-            isBotOn = state;
-            updateBotUI(state);
-            notify(state ? "Bot Ativado" : "Bot Desligado", state ? "success" : "error");
-        }
-
-        function updateBotUI(state) {
-            document.getElementById('led').className = state ? "led-circle active" : "led-circle";
-            document.getElementById('led-text').innerText = state ? "BOT ANALISANDO" : "SISTEMA STANDBY";
-            document.getElementById('btn-on').disabled = state;
-            document.getElementById('btn-off').disabled = !state;
-            document.getElementById('auto-state-desc').innerText = state ? "ATIVO" : "INATIVO";
-        }
-
-        async function trade(act) {
-            const amt = document.getElementById('m-amount').value;
-            const res = await fetch(`/execute_trade?action=${act}&amount=${amt}`, {method: 'POST'});
-            const data = await res.json();
-            notify(data.message, data.status === 'success' ? 'success' : 'error');
-        }
-
-        function startLoops() {
-            setInterval(async () => {
-                const res = await fetch('/account_info');
-                const data = await res.json();
-                document.getElementById('balance').innerText = "$" + data.balance.toFixed(2);
-                document.getElementById('acc-type').innerText = data.account_type.toUpperCase();
-            }, 4000);
-
+        function startSync() {
             setInterval(async () => {
                 const res = await fetch('/get_analysis');
                 const data = await res.json();
-                
-                if(data.analysis && data.analysis.status === 'active') {
-                    const s = data.analysis;
-                    document.getElementById('ia-action').innerText = s.action;
-                    document.getElementById('ia-action').style.color = s.action.includes("CALL") ? "#00ff88" : "#ff3344";
-                    document.getElementById('prob-val').innerText = (s.probability * 100).toFixed(0) + "%";
-                    document.getElementById('ia-reason').innerText = s.reason;
-                    
-                    document.getElementById('m-indicator').innerText = `SINAL: ${s.action} (${(s.probability * 100).toFixed(0)}%)`;
+                if(data.analysis.status === 'active') {
+                    document.getElementById('ia-action').innerText = data.analysis.action;
+                    document.getElementById('ia-prob').innerText = (data.analysis.probability * 100).toFixed(0) + "%";
+                    document.getElementById('ia-action').style.color = data.analysis.action.includes("CALL") ? "#00ff88" : "#ff3344";
                 }
-
-                document.getElementById('stat-trend').innerText = data.macro.trend;
-                document.getElementById('stat-vol').innerText = data.macro.volatility;
-                updateBotUI(data.bot_active);
             }, 2000);
+
+            setInterval(async () => {
+                const res = await fetch('/account_info');
+                const data = await res.json();
+                document.getElementById('balance-val').innerText = "$" + data.balance.toFixed(2);
+                document.getElementById('acc-type').innerText = data.account_type.toUpperCase();
+            }, 4000);
         }
     </script>
 </body>
