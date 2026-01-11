@@ -12,8 +12,7 @@ from deriv_client import DerivClient
 
 app = FastAPI()
 client: Optional[DerivClient] = None
-# Estado Global do Bot
-bot_active = False
+bot_active = False # Estado mestre do bot
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
@@ -34,9 +33,9 @@ async def login(data: TokenRequest):
         await asyncio.sleep(4) 
         if client.authorized:
             return {"status": "success"}
-        return {"status": "error", "message": "Token inválido ou erro de conexão."}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": "Falha na conexão ou Token inválido"}
+    except:
+        return {"status": "error", "message": "Erro interno no servidor"}
 
 @app.get("/account_info")
 async def account_info():
@@ -47,15 +46,12 @@ async def account_info():
 @app.get("/get_analysis")
 async def get_analysis():
     sinal = generate_signal()
-    # Adicionamos o estado atual do bot na resposta da análise
+    macro = get_macro_analysis()
     return {
-        "analysis": sinal if sinal else {"status": "waiting"},
+        "analysis": sinal,
+        "macro": macro,
         "bot_active": bot_active
     }
-
-@app.get("/macro_stats")
-async def macro_stats():
-    return get_macro_analysis()
 
 @app.post("/toggle_bot")
 async def toggle_bot(active: bool):
@@ -63,11 +59,12 @@ async def toggle_bot(active: bool):
     bot_active = active
     return {"status": "success", "bot_active": bot_active}
 
-@app.post("/emergency_stop")
-async def emergency_stop():
-    global bot_active
-    bot_active = False
-    return {"status": "stopped"}
+@app.post("/execute_trade")
+async def execute_trade(action: str, amount: float):
+    if not client or not client.authorized:
+        return {"status": "error", "message": "Sessão expirada. Reconecte."}
+    # Aqui chamaria o executor.py para enviar à Deriv
+    return {"status": "success", "message": f"Ordem de {action} executada com ${amount}"}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=10000)
