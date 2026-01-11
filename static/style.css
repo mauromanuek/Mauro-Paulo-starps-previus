@@ -1,340 +1,53 @@
-/* Variáveis de Identidade Visual e Cores de Sistema */
-:root {
-    --accent: #ff4400;
-    --accent-glow: rgba(255, 68, 0, 0.3);
-    --bg: #0a0a0a;
-    --card: #141414;
-    --card-hover: #1c1c1c;
-    --text-main: #e0e0e0;
-    --text-dim: #999;
-    --success: #00ff88;
-    --danger: #ff3344;
-    --warning: #ffcc00;
-    --header-height: 60px;
-    --sidebar-width: 280px;
-}
+:root { --accent: #ff4400; --bg: #0a0a0a; --card: #141414; --success: #00ff88; --danger: #ff3344; }
 
-/* Reset e Estrutura Base Responsiva */
-* {
-    box-sizing: border-box;
-    -webkit-tap-highlight-color: transparent;
-}
+body { margin: 0; background: var(--bg); color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
 
-body {
-    margin: 0;
-    background: var(--bg);
-    color: var(--text-main);
-    font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    overflow-x: hidden;
-    line-height: 1.5;
-}
+.view { display: none; height: 100vh; flex-direction: column; }
+.view.active { display: flex; }
 
-/* Gestão de Visualização (Login vs Dashboard) */
-.view {
-    display: none;
-    min-height: 100vh;
-    width: 100%;
-}
+/* Header & Status */
+header { height: 60px; background: #000; border-bottom: 1px solid #222; display: flex; align-items: center; padding: 0 15px; justify-content: space-between; }
+.led-circle { width: 10px; height: 10px; background: #444; border-radius: 50%; }
+.led-circle.active { background: var(--success); box-shadow: 0 0 10px var(--success); animation: pulse 1s infinite; }
+.status-indicator { display: flex; align-items: center; gap: 10px; font-size: 11px; font-weight: bold; color: #888; }
+@keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
 
-.view.active {
-    display: flex;
-    flex-direction: column;
-}
+/* Sidebar */
+#sidebar { position: fixed; left: -280px; top: 0; width: 260px; height: 100%; background: var(--card); border-right: 1px solid #222; transition: 0.3s; z-index: 999; padding-top: 20px; }
+#sidebar.open { left: 0; }
+#sidebar ul { list-style: none; padding: 0; }
+#sidebar li { padding: 15px 20px; border-bottom: 1px solid #1a1a1a; cursor: pointer; }
+#sidebar li:hover { background: #1a1a1a; color: var(--accent); }
+.sidebar-user { padding: 20px; color: var(--accent); font-weight: bold; border-bottom: 1px solid #222; }
 
-/* --- INTERFACE DE LOGIN --- */
-#login-view {
-    align-items: center;
-    justify-content: center;
-    background: radial-gradient(circle at center, #1a1a1a 0%, #0a0a0a 100%);
-    padding: 20px;
-}
+/* Cards & Layout */
+.container { flex: 1; padding: 15px; overflow-y: auto; }
+.card { background: var(--card); padding: 20px; border-radius: 12px; border: 1px solid #222; margin-bottom: 15px; }
+.signal-card { border-left: 5px solid var(--accent); }
+.grid-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+.mini-card { background: #111; padding: 10px; border-radius: 6px; font-size: 11px; text-align: center; }
 
-.login-card {
-    width: 100%;
-    max-width: 360px;
-    background: var(--card);
-    padding: 40px 30px;
-    border-radius: 16px;
-    text-align: center;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-    border: 1px solid #222;
-}
+#chart-box { height: 40vh; background: #000; border-radius: 12px; border: 1px solid #222; position: relative; overflow: hidden; }
+.chart-msg { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.8); text-align: center; z-index: 5; }
 
-.login-card h1 {
-    font-size: 24px;
-    letter-spacing: 2px;
-    margin-bottom: 10px;
-}
-
-.login-card input {
-    width: 100%;
-    padding: 14px;
-    margin: 20px 0;
-    background: #000;
-    border: 1px solid #333;
-    border-radius: 8px;
-    color: white;
-    font-size: 16px;
-    transition: border 0.3s;
-}
-
-.login-card input:focus {
-    border-color: var(--accent);
-    outline: none;
-}
-
-/* --- HEADER E BARRA DE STATUS --- */
-header {
-    height: var(--header-height);
-    background: #000;
-    display: flex;
-    align-items: center;
-    padding: 0 20px;
-    justify-content: space-between;
-    border-bottom: 1px solid #222;
-    position: sticky;
-    top: 0;
-    z-index: 1000;
-}
-
-.info-bar {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-}
-
-#balance-display {
-    font-weight: bold;
-    font-family: 'Courier New', monospace;
-    font-size: 18px;
-}
-
-.badge {
-    background: #222;
-    padding: 4px 10px;
-    border-radius: 4px;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-}
-
-/* --- MENU HAMBÚRGUER (SIDEBAR) --- */
-#sidebar {
-    position: fixed;
-    left: calc(-1 * var(--sidebar-width));
-    top: 0;
-    width: var(--sidebar-width);
-    height: 100%;
-    background: #0f0f0f;
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    z-index: 9999;
-    border-right: 1px solid #222;
-    padding-top: 20px;
-    display: flex;
-    flex-direction: column;
-}
-
-#sidebar.open {
-    transform: translateX(var(--sidebar-width));
-}
-
-.sidebar-header {
-    padding: 0 25px 20px;
-    border-bottom: 1px solid #222;
-    margin-bottom: 10px;
-    font-weight: bold;
-    color: var(--accent);
-    font-size: 14px;
-    letter-spacing: 1px;
-}
-
-#sidebar ul {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
-
-.menu-item, #sidebar li {
-    padding: 16px 25px;
-    cursor: pointer;
-    border-bottom: 1px solid #1a1a1a;
-    transition: 0.2s;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    color: var(--text-dim);
-}
-
-.menu-item:hover, #sidebar li:hover {
-    background: #1a1a1a;
-    color: var(--accent);
-}
-
-/* --- ÁREA DE CONTEÚDO E GRIDS --- */
-.main-container {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    max-width: 1400px;
-    margin: 0 auto;
-}
-
-.interface-layer {
-    padding: 20px;
-    width: 100%;
-}
-
-/* Painel de Sinais IA */
-.analysis-panel {
-    background: var(--card);
-    padding: 20px;
-    border-radius: 12px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-    border-left: 6px solid var(--accent);
-    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-}
-
-.signal-info h3 { margin: 0; font-size: 14px; color: var(--text-dim); }
-.signal-info h2 { margin: 5px 0 0 0; font-size: 22px; }
-.signal-prob h2 { margin: 0; font-size: 32px; color: var(--accent); }
-
-/* --- GRÁFICOS E FALLBACK --- */
-#chart-wrapper {
-    width: 100%;
-    height: 60vh;
-    min-height: 350px;
-    background: #000;
-    border-radius: 12px;
-    overflow: hidden;
-    position: relative;
-    border: 1px solid #222;
-}
-
-#chart-container {
-    width: 100%;
-    height: 100%;
-}
-
-.chart-error-msg {
-    position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: #0a0a0a;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    padding: 30px;
-    color: var(--text-dim);
-}
-
-/* --- COMPONENTES DE BOTÃO E ESTADOS --- */
-.control-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 15px;
-    margin-top: 20px;
-}
-
-.btn {
-    width: 100%;
-    padding: 16px;
-    border: none;
-    border-radius: 8px;
-    font-weight: bold;
-    cursor: pointer;
-    font-size: 14px;
-    text-transform: uppercase;
-    transition: 0.3s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-}
-
+/* Buttons */
+.actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px; }
+.btn { padding: 14px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; text-transform: uppercase; }
 .btn-start { background: var(--success); color: #000; }
 .btn-stop { background: var(--danger); color: #fff; }
+.btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
-.btn:disabled {
-    filter: grayscale(1);
-    opacity: 0.2;
-    cursor: not-allowed;
-}
+/* Manual Analysis Bar */
+.manual-analysis-bar { background: #000; padding: 15px; border-radius: 8px; border: 1px dashed #333; text-align: center; font-weight: bold; color: var(--accent); margin: 10px 0; }
 
-/* Indicador de Estado do Bot (Luz de Atividade) */
-.bot-status-bar {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    background: #111;
-    padding: 6px 14px;
-    border-radius: 20px;
-    border: 1px solid #222;
-    font-size: 12px;
-}
+/* Toasts */
+#toast-area { position: fixed; top: 20px; right: 20px; z-index: 10000; }
+.toast { padding: 12px 20px; border-radius: 6px; margin-bottom: 10px; font-size: 13px; font-weight: bold; animation: slide 0.3s forwards; }
+.toast-success { background: var(--success); color: #000; }
+.toast-error { background: var(--danger); color: #fff; }
+@keyframes slide { from { transform: translateX(100%); } to { transform: translateX(0); } }
 
-.status-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: #444;
-}
-
-.status-dot.active {
-    background: var(--success);
-    box-shadow: 0 0 10px var(--success);
-    animation: pulse 1.5s infinite;
-}
-
-@keyframes pulse {
-    0% { opacity: 1; }
-    50% { opacity: 0.3; }
-    100% { opacity: 1; }
-}
-
-/* --- RESPONSIVIDADE EXTREMA --- */
-
-/* Ajustes para Tablet */
-@media (max-width: 992px) {
-    #chart-wrapper { height: 50vh; }
-}
-
-/* Ajustes para Smartphones */
+/* Mobile */
 @media (max-width: 600px) {
-    header { padding: 0 15px; }
-    
-    .analysis-panel {
-        flex-direction: column;
-        text-align: center;
-        gap: 15px;
-    }
-    
-    .signal-prob h2 { font-size: 28px; }
-    
-    .control-grid {
-        grid-template-columns: 1fr;
-    }
-    
-    .btn { padding: 18px; } /* Botões maiores para toque fácil */
-    
-    #balance-display { font-size: 16px; }
-
-    .interface-layer { padding: 15px; }
-    
-    #chart-wrapper { height: 45vh; }
-}
-
-/* Classes de Utilidade Visual */
-.bg-up { color: var(--success) !important; }
-.bg-down { color: var(--danger) !important; }
-.card-panel {
-    background: var(--card);
-    padding: 20px;
-    border-radius: 12px;
-    margin-bottom: 20px;
-    border: 1px solid #222;
+    .grid-stats { grid-template-columns: 1fr; }
 }
