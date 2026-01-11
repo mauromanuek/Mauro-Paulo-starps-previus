@@ -1,0 +1,28 @@
+:root { --accent: #ff4400; --bg: #0e0e15; --card: #161720; }
+body { margin: 0; background: var(--bg); color: white; font-family: 'Segoe UI', sans-serif; }
+.view { display: none; height: 100vh; }
+.view.active { display: block; }
+
+/* Menu Lateral */
+#sidebar { 
+    position: fixed; left: -250px; top: 60px; width: 200px; height: 100%; 
+    background: var(--card); transition: 0.3s; z-index: 10; border-right: 1px solid #333;
+}
+#sidebar.open { left: 0; }
+#sidebar ul { list-style: none; padding: 20px; }
+#sidebar li { padding: 15px; cursor: pointer; border-bottom: 1px solid #222; }
+#sidebar li:hover { color: var(--accent); }
+
+/* Header */
+header { height: 60px; background: var(--card); display: flex; align-items: center; padding: 0 20px; justify-content: space-between; border-bottom: 1px solid #333; }
+.menu-btn { background: none; border: none; color: white; font-size: 24px; cursor: pointer; }
+
+/* Dashboard */
+.content { padding: 20px; height: calc(100vh - 100px); }
+.analysis-panel { background: var(--card); padding: 15px; border-radius: 8px; display: flex; justify-content: space-between; margin-bottom: 15px; border-left: 5px solid var(--accent); }
+#chart-container { background: #000; border-radius: 8px; min-height: 400px; }
+
+/* Login */
+.login-card { width: 300px; margin: 100px auto; background: var(--card); padding: 30px; border-radius: 12px; text-align: center; }
+input { width: 90%; padding: 10px; margin-bottom: 20px; background: #000; border: 1px solid #333; color: white; }
+button { width: 100%; padding: 10px; background: var(--accent); border: none; color: white; cursor: pointer; font-weight: bold; }

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Previus-Starps OS</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+</head>
+<body>
+    <div id="login-view" class="view active">
+        <div class="login-card">
+            <h1 style="color:#ff4400">PREVIUS-STARPS</h1>
+            <p>Conecte sua conta Deriv</p>
+            <input type="password" id="tokenInput" placeholder="Token API">
+            <button onclick="connectToServer()">CONECTAR SISTEMA</button>
+            <p id="status-msg"></p>
+        </div>
+    </div>
+
+    <div id="dashboard-view" class="view">
+        <header>
+            <button class="menu-btn" onclick="toggleMenu()">☰</button>
+            <div class="info-bar">
+                <span id="balance-display">$0.00</span>
+                <span id="type-display" class="badge">DEMO</span>
+            </div>
+        </header>
+
+        <div class="main-layout">
+            <nav id="sidebar">
+                <ul>
+                    <li onclick="changeTime('1')">Gráfico 1 Min</li>
+                    <li onclick="changeTime('5')">Gráfico 5 Min</li>
+                    <li onclick="changeTime('15')">Gráfico 15 Min</li>
+                    <hr>
+                    <li style="color: #ff4400;">Sair</li>
+                </ul>
+            </nav>
+
+            <section class="content">
+                <div class="analysis-panel">
+                    <div class="signal-info">
+                        <h3>SINAL IA: <span id="iaAction">ANALISANDO...</span></h3>
+                        <p id="iaReason">Aguardando fluxo de dados...</p>
+                    </div>
+                    <div class="signal-prob">
+                        <h2 id="iaProb">--%</h2>
+                    </div>
+                </div>
+
+                <div id="chart-container" style="height: 100%; width: 100%;"></div>
+            </section>
+        </div>
+    </div>
+
+    <script>
+        let currentInterval = "1";
+
+        function toggleMenu() { document.getElementById('sidebar').classList.toggle('open'); }
+
+        async function connectToServer() {
+            const token = document.getElementById('tokenInput').value;
+            if(!token) return;
+            document.getElementById('status-msg').innerText = "Validando...";
+
+            const res = await fetch('/login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({token: token})
+            });
+            const data = await res.json();
+
+            if(data.status === 'success') {
+                document.getElementById('login-view').classList.remove('active');
+                document.getElementById('dashboard-view').classList.add('active');
+                loadChart(currentInterval);
+                startLiveData();
+            } else {
+                document.getElementById('status-msg').innerText = "Erro: Token Inválido";
+            }
+        }
+
+        // Função para carregar o gráfico corretamente
+        function loadChart(interval) {
+            new TradingView.widget({
+                "width": "100%",
+                "height": "100%",
+                "symbol": "FOREXCOM:SPX500", // Simulação para Volatility (TradingView gratuito não tem R_100 nativo)
+                "interval": interval,
+                "timezone": "Etc/UTC",
+                "theme": "dark",
+                "style": "1",
+                "locale": "br",
+                "toolbar_bg": "#f1f3f6",
+                "enable_publishing": false,
+                "hide_side_toolbar": false,
+                "allow_symbol_change": true,
+                "container_id": "chart-container"
+            });
+        }
+
+        function changeTime(t) {
+            currentInterval = t;
+            loadChart(t);
+            toggleMenu();
+        }
+
+        function startLiveData() {
+            setInterval(async () => {
+                const res = await fetch('/account_info');
+                const data = await res.json();
+                document.getElementById('balance-display').innerText = "$" + (data.balance || 0).toFixed(2);
+                document.getElementById('type-display').innerText = (data.account_type || "demo").toUpperCase();
+            }, 3000);
+
+            setInterval(async () => {
+                const res = await fetch('/get_analysis');
+                const data = await res.json();
+                if(data.status === 'active') {
+                    document.getElementById('iaAction').innerText = data.action;
+                    document.getElementById('iaProb').innerText = (data.probability * 100).toFixed(0) + "%";
+                    document.getElementById('iaReason').innerText = data.reason;
+                    document.getElementById('iaAction').style.color = data.action.includes("CALL") ? "#00ff88" : "#ff3344";
+                }
+            }, 2000);
+        }
+    </script>
+</body>
+</html>
