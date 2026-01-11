@@ -1,53 +1,78 @@
-:root { --accent: #ff4400; --bg: #0a0a0a; --card: #141414; --success: #00ff88; --danger: #ff3344; }
+:root { 
+    --accent: #ff4400; 
+    --bg: #0a0a0b; 
+    --card: #15161d; 
+    --success: #00ff88; 
+    --danger: #ff3344; 
+}
 
-body { margin: 0; background: var(--bg); color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+body { margin: 0; background: var(--bg); color: white; font-family: 'Inter', sans-serif; overflow: hidden; }
 
-.view { display: none; height: 100vh; flex-direction: column; }
-.view.active { display: flex; }
+/* CENTRALIZAÇÃO DO LOGIN */
+#login-view {
+    display: none;
+    height: 100vh;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle, #1a1a1a 0%, #000 100%);
+}
+#login-view.active { display: flex; }
+.login-wrapper { text-align: center; width: 100%; max-width: 400px; padding: 20px; }
+.login-form { margin-top: 30px; display: flex; flex-direction: column; gap: 15px; }
 
-/* Header & Status */
-header { height: 60px; background: #000; border-bottom: 1px solid #222; display: flex; align-items: center; padding: 0 15px; justify-content: space-between; }
-.led-circle { width: 10px; height: 10px; background: #444; border-radius: 50%; }
-.led-circle.active { background: var(--success); box-shadow: 0 0 10px var(--success); animation: pulse 1s infinite; }
-.status-indicator { display: flex; align-items: center; gap: 10px; font-size: 11px; font-weight: bold; color: #888; }
-@keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+input { 
+    background: #000; border: 1px solid #333; color: white; padding: 15px; 
+    border-radius: 8px; font-size: 16px; text-align: center;
+}
 
-/* Sidebar */
-#sidebar { position: fixed; left: -280px; top: 0; width: 260px; height: 100%; background: var(--card); border-right: 1px solid #222; transition: 0.3s; z-index: 999; padding-top: 20px; }
+/* HEADER & SIDEBAR */
+header { 
+    height: 65px; background: #000; display: flex; align-items: center; 
+    padding: 0 20px; justify-content: space-between; border-bottom: 1px solid #222;
+}
+#sidebar { 
+    position: fixed; left: -280px; top: 0; width: 260px; height: 100%; 
+    background: var(--card); z-index: 1000; transition: 0.3s; padding-top: 20px;
+}
 #sidebar.open { left: 0; }
-#sidebar ul { list-style: none; padding: 0; }
-#sidebar li { padding: 15px 20px; border-bottom: 1px solid #1a1a1a; cursor: pointer; }
-#sidebar li:hover { background: #1a1a1a; color: var(--accent); }
-.sidebar-user { padding: 20px; color: var(--accent); font-weight: bold; border-bottom: 1px solid #222; }
+#menu-overlay { 
+    position: fixed; inset: 0; background: rgba(0,0,0,0.7); 
+    display: none; z-index: 999; 
+}
+#menu-overlay.active { display: block; }
 
-/* Cards & Layout */
-.container { flex: 1; padding: 15px; overflow-y: auto; }
-.card { background: var(--card); padding: 20px; border-radius: 12px; border: 1px solid #222; margin-bottom: 15px; }
-.signal-card { border-left: 5px solid var(--accent); }
-.grid-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
-.mini-card { background: #111; padding: 10px; border-radius: 6px; font-size: 11px; text-align: center; }
+/* DASHBOARD & GRÁFICO */
+.main-content { padding: 15px; height: calc(100vh - 80px); overflow-y: auto; }
+.layer { display: none; }
+.layer.active { display: block; }
 
-#chart-box { height: 40vh; background: #000; border-radius: 12px; border: 1px solid #222; position: relative; overflow: hidden; }
-.chart-msg { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.8); text-align: center; z-index: 5; }
+.chart-container-wrapper { 
+    height: 50vh; background: #000; border-radius: 12px; 
+    border: 1px solid #222; margin: 15px 0; overflow: hidden;
+}
 
-/* Buttons */
-.actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px; }
-.btn { padding: 14px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; text-transform: uppercase; }
-.btn-start { background: var(--success); color: #000; }
-.btn-stop { background: var(--danger); color: #fff; }
-.btn:disabled { opacity: 0.3; cursor: not-allowed; }
+/* BOTÃO CENTRALIZADO */
+.central-control { display: flex; justify-content: center; margin-top: 20px; }
+#main-toggle-btn { width: 250px; font-size: 1.1rem; box-shadow: 0 4px 15px rgba(0,0,0,0.4); }
 
-/* Manual Analysis Bar */
-.manual-analysis-bar { background: #000; padding: 15px; border-radius: 8px; border: 1px dashed #333; text-align: center; font-weight: bold; color: var(--accent); margin: 10px 0; }
+/* CARDS DE OPERAÇÃO */
+.card { background: var(--card); padding: 25px; border-radius: 15px; border: 1px solid #222; }
+.profit-display { 
+    font-weight: bold; font-size: 1.4rem; color: var(--success); 
+    margin: 15px 0; text-align: center; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px;
+}
+.settings-grid { display: grid; grid-template-columns: 1fr; gap: 15px; }
+.input-group { display: flex; flex-direction: column; gap: 5px; }
 
-/* Toasts */
-#toast-area { position: fixed; top: 20px; right: 20px; z-index: 10000; }
-.toast { padding: 12px 20px; border-radius: 6px; margin-bottom: 10px; font-size: 13px; font-weight: bold; animation: slide 0.3s forwards; }
+/* TOASTS */
+.toast { 
+    position: fixed; top: 20px; right: 20px; padding: 15px 25px; 
+    border-radius: 8px; font-weight: bold; z-index: 2000; animation: slide 0.3s forwards;
+}
 .toast-success { background: var(--success); color: #000; }
-.toast-error { background: var(--danger); color: #fff; }
+.toast-info { background: #fff; color: #000; }
 @keyframes slide { from { transform: translateX(100%); } to { transform: translateX(0); } }
 
-/* Mobile */
-@media (max-width: 600px) {
-    .grid-stats { grid-template-columns: 1fr; }
-}
+.btn { cursor: pointer; border: none; padding: 15px; border-radius: 8px; font-weight: bold; transition: 0.2s; }
+.btn-start { background: var(--success); color: #000; }
+.btn-stop { background: var(--danger); color: #fff; }
