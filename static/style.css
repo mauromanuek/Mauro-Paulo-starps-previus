@@ -1,78 +1,138 @@
-:root { 
-    --accent: #ff4400; 
-    --bg: #0a0a0b; 
-    --card: #15161d; 
-    --success: #00ff88; 
-    --danger: #ff3344; 
-}
+* { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
 
-body { margin: 0; background: var(--bg); color: white; font-family: 'Inter', sans-serif; overflow: hidden; }
+body { background-color: #0a0a0a; color: white; overflow-x: hidden; }
 
-/* CENTRALIZAÇÃO DO LOGIN */
-#login-view {
-    display: none;
-    height: 100vh;
-    align-items: center;
+.hidden { display: none !important; }
+
+/* LOGIN LAYER CENTRALIZADO */
+.overlay-layer {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: #0a0a0a;
+    display: flex;
     justify-content: center;
-    background: radial-gradient(circle, #1a1a1a 0%, #000 100%);
-}
-#login-view.active { display: flex; }
-.login-wrapper { text-align: center; width: 100%; max-width: 400px; padding: 20px; }
-.login-form { margin-top: 30px; display: flex; flex-direction: column; gap: 15px; }
-
-input { 
-    background: #000; border: 1px solid #333; color: white; padding: 15px; 
-    border-radius: 8px; font-size: 16px; text-align: center;
+    align-items: center;
+    z-index: 1000;
 }
 
-/* HEADER & SIDEBAR */
-header { 
-    height: 65px; background: #000; display: flex; align-items: center; 
-    padding: 0 20px; justify-content: space-between; border-bottom: 1px solid #222;
-}
-#sidebar { 
-    position: fixed; left: -280px; top: 0; width: 260px; height: 100%; 
-    background: var(--card); z-index: 1000; transition: 0.3s; padding-top: 20px;
-}
-#sidebar.open { left: 0; }
-#menu-overlay { 
-    position: fixed; inset: 0; background: rgba(0,0,0,0.7); 
-    display: none; z-index: 999; 
-}
-#menu-overlay.active { display: block; }
-
-/* DASHBOARD & GRÁFICO */
-.main-content { padding: 15px; height: calc(100vh - 80px); overflow-y: auto; }
-.layer { display: none; }
-.layer.active { display: block; }
-
-.chart-container-wrapper { 
-    height: 50vh; background: #000; border-radius: 12px; 
-    border: 1px solid #222; margin: 15px 0; overflow: hidden;
+.login-card {
+    background: #151515;
+    padding: 40px;
+    border-radius: 12px;
+    text-align: center;
+    box-shadow: 0 0 20px rgba(255, 68, 0, 0.2);
+    width: 90%;
+    max-width: 400px;
 }
 
-/* BOTÃO CENTRALIZADO */
-.central-control { display: flex; justify-content: center; margin-top: 20px; }
-#main-toggle-btn { width: 250px; font-size: 1.1rem; box-shadow: 0 4px 15px rgba(0,0,0,0.4); }
-
-/* CARDS DE OPERAÇÃO */
-.card { background: var(--card); padding: 25px; border-radius: 15px; border: 1px solid #222; }
-.profit-display { 
-    font-weight: bold; font-size: 1.4rem; color: var(--success); 
-    margin: 15px 0; text-align: center; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px;
+.login-card input {
+    width: 100%;
+    padding: 15px;
+    margin: 20px 0;
+    background: #222;
+    border: 1px solid #333;
+    color: white;
+    border-radius: 5px;
 }
-.settings-grid { display: grid; grid-template-columns: 1fr; gap: 15px; }
-.input-group { display: flex; flex-direction: column; gap: 5px; }
 
-/* TOASTS */
-.toast { 
-    position: fixed; top: 20px; right: 20px; padding: 15px 25px; 
-    border-radius: 8px; font-weight: bold; z-index: 2000; animation: slide 0.3s forwards;
+.login-card button {
+    width: 100%;
+    padding: 15px;
+    background: #ff4400;
+    border: none;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    border-radius: 5px;
 }
-.toast-success { background: var(--success); color: #000; }
-.toast-info { background: #fff; color: #000; }
-@keyframes slide { from { transform: translateX(100%); } to { transform: translateX(0); } }
 
-.btn { cursor: pointer; border: none; padding: 15px; border-radius: 8px; font-weight: bold; transition: 0.2s; }
-.btn-start { background: var(--success); color: #000; }
-.btn-stop { background: var(--danger); color: #fff; }
+/* SIDEBAR & OVERLAY */
+#sidebar {
+    position: fixed;
+    left: -250px; width: 250px; height: 100%;
+    background: #111;
+    transition: 0.3s;
+    z-index: 900;
+    padding-top: 60px;
+}
+
+#sidebar.active { left: 0; }
+
+#sidebar-overlay {
+    position: fixed;
+    display: none;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.7);
+    z-index: 800;
+}
+
+#sidebar-overlay.active { display: block; }
+
+.nav-links li {
+    padding: 15px 20px;
+    list-style: none;
+    cursor: pointer;
+    border-bottom: 1px solid #222;
+}
+
+.nav-links li:hover { background: #ff4400; }
+
+/* DASHBOARD */
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    background: #151515;
+    border-bottom: 2px solid #ff4400;
+}
+
+.pnl-display { color: #00ff00; font-weight: bold; }
+
+.chart-container {
+    height: 60vh;
+    width: 100%;
+    margin-top: 10px;
+}
+
+/* BOTÃO MESTRE */
+.master-control {
+    display: flex;
+    justify-content: center;
+    margin: 30px 0;
+}
+
+#master-btn {
+    padding: 20px 60px;
+    font-size: 1.2rem;
+    font-weight: bold;
+    border: none;
+    border-radius: 50px;
+    cursor: pointer;
+    transition: 0.3s;
+}
+
+.btn-activate { background: #00c853; color: white; box-shadow: 0 0 15px #00c853; }
+.btn-deactivate { background: #ff1744; color: white; box-shadow: 0 0 15px #ff1744; }
+
+/* RISK MANAGEMENT */
+.risk-management {
+    max-width: 500px;
+    margin: 20px auto;
+    padding: 20px;
+    background: #151515;
+    border-radius: 10px;
+}
+
+.risk-management input {
+    width: 100%;
+    padding: 12px;
+    margin: 10px 0;
+    background: #222;
+    color: white;
+    border: 1px solid #333;
+}
+
+.trade-buttons { display: flex; gap: 10px; }
+.buy-btn { flex: 1; padding: 15px; background: #00c853; color: white; border: none; cursor: pointer; }
+.sell-btn { flex: 1; padding: 15px; background: #ff1744; color: white; border: none; cursor: pointer; }
