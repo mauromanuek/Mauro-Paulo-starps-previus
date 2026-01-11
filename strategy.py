@@ -28,7 +28,7 @@ def calculate_indicators(prices):
     upper_band = sma_20 + (std_20 * 2)
     lower_band = sma_20 - (std_20 * 2)
     
-    # Médias Móveis Exponenciais (Cruzamento e Tendência)
+    # Médias Móveis Exponenciais
     ema_9 = df.ewm(span=9).mean()
     ema_21 = df.ewm(span=21).mean()
     
@@ -43,7 +43,7 @@ def calculate_indicators(prices):
     }
 
 def generate_signal():
-    """Gera sinais com base em confluência técnica (Trader Experiente)"""
+    """Gera sinais com base em confluência técnica de alta probabilidade"""
     if len(ticks_history) < 30:
         return None
     
@@ -52,52 +52,36 @@ def generate_signal():
     reasons = []
     scenario = "Indefinição"
     
-    # 1. Análise de Estrutura de Mercado (Trend Following)
+    # Análise de Estrutura
     if ind["last_price"] > ind["ema_9"] > ind["ema_21"]:
         prob += 0.15
-        reasons.append("Tendência de Alta (Bullish Structure)")
+        reasons.append("Estrutura de Alta")
         scenario = "Continuação"
     elif ind["last_price"] < ind["ema_9"] < ind["ema_21"]:
         prob += 0.15
-        reasons.append("Tendência de Baixa (Bearish Structure)")
+        reasons.append("Estrutura de Baixa")
         scenario = "Continuação"
 
-    # 2. Confluência de Exaustão (RSI + Bollinger)
-    # Sobrevenda + Toque na Banda Inferior
+    # Confluência RSI e Bollinger
     if ind["rsi"] < 30 and ind["last_price"] <= ind["lower"]:
         prob += 0.25
         action = "CALL (COMPRA)"
-        reasons.append("Exaustão Vendedora + Suporte Bollinger")
+        reasons.append("Exaustão Vendedora")
         scenario = "Reversão"
-    # Sobrecompra + Toque na Banda Superior
     elif ind["rsi"] > 70 and ind["last_price"] >= ind["upper"]:
         prob += 0.25
         action = "PUT (VENDA)"
-        reasons.append("Exaustão Compradora + Resistência Bollinger")
+        reasons.append("Exaustão Compradora")
         scenario = "Reversão"
     else:
-        # Se não houver exaustão, segue a tendência das médias
-        if ind["last_price"] > ind["ema_9"]:
-            action = "CALL (COMPRA)"
-        else:
-            action = "PUT (VENDA)"
+        action = "CALL (COMPRA)" if ind["last_price"] > ind["ema_9"] else "PUT (VENDA)"
 
-    # 3. Filtro de Rejeição (Price Action simplificado em ticks)
-    # Se o preço tentou romper e voltou (pavio em formação)
-    if action == "CALL (COMPRA)" and ind["last_price"] < ind["prev_price"]:
-        prob -= 0.10
-        scenario = "Rejeição de Topo"
-    elif action == "PUT (VENDA)" and ind["last_price"] > ind["prev_price"]:
-        prob -= 0.10
-        scenario = "Rejeição de Fundo"
-
-    # CRITÉRIO DE ENTRADA: Apenas alta probabilidade (Trader Conservador)
     if prob < 0.75:
         return {
             "action": "AGUARDAR",
             "probability": prob,
-            "reason": "Aguardando confluência de indicadores",
-            "scenario": "Indefinição",
+            "reason": "Buscando confluência...",
+            "scenario": "Lateralização",
             "status": "waiting"
         }
 
@@ -111,9 +95,8 @@ def generate_signal():
     }
 
 def get_macro_analysis():
-    """Analisa o contexto geral sem focar em entrada imediata"""
     if len(ticks_history) < 50:
-        return {"status": "loading", "trend": "Analisando...", "volatility": "---", "context": "Coletando Ticks..."}
+        return {"status": "loading", "trend": "Analizando...", "volatility": "---", "context": "Coletando Dados..."}
     
     df = pd.Series(ticks_history)
     ema_200 = df.ewm(span=200).mean().iloc[-1] if len(df) >= 200 else df.mean()
@@ -121,12 +104,8 @@ def get_macro_analysis():
     std_dev = df.std()
     
     trend = "ALTA" if current > ema_200 else "BAIXA"
-    vol = "ALTA (Risco Elevado)" if std_dev > (df.mean() * 0.0015) else "NORMAL"
-    
-    if abs(current - ema_200) < std_dev:
-        context = "Lateralização / Consolidação"
-    else:
-        context = "Mercado em Tendência Forte"
+    vol = "ALTA" if std_dev > (df.mean() * 0.0015) else "NORMAL"
+    context = "Tendência" if abs(current - ema_200) > std_dev else "Consolidação"
 
     return {
         "status": "ready",
