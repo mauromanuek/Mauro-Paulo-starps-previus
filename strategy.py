@@ -1,34 +1,32 @@
 import pandas as pd
-import numpy as np
 
-ticks_history = []
+class TradingStrategy:
+    def __init__(self, short_period=9, long_period=21):
+        self.short_period = short_period
+        self.long_period = long_period
 
-def update_ticks(price):
-    global ticks_history
-    ticks_history.append(price)
-    if len(ticks_history) > 200:
-        ticks_history.pop(0)
+    def analyze(self, ticks):
+        """
+        Recebe uma lista de preços (ticks) e retorna 'BUY', 'SELL' ou 'NEUTRAL'.
+        """
+        if len(ticks) < self.long_period:
+            return "Aguardando dados..."
 
-def generate_signal():
-    if len(ticks_history) < 20:
-        return {"status": "waiting"}
-    
-    df = pd.Series(ticks_history)
-    ema = df.ewm(span=14).mean().iloc[-1]
-    last_price = df.iloc[-1]
-    
-    action = "AGUARDAR"
-    prob = 0.50
-    if last_price > ema:
-        action = "CALL (COMPRA)"
-        prob = 0.82
-    elif last_price < ema:
-        action = "PUT (VENDA)"
-        prob = 0.79
+        df = pd.DataFrame(ticks, columns=['price'])
+        
+        # Cálculo das EMAs
+        df['ema_short'] = df['price'].ewm(span=self.short_period, adjust=False).mean()
+        df['ema_long'] = df['price'].ewm(span=self.long_period, adjust=False).mean()
 
-    return {
-        "status": "active",
-        "action": action,
-        "probability": prob,
-        "reason": "Tendência baseada em cruzamento de média"
-    }
+        last_short = df['ema_short'].iloc[-1]
+        last_long = df['ema_long'].iloc[-1]
+        prev_short = df['ema_short'].iloc[-2]
+        prev_long = df['ema_long'].iloc[-2]
+
+        # Lógica de Cruzamento
+        if prev_short <= prev_long and last_short > last_long:
+            return "BUY"
+        elif prev_short >= prev_long and last_short < last_long:
+            return "SELL"
+        
+        return "NEUTRAL"
