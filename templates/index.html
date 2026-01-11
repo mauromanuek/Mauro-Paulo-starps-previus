@@ -3,286 +3,214 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Previus-Starps OS | Professional Trading Terminal</title>
+    <title>Previus-Starps | Profissional</title>
     <link rel="stylesheet" href="/static/style.css">
     <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-    <style>
-        /* Ajustes de Profissionalização UX/UI */
-        :root { --primary: #ff4400; --bg: #0a0a0a; --card: #141414; --text: #e0e0e0; --success: #00ff88; --danger: #ff3344; }
-        
-        body { overflow-x: hidden; font-family: 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); margin: 0; }
-        
-        /* Layout Responsivo */
-        .main-container { display: flex; flex-direction: column; height: 100vh; }
-        header { display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; background: #000; border-bottom: 1px solid #222; position: sticky; top: 0; z-index: 1001; }
-        
-        /* Menu Hambúrguer Profissional */
-        #sidebar { position: fixed; left: -280px; top: 0; width: 280px; height: 100%; background: #0f0f0f; transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1); z-index: 9999; border-right: 1px solid #333; box-shadow: 10px 0 30px rgba(0,0,0,0.5); }
-        #sidebar.open { left: 0; }
-        .sidebar-header { padding: 25px 20px; background: #000; font-weight: bold; color: var(--primary); border-bottom: 1px solid #222; }
-        .menu-item { padding: 16px 20px; border-bottom: 1px solid #1a1a1a; cursor: pointer; display: flex; align-items: center; gap: 12px; transition: 0.2s; }
-        .menu-item:hover { background: #1a1a1a; color: var(--primary); }
-
-        /* Interfaces Dinâmicas */
-        .interface-layer { display: none; padding: 20px; flex: 1; overflow-y: auto; width: 100%; box-sizing: border-box; }
-        .interface-layer.active { display: block; animation: fadeIn 0.3s ease; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-
-        /* Estado do Bot e Indicadores */
-        .bot-status-bar { display: flex; align-items: center; gap: 10px; font-size: 12px; padding: 5px 15px; background: #111; border-radius: 20px; border: 1px solid #333; }
-        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #555; }
-        .status-dot.active { background: var(--success); box-shadow: 0 0 10px var(--success); animation: pulse 1.5s infinite; }
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
-
-        /* Gráficos e Fallback */
-        #chart-wrapper { position: relative; height: 60vh; background: #000; border-radius: 8px; overflow: hidden; border: 1px solid #222; }
-        .chart-error-msg { display: none; position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; background: #0a0a0a; z-index: 10; }
-        
-        /* Botões de Controle */
-        .control-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
-        .btn { padding: 15px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; text-transform: uppercase; transition: 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px; }
-        .btn-start { background: var(--success); color: #000; }
-        .btn-stop { background: var(--danger); color: #fff; }
-        .btn:disabled { opacity: 0.3; cursor: not-allowed; filter: grayscale(1); }
-
-        /* Responsividade Mobile */
-        @media (max-width: 768px) {
-            .control-grid { grid-template-columns: 1fr; }
-            .info-bar { font-size: 14px; }
-            #chart-wrapper { height: 50vh; }
-        }
-    </style>
 </head>
 <body>
+    <div id="toast-area"></div>
+
     <div id="login-view" class="view active">
         <div class="login-card">
-            <h1 style="color:var(--primary); margin-bottom: 5px;">PREVIUS-STARPS</h1>
-            <p style="font-size: 14px; opacity: 0.7;">Terminal de Negociação Inteligente</p>
-            <input type="password" id="tokenInput" placeholder="Insira seu Token API Deriv">
-            <button class="btn btn-start" style="width:100%" onclick="connectToServer()">INICIAR CONEXÃO</button>
-            <p id="status-msg" style="font-size: 12px; margin-top: 15px;"></p>
+            <h1 style="color:#ff4400; margin-bottom:5px;">PREVIUS-STARPS</h1>
+            <p style="font-size:12px; opacity:0.6; margin-bottom:20px;">SISTEMA DE ANÁLISE QUANTITATIVA</p>
+            <input type="password" id="tokenInput" placeholder="Token API Deriv">
+            <button class="btn btn-start" style="width:100%" onclick="connect()">ENTRAR NO TERMINAL</button>
+            <p id="login-status" style="margin-top:15px; font-size:11px;"></p>
         </div>
     </div>
 
     <div id="dashboard-view" class="view">
         <header>
-            <button class="menu-btn" onclick="toggleMenu()" style="background:none; border:none; color:#fff; font-size:24px; cursor:pointer;">☰</button>
-            
-            <div class="bot-status-bar">
-                <div id="bot-dot" class="status-dot"></div>
-                <span id="bot-text-status">BOT DESLIGADO</span>
+            <button class="menu-btn" onclick="toggleSidebar()">☰</button>
+            <div class="status-indicator">
+                <div id="led" class="led-circle"></div>
+                <span id="led-text">SISTEMA OFFLINE</span>
             </div>
-
-            <div class="info-bar">
-                <span id="balance-display" style="font-weight:bold; color:var(--success);">$0.00</span>
+            <div class="balance-badge">
+                <small id="acc-type">DEMO</small>
+                <span id="balance">$0.00</span>
             </div>
         </header>
 
         <nav id="sidebar">
-            <div class="sidebar-header">MENU PRINCIPAL</div>
-            <div class="menu-item" onclick="showLayer('layer-general')">📊 Análise Geral</div>
-            <div class="menu-item" onclick="showLayer('layer-fast')">⚡ Trade Rápido</div>
-            <div class="menu-item" onclick="showLayer('layer-manual')">🎮 Operação Manual</div>
-            <div class="menu-item" onclick="showLayer('layer-auto')">🤖 Operação Automática</div>
-            <div class="menu-item" onclick="showLayer('layer-risk')">🛡️ Gestão de Risco</div>
-            <div class="menu-item" style="color:var(--danger); border-top: 1px solid #222;" onclick="emergencyStop()">🛑 Stop Emergência</div>
+            <div class="sidebar-user">TERMINAL ATIVO</div>
+            <ul>
+                <li onclick="switchTab('tab-general')">📊 Dashboard Geral</li>
+                <li onclick="switchTab('tab-manual')">🎮 Operar Manual</li>
+                <li onclick="switchTab('tab-auto')">🤖 Operar Automático</li>
+                <li onclick="switchTab('tab-settings')">⚙️ Configurações</li>
+            </ul>
         </nav>
 
-        <main class="main-container">
-            <section id="layer-general" class="interface-layer active">
-                <div class="analysis-panel card-panel">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <h3>SINAL IA</h3>
-                        <span id="ia-badge" class="badge">ANALISANDO...</span>
+        <main class="container">
+            <section id="tab-general" class="tab-content active">
+                <div class="card signal-card">
+                    <div class="sig-header">
+                        <span class="badge">SINAL ATUAL</span>
+                        <span id="prob-val" class="prob-text">--%</span>
                     </div>
-                    <h2 id="iaAction" style="margin: 10px 0;">AGUARDANDO...</h2>
-                    <p id="iaReason" style="font-size:14px; opacity:0.8;">Inicie o bot para começar a análise de confluência.</p>
+                    <h2 id="ia-action">AGUARDANDO...</h2>
+                    <p id="ia-reason">Inicie o monitoramento para receber sinais.</p>
                 </div>
 
-                <div id="chart-wrapper">
-                    <div id="chart-container" style="height:100%;"></div>
-                    <div id="chart-error" class="chart-error-msg">
-                        <span style="font-size:40px;">📉</span>
-                        <p>Gráfico indisponível para este ativo no TradingView.</p>
-                        <p style="font-size:12px; opacity:0.6;">A análise do bot continua funcionando via WebSocket.</p>
+                <div class="grid-stats">
+                    <div class="mini-card">TENDÊNCIA: <b id="stat-trend">--</b></div>
+                    <div class="mini-card">VOLATILIDADE: <b id="stat-vol">--</b></div>
+                </div>
+
+                <div id="chart-box">
+                    <div id="tv-chart"></div>
+                    <div id="tv-error" class="chart-msg" style="display:none;">
+                        <p>Ativo indisponível no TradingView.</p>
+                        <small>O Bot continua operando normalmente.</small>
                     </div>
                 </div>
 
-                <div class="control-grid">
-                    <button id="btn-start-bot" class="btn btn-start" onclick="toggleBot(true)">▶ ATIVAR BOT</button>
-                    <button id="btn-stop-bot" class="btn btn-stop" onclick="toggleBot(false)" disabled>■ DESLIGAR BOT</button>
+                <div class="actions">
+                    <button id="btn-on" class="btn btn-start" onclick="setBot(true)">ATIVAR BOT</button>
+                    <button id="btn-off" class="btn btn-stop" onclick="setBot(false)" disabled>DESLIGAR BOT</button>
                 </div>
             </section>
 
-            <section id="layer-fast" class="interface-layer">
-                <h2>⚡ TRADE RÁPIDO</h2>
-                <div class="card-panel">
-                    <p>Previsão para a Próxima Vela:</p>
-                    <h1 id="fast-action" style="text-align:center;">---</h1>
-                    <div style="display:flex; justify-content:space-around; margin: 20px 0;">
-                        <div>Probabilidade: <b id="fast-prob">0%</b></div>
-                        <div>Cenário: <b id="fast-scen">--</b></div>
+            <section id="tab-manual" class="tab-content">
+                <div class="card">
+                    <h3>OPERAÇÃO MANUAL</h3>
+                    <div class="manual-analysis-bar">
+                        <div id="m-indicator">Aguardando Análise...</div>
                     </div>
-                    <button class="btn btn-start" style="width:100%" onclick="confirmTrade()">CONFIRMAR ENTRADA RÁPIDA</button>
-                </div>
-            </section>
-
-            <section id="layer-manual" class="interface-layer">
-                <h2>🎮 OPERAÇÃO MANUAL</h2>
-                <div class="card-panel">
-                    <label>Valor (USD):</label>
-                    <input type="number" id="mAmount" value="10" style="width:100%; padding:12px; margin:10px 0; background:#000; border:1px solid #333; color:#fff;">
-                    <div class="control-grid">
-                        <button class="btn btn-start" onclick="confirmTrade()">COMPRAR (CALL)</button>
-                        <button class="btn btn-stop" onclick="confirmTrade()">VENDER (PUT)</button>
+                    <div class="input-group">
+                        <label>Valor da Entrada (USD):</label>
+                        <input type="number" id="m-amount" value="10">
+                    </div>
+                    <div class="actions">
+                        <button class="btn btn-start" onclick="trade('CALL')">COMPRAR (CALL)</button>
+                        <button class="btn btn-stop" onclick="trade('PUT')">VENDER (PUT)</button>
                     </div>
                 </div>
             </section>
 
-            <section id="layer-auto" class="interface-layer">
-                <h2>🤖 OPERAÇÃO AUTOMÁTICA</h2>
-                <div class="card-panel">
-                    <p>Estado atual: <b id="auto-status-text">DESATIVADO</b></p>
-                    <p style="font-size:12px; opacity:0.6; margin-bottom:20px;">O bot executará ordens sozinho baseando-se na confluência de indicadores quando atingir >75%.</p>
-                    <button class="btn btn-start" style="width:100%" onclick="toggleBot(true)">LIGAR AUTOMAÇÃO</button>
-                </div>
-            </section>
-
-            <section id="layer-risk" class="interface-layer">
-                <h2>🛡️ GESTÃO DE RISCO</h2>
-                <div class="card-panel">
-                    <p>Stop Loss Diário: <input type="number" value="50" style="background:#000; border:1px solid #333; color:#fff; padding:5px;"></p>
-                    <p>Meta Diária: <input type="number" value="25" style="background:#000; border:1px solid #333; color:#fff; padding:5px;"></p>
+            <section id="tab-auto" class="tab-content">
+                <div class="card">
+                    <h3>OPERAÇÃO AUTOMÁTICA</h3>
+                    <p>O sistema executará entradas quando a confiança for >85%.</p>
+                    <div class="auto-status-box">
+                        STATUS: <span id="auto-state-desc">INATIVO</span>
+                    </div>
+                    <button class="btn btn-start" style="width:100%" onclick="setBot(true)">LIGAR AUTOMAÇÃO</button>
                 </div>
             </section>
         </main>
     </div>
 
     <script>
-        let currentInterval = "1";
-        let botState = false;
+        let isBotOn = false;
 
-        function toggleMenu() { document.getElementById('sidebar').classList.toggle('open'); }
+        function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); }
 
-        function showLayer(id) {
-            document.querySelectorAll('.interface-layer').forEach(l => l.classList.remove('active'));
+        function switchTab(id) {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
             document.getElementById(id).classList.add('active');
-            toggleMenu();
-            if(id === 'layer-general') loadChart(currentInterval);
+            toggleSidebar();
         }
 
-        async function connectToServer() {
+        function notify(msg, type='info') {
+            const area = document.getElementById('toast-area');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.innerText = msg;
+            area.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        async function connect() {
             const token = document.getElementById('tokenInput').value;
-            if(!token) return;
-            document.getElementById('status-msg').innerText = "Autenticando na Deriv...";
+            if(!token) return notify("Insira o token!", "error");
             
+            document.getElementById('login-status').innerText = "Autenticando...";
             const res = await fetch('/login', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({token})
             });
             const data = await res.json();
+
             if(data.status === 'success') {
                 document.getElementById('login-view').classList.remove('active');
                 document.getElementById('dashboard-view').classList.add('active');
-                loadChart(currentInterval);
-                startMonitoring();
+                initTV();
+                startLoops();
             } else {
-                document.getElementById('status-msg').innerText = data.message;
+                notify(data.message, "error");
+                document.getElementById('login-status').innerText = "Erro ao conectar.";
             }
         }
 
-        function loadChart(interval) {
-            document.getElementById('chart-error').style.display = 'none';
-            try {
-                new TradingView.widget({
-                    "width": "100%", "height": "100%",
-                    "symbol": "DERIV:100", // Ativo padrão
-                    "interval": interval,
-                    "theme": "dark",
-                    "style": "1",
-                    "container_id": "chart-container",
-                    "library_path": "https://s3.tradingview.com/tv.js",
-                    "onChartReady": function() { console.log("TV Ready"); },
-                    "callback": function() {
-                        // Verifica se o container está vazio após tentativa de load
-                        setTimeout(() => {
-                            if(document.querySelector('#chart-container iframe') == null) {
-                                document.getElementById('chart-error').style.display = 'flex';
-                            }
-                        }, 3000);
-                    }
-                });
-            } catch(e) {
-                document.getElementById('chart-error').style.display = 'flex';
-            }
+        function initTV() {
+            new TradingView.widget({
+                "width": "100%", "height": "100%",
+                "symbol": "DERIV:100",
+                "interval": "1",
+                "theme": "dark",
+                "container_id": "tv-chart",
+                "hide_side_toolbar": true,
+                "callback": function() {
+                    setTimeout(() => {
+                        if(!document.querySelector('#tv-chart iframe')) 
+                            document.getElementById('tv-error').style.display = 'flex';
+                    }, 3000);
+                }
+            });
         }
 
-        async function toggleBot(state) {
-            await fetch(`/toggle_bot?active=${state}`, {method: 'POST'});
-            updateBotVisuals(state);
+        async function setBot(state) {
+            const res = await fetch(`/toggle_bot?active=${state}`, {method: 'POST'});
+            const data = await res.json();
+            isBotOn = state;
+            updateBotUI(state);
+            notify(state ? "Bot Ativado" : "Bot Desligado", state ? "success" : "error");
         }
 
-        function updateBotVisuals(state) {
-            botState = state;
-            const dot = document.getElementById('bot-dot');
-            const text = document.getElementById('bot-text-status');
-            const btnStart = document.getElementById('btn-start-bot');
-            const btnStop = document.getElementById('btn-stop-bot');
-
-            if(state) {
-                dot.classList.add('active');
-                text.innerText = "BOT ATIVO - ANALISANDO";
-                text.style.color = "var(--success)";
-                btnStart.disabled = true;
-                btnStop.disabled = false;
-            } else {
-                dot.classList.remove('active');
-                text.innerText = "BOT DESLIGADO";
-                text.style.color = "#888";
-                btnStart.disabled = false;
-                btnStop.disabled = true;
-            }
+        function updateBotUI(state) {
+            document.getElementById('led').className = state ? "led-circle active" : "led-circle";
+            document.getElementById('led-text').innerText = state ? "BOT ANALISANDO" : "SISTEMA STANDBY";
+            document.getElementById('btn-on').disabled = state;
+            document.getElementById('btn-off').disabled = !state;
+            document.getElementById('auto-state-desc').innerText = state ? "ATIVO" : "INATIVO";
         }
 
-        async function emergencyStop() {
-            await fetch('/emergency_stop', {method: 'POST'});
-            updateBotVisuals(false);
-            alert("SISTEMA INTERROMPIDO IMEDIATAMENTE.");
+        async function trade(act) {
+            const amt = document.getElementById('m-amount').value;
+            const res = await fetch(`/execute_trade?action=${act}&amount=${amt}`, {method: 'POST'});
+            const data = await res.json();
+            notify(data.message, data.status === 'success' ? 'success' : 'error');
         }
 
-        function confirmTrade() {
-            alert("Ordem enviada para processamento na corretora.");
-        }
-
-        function startMonitoring() {
-            // Monitorar Conta e Sinais
+        function startLoops() {
             setInterval(async () => {
                 const res = await fetch('/account_info');
                 const data = await res.json();
-                document.getElementById('balance-display').innerText = "$" + (data.balance || 0).toFixed(2);
-            }, 3000);
+                document.getElementById('balance').innerText = "$" + data.balance.toFixed(2);
+                document.getElementById('acc-type').innerText = data.account_type.toUpperCase();
+            }, 4000);
 
             setInterval(async () => {
                 const res = await fetch('/get_analysis');
                 const data = await res.json();
                 
-                const sinal = data.analysis;
-                updateBotVisuals(data.bot_active);
-
-                if(sinal.status === 'active') {
-                    document.getElementById('iaAction').innerText = sinal.action;
-                    document.getElementById('iaAction').style.color = sinal.action.includes("CALL") ? "var(--success)" : "var(--danger)";
-                    document.getElementById('iaReason').innerText = sinal.reason;
-                    document.getElementById('ia-badge').innerText = "SINAL FORTE";
+                if(data.analysis && data.analysis.status === 'active') {
+                    const s = data.analysis;
+                    document.getElementById('ia-action').innerText = s.action;
+                    document.getElementById('ia-action').style.color = s.action.includes("CALL") ? "#00ff88" : "#ff3344";
+                    document.getElementById('prob-val').innerText = (s.probability * 100).toFixed(0) + "%";
+                    document.getElementById('ia-reason').innerText = s.reason;
                     
-                    // Update Fast Trade Layer
-                    document.getElementById('fast-action').innerText = sinal.action;
-                    document.getElementById('fast-prob').innerText = (sinal.probability * 100).toFixed(0) + "%";
-                    document.getElementById('fast-scen').innerText = sinal.scenario;
-                } else {
-                    document.getElementById('ia-badge').innerText = botState ? "ANALISANDO..." : "PAUSADO";
+                    document.getElementById('m-indicator').innerText = `SINAL: ${s.action} (${(s.probability * 100).toFixed(0)}%)`;
                 }
+
+                document.getElementById('stat-trend').innerText = data.macro.trend;
+                document.getElementById('stat-vol').innerText = data.macro.volatility;
+                updateBotUI(data.bot_active);
             }, 2000);
         }
     </script>
