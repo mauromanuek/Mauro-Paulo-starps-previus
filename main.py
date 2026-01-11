@@ -32,9 +32,9 @@ async def login(data: TokenRequest):
         await asyncio.sleep(4) # Aumentado para dar tempo de autorizar
         if client.authorized:
             return {"status": "success"}
-        return {"status": "error", "message": "Falha na conexão"}
+        return {"status": "error", "message": "Falha na conexão ou Token inválido"}
     except:
-        return {"status": "error", "message": "Erro interno"}
+        return {"status": "error", "message": "Erro interno no servidor"}
 
 @app.get("/account_info")
 async def account_info():
