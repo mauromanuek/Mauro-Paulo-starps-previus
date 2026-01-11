@@ -8,136 +8,183 @@
     <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
 </head>
 <body>
+
+    <div class="sidebar-overlay" id="overlay" onclick="toggleMenu()"></div>
+
     <div id="login-view" class="view active">
         <div class="login-card">
-            <h1 style="color:#ff4400; margin-bottom: 5px;">PREVIUS-STARPS</h1>
-            <p style="font-size: 12px; color: #888; margin-bottom: 25px;">SISTEMA INTELIGENTE DE TRADING</p>
-            <input type="password" id="tokenInput" placeholder="Insira seu Token API Deriv">
-            <button onclick="connectToServer()">ACESSAR TERMINAL</button>
-            <p id="status-msg" style="font-size: 12px; margin-top: 15px;"></p>
+            <h1 style="color:var(--accent); margin: 0;">PREVIUS-STARPS</h1>
+            <p style="font-size: 12px; color: #888; margin-bottom: 30px;">SISTEMA DE ANÁLISE PROFISSIONAL</p>
+            <input type="password" id="tokenInput" placeholder="Token API Deriv">
+            <button class="btn-action btn-start-auto" onclick="connectToServer()">ACESSAR TERMINAL</button>
+            <p id="status-msg" style="font-size: 12px; margin-top: 15px; color: #888;"></p>
         </div>
     </div>
 
     <div id="dashboard-view" class="view">
         <header>
-            <button class="menu-btn" onclick="toggleMenu()">☰</button>
-            <div style="font-weight: 800; color: var(--accent); font-size: 14px;">PREVIUS OS</div>
-            <div class="info-bar">
-                <span id="balance-display">$0.00</span>
+            <button class="menu-btn" onclick="toggleMenu()" style="background:none; border:none; color:white; font-size:24px; cursor:pointer;">☰</button>
+            <div style="font-weight: 800; color: var(--accent); letter-spacing: 1px;">PREVIUS OS</div>
+            <div style="display: flex; gap: 15px; align-items: center;">
+                <span id="balance-display" style="font-weight: bold;">$0.00</span>
                 <span id="type-display" class="badge">DEMO</span>
             </div>
         </header>
 
-        <div class="main-layout">
+        <div class="main-container">
             <nav id="sidebar">
-                <div style="padding: 20px; text-align: right;"><button onclick="toggleMenu()" style="background:none; color:white; width: auto;">✕</button></div>
                 <ul>
-                    <li onclick="switchTab('geral')">📊 Visão Geral</li>
-                    <li onclick="switchTab('manual')">🎯 Operação Manual</li>
-                    <li onclick="switchTab('auto')">🤖 Operação Automática</li>
-                    <hr style="border: 0; border-top: 1px solid #222;">
-                    <li onclick="changeTime('1')">Gráfico 1 Min</li>
-                    <li onclick="changeTime('5')">Gráfico 5 Min</li>
-                    <li onclick="location.reload()" style="color: var(--danger);">Sair</li>
+                    <li onclick="openPanel('manual')">🎯 Operação Manual</li>
+                    <li onclick="openPanel('auto')">🤖 Operação Automática</li>
+                    <hr style="border:0; border-top:1px solid #222; margin: 10px 0;">
+                    <li onclick="location.reload()" style="color: var(--danger);">✕ Sair do Sistema</li>
                 </ul>
             </nav>
 
-            <section id="chart-container"></section>
-
-            <aside class="interface-panel active" id="panel-geral">
-                <h4 style="margin-top: 0;">SINAL IA EM TEMPO REAL</h4>
-                <div class="analysis-summary">
-                    <div>
-                        <div class="signal-text" id="iaAction">ANALISANDO...</div>
-                        <div id="iaReason" style="font-size: 11px; color: #888;">Aguardando fluxo...</div>
-                    </div>
-                    <div class="signal-prob" id="iaProb">--%</div>
-                </div>
-                <p style="font-size: 11px; color: #666; text-align: center;">Mantenha a aba aberta para receber as confirmações de entrada.</p>
-            </aside>
+            <main id="chart-area">
+                <button id="analysisBtn" class="floating-analysis-btn btn-start" onclick="toggleAnalysis()">
+                    <span id="btnIcon">▶</span> <span id="btnText">Iniciar Análise</span>
+                </button>
+                <div id="chart-container"></div>
+            </main>
 
             <aside class="interface-panel" id="panel-manual">
-                <h4 style="margin-top: 0;">OPERAÇÃO MANUAL</h4>
-                <div class="analysis-summary">
-                    <div>
-                        <div class="signal-text" id="iaActionManual">SINAL: --</div>
-                        <div id="iaProbManual" style="font-size: 11px; color: var(--accent);">Probabilidade: --%</div>
-                    </div>
+                <div class="panel-header">
+                    <h3 style="margin:0">Manual</h3>
+                    <button onclick="closePanels()" style="background:none; border:none; color:white; cursor:pointer;">✕</button>
                 </div>
-                
-                <div class="panel-row">
-                    <div class="panel-group">
-                        <label>VALOR (USD)</label>
-                        <input type="number" id="manualAmount" value="10">
+                <div class="panel-content">
+                    <div class="ia-card">
+                        <div class="signal-prob" id="manProb">Aguardando Análise...</div>
+                        <div class="signal-text" id="manAction">--</div>
+                        <div id="manReason" style="font-size: 11px; color: #888;">Inicie a análise para ver recomendações.</div>
                     </div>
-                </div>
-                <div class="panel-row">
-                    <div class="panel-group">
-                        <label>TAKE PROFIT</label>
-                        <input type="number" id="manualTP" value="5">
+
+                    <div class="input-group">
+                        <label>Valor da Operação (USD)</label>
+                        <input type="number" id="manStake" value="10.00">
                     </div>
-                    <div class="panel-group">
-                        <label>STOP LOSS</label>
-                        <input type="number" id="manualSL" value="5">
+                    <div style="display: flex; gap: 10px;">
+                        <div class="input-group" style="flex:1">
+                            <label>Take Profit</label>
+                            <input type="number" id="manTP" value="5.00">
+                        </div>
+                        <div class="input-group" style="flex:1">
+                            <label>Stop Loss</label>
+                            <input type="number" id="manSL" value="5.00">
+                        </div>
                     </div>
-                </div>
-                <div class="panel-row" style="margin-top: 15px;">
-                    <button class="btn-buy" style="flex:1">COMPRA (CALL)</button>
-                    <button class="btn-sell" style="flex:1">VENDA (PUT)</button>
-                </div>
-                <div class="stats-grid">
-                    <div class="stat-box"><small>RESULTADO</small><span id="manRes">--</span></div>
-                    <div class="stat-box"><small>LUCRO</small><span id="manProfit">$0.00</span></div>
-                    <div class="stat-box"><small>STATUS</small><span style="color:var(--success)">PRONTO</span></div>
+
+                    <button class="btn-action btn-buy">COMPRA (CALL)</button>
+                    <button class="btn-action btn-sell">VENDA (PUT)</button>
+
+                    <div class="stats-grid">
+                        <div class="stat-box"><small>LUCRO DIA</small><span id="manProfit" style="color:var(--success)">$0.00</span></div>
+                        <div class="stat-box"><small>PERDA DIA</small><span id="manLoss" style="color:var(--danger)">$0.00</span></div>
+                    </div>
                 </div>
             </aside>
 
             <aside class="interface-panel" id="panel-auto">
-                <h4 style="margin-top: 0;">BOT AUTOMÁTICO</h4>
-                <div class="panel-row">
-                    <div class="panel-group">
-                        <label>ENTRADA (USD)</label>
-                        <input type="number" id="autoAmount" value="1.00">
-                    </div>
+                <div class="panel-header">
+                    <h3 style="margin:0">Automático</h3>
+                    <button onclick="closePanels()" style="background:none; border:none; color:white; cursor:pointer;">✕</button>
                 </div>
-                <div class="panel-row">
-                    <div class="panel-group">
-                        <label>TAKE PROFIT</label>
-                        <input type="number" id="autoTP" value="10.00">
+                <div class="panel-content">
+                    <div class="ia-card">
+                        <div id="botStatusLabel" style="font-size: 12px; color: #888;">STATUS DO BOT</div>
+                        <div class="signal-text" id="botStatus">DESLIGADO</div>
+                        <div id="botActivity" style="font-size: 11px; color: var(--accent);">Pronto para iniciar</div>
                     </div>
-                    <div class="panel-group">
-                        <label>STOP LOSS</label>
-                        <input type="number" id="autoSL" value="5.00">
+
+                    <div class="input-group">
+                        <label>Stake (Entrada)</label>
+                        <input type="number" id="autoStake" value="1.00">
                     </div>
-                </div>
-                <button class="btn-auto" id="btnStartAuto" onclick="toggleBot()">▶ INICIAR OPERAÇÃO AUTOMÁTICA</button>
-                
-                <div class="stats-grid" style="margin-top: 20px;">
-                    <div class="stat-box"><small>STATUS</small><span id="botStatus">PAUSADO</span></div>
-                    <div class="stat-box"><small>SESSÃO</small><span id="botSession">$0.00</span></div>
-                    <div class="stat-box"><small>W/L</small><span>0 / 0</span></div>
+                    <div style="display: flex; gap: 10px;">
+                        <div class="input-group" style="flex:1">
+                            <label>Take Profit</label>
+                            <input type="number" id="autoTP" value="10.00">
+                        </div>
+                        <div class="input-group" style="flex:1">
+                            <label>Stop Loss</label>
+                            <input type="number" id="autoSL" value="5.00">
+                        </div>
+                    </div>
+
+                    <button id="btnAutoStart" class="btn-action btn-start-auto" onclick="toggleBot()">INICIAR OPERAÇÃO AUTOMÁTICA</button>
+
+                    <div class="stats-grid">
+                        <div class="stat-box"><small>RESULTADO</small><span id="autoRes">$0.00</span></div>
+                        <div class="stat-box"><small>ACERTOS</small><span>0 / 0</span></div>
+                    </div>
                 </div>
             </aside>
         </div>
     </div>
 
     <script>
-        let currentInterval = "1";
-        let botActive = false;
+        let isAnalyzing = false;
+        let isBotActive = false;
 
-        function toggleMenu() { document.getElementById('sidebar').classList.toggle('open'); }
+        function toggleMenu() {
+            const sb = document.getElementById('sidebar');
+            const ov = document.getElementById('overlay');
+            sb.classList.toggle('open');
+            ov.style.display = sb.classList.contains('open') ? 'block' : 'none';
+        }
 
-        function switchTab(tabId) {
-            document.querySelectorAll('.interface-panel').forEach(p => p.classList.remove('active'));
-            document.getElementById('panel-' + tabId).classList.add('active');
-            if(window.innerWidth < 1024) toggleMenu();
+        function openPanel(id) {
+            closePanels();
+            toggleMenu();
+            document.getElementById('panel-' + id).style.display = 'flex';
+        }
+
+        function closePanels() {
+            document.querySelectorAll('.interface-panel').forEach(p => p.style.display = 'none');
+        }
+
+        function toggleAnalysis() {
+            isAnalyzing = !isAnalyzing;
+            const btn = document.getElementById('analysisBtn');
+            const text = document.getElementById('btnText');
+            const icon = document.getElementById('btnIcon');
+
+            if(isAnalyzing) {
+                btn.className = "floating-analysis-btn btn-stop";
+                text.innerText = "Parar Análise";
+                icon.innerText = "■";
+                // Aqui o bot começa a chamar a rota /get_analysis
+            } else {
+                btn.className = "floating-analysis-btn btn-start";
+                text.innerText = "Iniciar Análise";
+                icon.innerText = "▶";
+            }
+        }
+
+        function toggleBot() {
+            isBotActive = !isBotActive;
+            const btn = document.getElementById('btnAutoStart');
+            const status = document.getElementById('botStatus');
+            
+            if(isBotActive) {
+                btn.innerText = "PARAR OPERAÇÃO";
+                btn.style.background = "var(--danger)";
+                status.innerText = "OPERANDO";
+                status.style.color = "var(--success)";
+            } else {
+                btn.innerText = "INICIAR OPERAÇÃO AUTOMÁTICA";
+                btn.style.background = "var(--accent)";
+                status.innerText = "DESLIGADO";
+                status.style.color = "white";
+            }
         }
 
         async function connectToServer() {
             const token = document.getElementById('tokenInput').value;
             if(!token) return;
-            document.getElementById('status-msg').innerText = "Autenticando na Deriv...";
-
+            document.getElementById('status-msg').innerText = "Autenticando...";
+            
             try {
                 const res = await fetch('/login', {
                     method: 'POST',
@@ -145,25 +192,22 @@
                     body: JSON.stringify({token: token})
                 });
                 const data = await res.json();
-
                 if(data.status === 'success') {
                     document.getElementById('login-view').classList.remove('active');
                     document.getElementById('dashboard-view').classList.add('active');
-                    loadChart(currentInterval);
-                    startLiveData();
+                    loadChart();
+                    startDataLoop();
                 } else {
-                    document.getElementById('status-msg').innerText = "Erro: " + data.message;
+                    document.getElementById('status-msg').innerText = "Token Inválido.";
                 }
-            } catch (e) {
-                document.getElementById('status-msg').innerText = "Erro de conexão com servidor.";
-            }
+            } catch (e) { document.getElementById('status-msg').innerText = "Erro de conexão."; }
         }
 
-        function loadChart(interval) {
+        function loadChart() {
             new TradingView.widget({
                 "autosize": true,
-                "symbol": "FOREXCOM:SPX500", 
-                "interval": interval,
+                "symbol": "DERIV:100", // Mantém a lógica original do ativo
+                "interval": "1",
                 "timezone": "Etc/UTC",
                 "theme": "dark",
                 "style": "1",
@@ -175,31 +219,8 @@
             });
         }
 
-        function changeTime(t) {
-            currentInterval = t;
-            loadChart(t);
-            if(window.innerWidth < 1024) toggleMenu();
-        }
-
-        function toggleBot() {
-            botActive = !botActive;
-            const btn = document.getElementById('btnStartAuto');
-            const status = document.getElementById('botStatus');
-            if(botActive) {
-                btn.innerText = "■ PARAR OPERAÇÃO";
-                btn.style.background = "var(--danger)";
-                status.innerText = "ANALISANDO";
-                status.style.color = "var(--accent)";
-            } else {
-                btn.innerText = "▶ INICIAR OPERAÇÃO AUTOMÁTICA";
-                btn.style.background = "var(--accent)";
-                status.innerText = "PAUSADO";
-                status.style.color = "white";
-            }
-        }
-
-        function startLiveData() {
-            // Update Account Info
+        function startDataLoop() {
+            // Loop para Balanço
             setInterval(async () => {
                 const res = await fetch('/account_info');
                 const data = await res.json();
@@ -207,24 +228,17 @@
                 document.getElementById('type-display').innerText = (data.account_type || "demo").toUpperCase();
             }, 3000);
 
-            // Update Analysis
+            // Loop para Análise (Só processa se isAnalyzing for true)
             setInterval(async () => {
+                if(!isAnalyzing) return;
                 const res = await fetch('/get_analysis');
                 const data = await res.json();
                 if(data.status === 'active') {
-                    const color = data.action.includes("CALL") ? "#00ff88" : "#ff3344";
-                    const prob = (data.probability * 100).toFixed(0) + "%";
-                    
-                    // Update Geral
-                    document.getElementById('iaAction').innerText = data.action;
-                    document.getElementById('iaAction').style.color = color;
-                    document.getElementById('iaProb').innerText = prob;
-                    document.getElementById('iaReason').innerText = data.reason;
-
-                    // Update Manual
-                    document.getElementById('iaActionManual').innerText = "RECOMENDAÇÃO: " + data.action;
-                    document.getElementById('iaActionManual').style.color = color;
-                    document.getElementById('iaProbManual').innerText = "Probabilidade: " + prob;
+                    const color = data.action.includes("CALL") ? "var(--success)" : "var(--danger)";
+                    document.getElementById('manAction').innerText = data.action;
+                    document.getElementById('manAction').style.color = color;
+                    document.getElementById('manProb').innerText = "PROBABILIDADE: " + (data.probability * 100).toFixed(0) + "%";
+                    document.getElementById('manReason').innerText = data.reason;
                 }
             }, 2000);
         }
