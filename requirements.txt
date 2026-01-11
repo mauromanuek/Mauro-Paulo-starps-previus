@@ -1,8 +1,6 @@
 fastapi
-uvicorn[standard]
+uvicorn
 websockets
-pydantic
 pandas
-numpy
 jinja2
-python-multipart
+python-dotenv
