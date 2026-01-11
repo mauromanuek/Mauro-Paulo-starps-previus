@@ -1,116 +1,68 @@
 <!DOCTYPE html>
-<html lang="pt">
+<html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Previus-Starps | Trading Terminal</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Previus-Starps OS | Trading Bot</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://s3.tradingview.com/tv.js"></script>
 </head>
-<body>
-
-    <div id="login-layer" class="overlay-layer">
-        <div class="login-card">
-            <img src="https://via.placeholder.com/60/ff4400/ffffff?text=PS" alt="Logo">
-            <h2>Previus-Starps</h2>
-            <input type="password" id="api-token" placeholder="Insira seu Token Deriv API">
-            <button onclick="app.login()">ENTRAR NO TERMINAL</button>
-        </div>
+<body class="dark-theme">
+    <div class="sidebar" id="sidebar">
+        <div class="logo">STARPS <span>OS</span></div>
+        <nav>
+            <a href="#">Dashboard</a>
+            <a href="#">Estatísticas</a>
+            <a href="#">Configurações</a>
+        </nav>
     </div>
 
-    <div id="sidebar-overlay" onclick="app.toggleMenu()"></div>
-    <nav id="sidebar">
-        <div class="sidebar-header">MENU</div>
-        <ul class="nav-links">
-            <li onclick="app.showSection('dashboard')">Dashboard Geral</li>
-            <li onclick="app.showSection('manual')">Operação Manual</li>
-            <li onclick="app.showSection('auto')">Modo Automático</li>
-        </ul>
-    </nav>
-
-    <main id="main-content" class="hidden">
+    <main class="content">
         <header>
-            <div class="menu-btn" onclick="app.toggleMenu()">☰</div>
-            <div class="logo">PREVIUS-STARPS</div>
-            <div class="pnl-display">P&L: <span id="pnl-value">0.00 USD</span></div>
+            <div class="account-info">
+                <span class="badge">Balance: <strong id="balance">$ 0.00</strong></span>
+                <span class="badge type" id="account-type">Demo</span>
+            </div>
         </header>
 
-        <section id="dashboard-section" class="content-section">
+        <section class="grid">
             <div class="chart-container">
-                <div id="tradingview_100"></div>
+                <div id="tradingview_widget"></div>
             </div>
-            
-            <div class="master-control">
-                <button id="master-btn" class="btn-activate" onclick="app.toggleBot()">ACTIVAR BOT</button>
-            </div>
-        </section>
 
-        <section id="manual-section" class="content-section hidden">
-            <div class="risk-management">
-                <h3>Gestão Manual</h3>
-                <input type="number" id="manual-stake" placeholder="Stake ($)">
-                <input type="number" id="manual-tp" placeholder="Take Profit ($)">
-                <input type="number" id="manual-sl" placeholder="Stop Loss ($)">
-                <div class="trade-buttons">
-                    <button class="buy-btn">COMPRAR</button>
-                    <button class="sell-btn">VENDER</button>
-                </div>
+            <div class="analysis-card">
+                <h3>Análise em Tempo Real</h3>
+                <div id="signal-display">Aguardando sinal...</div>
+                <div class="prob-bar"><div id="prob-fill"></div></div>
+                <p id="reason"></p>
+                <button id="btn-execute" class="btn-orange">Autorizar Entrada</button>
             </div>
         </section>
     </main>
 
-    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
     <script>
-        const app = {
-            isBotActive: false,
-            
-            login() {
-                const token = document.getElementById('api-token').value;
-                if(token) {
-                    document.getElementById('login-layer').style.display = 'none';
-                    document.getElementById('main-content').classList.remove('hidden');
-                    this.initChart();
-                }
-            },
+        // Inicializa TradingView para Volatility 100 (R_100)
+        new TradingView.widget({
+            "autosize": true,
+            "symbol": "DERIV:R_100",
+            "interval": "1",
+            "timezone": "Etc/UTC",
+            "theme": "dark",
+            "style": "1",
+            "locale": "br",
+            "container_id": "tradingview_widget"
+        });
 
-            toggleMenu() {
-                document.getElementById('sidebar').classList.toggle('active');
-                document.getElementById('sidebar-overlay').classList.toggle('active');
-            },
+        async function updateData() {
+            try {
+                const response = await fetch('/get_analysis');
+                const data = await response.json();
+                document.getElementById('signal-display').innerText = data.action;
+                document.getElementById('prob-fill').style.width = data.prob + '%';
+                document.getElementById('reason').innerText = data.reason;
+            } catch (e) { console.error("Erro ao buscar dados"); }
+        }
 
-            showSection(section) {
-                document.querySelectorAll('.content-section').forEach(s => s.classList.add('hidden'));
-                document.getElementById(`${section}-section`).classList.remove('hidden');
-                this.toggleMenu();
-            },
-
-            toggleBot() {
-                this.isBotActive = !this.isBotActive;
-                const btn = document.getElementById('master-btn');
-                if(this.isBotActive) {
-                    btn.innerText = "DESLIGAR BOT";
-                    btn.className = "btn-deactivate";
-                } else {
-                    btn.innerText = "ACTIVAR BOT";
-                    btn.className = "btn-activate";
-                }
-            },
-
-            initChart() {
-                new TradingView.widget({
-                    "autosize": true,
-                    "symbol": "DERIV:100",
-                    "interval": "1",
-                    "timezone": "Etc/UTC",
-                    "theme": "dark",
-                    "style": "1",
-                    "locale": "pt",
-                    "container_id": "tradingview_100",
-                    "hide_side_toolbar": false,
-                    "allow_symbol_change": true,
-                    "details": true,
-                });
-            }
-        };
+        setInterval(updateData, 3000);
     </script>
 </body>
 </html>
