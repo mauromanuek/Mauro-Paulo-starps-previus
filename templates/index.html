@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Previus-Starps OS</title>
     <link rel="stylesheet" href="/static/style.css">
     <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
@@ -10,17 +10,18 @@
 <body>
     <div id="login-view" class="view active">
         <div class="login-card">
-            <h1 style="color:#ff4400">PREVIUS-STARPS</h1>
-            <p>Conecte sua conta Deriv</p>
-            <input type="password" id="tokenInput" placeholder="Token API">
-            <button onclick="connectToServer()">CONECTAR SISTEMA</button>
-            <p id="status-msg"></p>
+            <h1 style="color:#ff4400; margin-bottom: 5px;">PREVIUS-STARPS</h1>
+            <p style="font-size: 12px; color: #888; margin-bottom: 25px;">SISTEMA INTELIGENTE DE TRADING</p>
+            <input type="password" id="tokenInput" placeholder="Insira seu Token API Deriv">
+            <button onclick="connectToServer()">ACESSAR TERMINAL</button>
+            <p id="status-msg" style="font-size: 12px; margin-top: 15px;"></p>
         </div>
     </div>
 
     <div id="dashboard-view" class="view">
         <header>
             <button class="menu-btn" onclick="toggleMenu()">☰</button>
+            <div style="font-weight: 800; color: var(--accent); font-size: 14px;">PREVIUS OS</div>
             <div class="info-bar">
                 <span id="balance-display">$0.00</span>
                 <span id="type-display" class="badge">DEMO</span>
@@ -29,70 +30,144 @@
 
         <div class="main-layout">
             <nav id="sidebar">
+                <div style="padding: 20px; text-align: right;"><button onclick="toggleMenu()" style="background:none; color:white; width: auto;">✕</button></div>
                 <ul>
+                    <li onclick="switchTab('geral')">📊 Visão Geral</li>
+                    <li onclick="switchTab('manual')">🎯 Operação Manual</li>
+                    <li onclick="switchTab('auto')">🤖 Operação Automática</li>
+                    <hr style="border: 0; border-top: 1px solid #222;">
                     <li onclick="changeTime('1')">Gráfico 1 Min</li>
                     <li onclick="changeTime('5')">Gráfico 5 Min</li>
-                    <li onclick="changeTime('15')">Gráfico 15 Min</li>
-                    <hr>
-                    <li style="color: #ff4400;">Sair</li>
+                    <li onclick="location.reload()" style="color: var(--danger);">Sair</li>
                 </ul>
             </nav>
 
-            <section class="content">
-                <div class="analysis-panel">
-                    <div class="signal-info">
-                        <h3>SINAL IA: <span id="iaAction">ANALISANDO...</span></h3>
-                        <p id="iaReason">Aguardando fluxo de dados...</p>
+            <section id="chart-container"></section>
+
+            <aside class="interface-panel active" id="panel-geral">
+                <h4 style="margin-top: 0;">SINAL IA EM TEMPO REAL</h4>
+                <div class="analysis-summary">
+                    <div>
+                        <div class="signal-text" id="iaAction">ANALISANDO...</div>
+                        <div id="iaReason" style="font-size: 11px; color: #888;">Aguardando fluxo...</div>
                     </div>
-                    <div class="signal-prob">
-                        <h2 id="iaProb">--%</h2>
+                    <div class="signal-prob" id="iaProb">--%</div>
+                </div>
+                <p style="font-size: 11px; color: #666; text-align: center;">Mantenha a aba aberta para receber as confirmações de entrada.</p>
+            </aside>
+
+            <aside class="interface-panel" id="panel-manual">
+                <h4 style="margin-top: 0;">OPERAÇÃO MANUAL</h4>
+                <div class="analysis-summary">
+                    <div>
+                        <div class="signal-text" id="iaActionManual">SINAL: --</div>
+                        <div id="iaProbManual" style="font-size: 11px; color: var(--accent);">Probabilidade: --%</div>
                     </div>
                 </div>
+                
+                <div class="panel-row">
+                    <div class="panel-group">
+                        <label>VALOR (USD)</label>
+                        <input type="number" id="manualAmount" value="10">
+                    </div>
+                </div>
+                <div class="panel-row">
+                    <div class="panel-group">
+                        <label>TAKE PROFIT</label>
+                        <input type="number" id="manualTP" value="5">
+                    </div>
+                    <div class="panel-group">
+                        <label>STOP LOSS</label>
+                        <input type="number" id="manualSL" value="5">
+                    </div>
+                </div>
+                <div class="panel-row" style="margin-top: 15px;">
+                    <button class="btn-buy" style="flex:1">COMPRA (CALL)</button>
+                    <button class="btn-sell" style="flex:1">VENDA (PUT)</button>
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-box"><small>RESULTADO</small><span id="manRes">--</span></div>
+                    <div class="stat-box"><small>LUCRO</small><span id="manProfit">$0.00</span></div>
+                    <div class="stat-box"><small>STATUS</small><span style="color:var(--success)">PRONTO</span></div>
+                </div>
+            </aside>
 
-                <div id="chart-container" style="height: 100%; width: 100%;"></div>
-            </section>
+            <aside class="interface-panel" id="panel-auto">
+                <h4 style="margin-top: 0;">BOT AUTOMÁTICO</h4>
+                <div class="panel-row">
+                    <div class="panel-group">
+                        <label>ENTRADA (USD)</label>
+                        <input type="number" id="autoAmount" value="1.00">
+                    </div>
+                </div>
+                <div class="panel-row">
+                    <div class="panel-group">
+                        <label>TAKE PROFIT</label>
+                        <input type="number" id="autoTP" value="10.00">
+                    </div>
+                    <div class="panel-group">
+                        <label>STOP LOSS</label>
+                        <input type="number" id="autoSL" value="5.00">
+                    </div>
+                </div>
+                <button class="btn-auto" id="btnStartAuto" onclick="toggleBot()">▶ INICIAR OPERAÇÃO AUTOMÁTICA</button>
+                
+                <div class="stats-grid" style="margin-top: 20px;">
+                    <div class="stat-box"><small>STATUS</small><span id="botStatus">PAUSADO</span></div>
+                    <div class="stat-box"><small>SESSÃO</small><span id="botSession">$0.00</span></div>
+                    <div class="stat-box"><small>W/L</small><span>0 / 0</span></div>
+                </div>
+            </aside>
         </div>
     </div>
 
     <script>
         let currentInterval = "1";
+        let botActive = false;
 
         function toggleMenu() { document.getElementById('sidebar').classList.toggle('open'); }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.interface-panel').forEach(p => p.classList.remove('active'));
+            document.getElementById('panel-' + tabId).classList.add('active');
+            if(window.innerWidth < 1024) toggleMenu();
+        }
 
         async function connectToServer() {
             const token = document.getElementById('tokenInput').value;
             if(!token) return;
-            document.getElementById('status-msg').innerText = "Validando...";
+            document.getElementById('status-msg').innerText = "Autenticando na Deriv...";
 
-            const res = await fetch('/login', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({token: token})
-            });
-            const data = await res.json();
+            try {
+                const res = await fetch('/login', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({token: token})
+                });
+                const data = await res.json();
 
-            if(data.status === 'success') {
-                document.getElementById('login-view').classList.remove('active');
-                document.getElementById('dashboard-view').classList.add('active');
-                loadChart(currentInterval);
-                startLiveData();
-            } else {
-                document.getElementById('status-msg').innerText = "Erro: Token Inválido";
+                if(data.status === 'success') {
+                    document.getElementById('login-view').classList.remove('active');
+                    document.getElementById('dashboard-view').classList.add('active');
+                    loadChart(currentInterval);
+                    startLiveData();
+                } else {
+                    document.getElementById('status-msg').innerText = "Erro: " + data.message;
+                }
+            } catch (e) {
+                document.getElementById('status-msg').innerText = "Erro de conexão com servidor.";
             }
         }
 
-        // Função para carregar o gráfico corretamente
         function loadChart(interval) {
             new TradingView.widget({
-                "width": "100%",
-                "height": "100%",
-                "symbol": "FOREXCOM:SPX500", // Simulação para Volatility (TradingView gratuito não tem R_100 nativo)
+                "autosize": true,
+                "symbol": "FOREXCOM:SPX500", 
                 "interval": interval,
                 "timezone": "Etc/UTC",
                 "theme": "dark",
                 "style": "1",
                 "locale": "br",
-                "toolbar_bg": "#f1f3f6",
                 "enable_publishing": false,
                 "hide_side_toolbar": false,
                 "allow_symbol_change": true,
@@ -103,10 +178,28 @@
         function changeTime(t) {
             currentInterval = t;
             loadChart(t);
-            toggleMenu();
+            if(window.innerWidth < 1024) toggleMenu();
+        }
+
+        function toggleBot() {
+            botActive = !botActive;
+            const btn = document.getElementById('btnStartAuto');
+            const status = document.getElementById('botStatus');
+            if(botActive) {
+                btn.innerText = "■ PARAR OPERAÇÃO";
+                btn.style.background = "var(--danger)";
+                status.innerText = "ANALISANDO";
+                status.style.color = "var(--accent)";
+            } else {
+                btn.innerText = "▶ INICIAR OPERAÇÃO AUTOMÁTICA";
+                btn.style.background = "var(--accent)";
+                status.innerText = "PAUSADO";
+                status.style.color = "white";
+            }
         }
 
         function startLiveData() {
+            // Update Account Info
             setInterval(async () => {
                 const res = await fetch('/account_info');
                 const data = await res.json();
@@ -114,14 +207,24 @@
                 document.getElementById('type-display').innerText = (data.account_type || "demo").toUpperCase();
             }, 3000);
 
+            // Update Analysis
             setInterval(async () => {
                 const res = await fetch('/get_analysis');
                 const data = await res.json();
                 if(data.status === 'active') {
+                    const color = data.action.includes("CALL") ? "#00ff88" : "#ff3344";
+                    const prob = (data.probability * 100).toFixed(0) + "%";
+                    
+                    // Update Geral
                     document.getElementById('iaAction').innerText = data.action;
-                    document.getElementById('iaProb').innerText = (data.probability * 100).toFixed(0) + "%";
+                    document.getElementById('iaAction').style.color = color;
+                    document.getElementById('iaProb').innerText = prob;
                     document.getElementById('iaReason').innerText = data.reason;
-                    document.getElementById('iaAction').style.color = data.action.includes("CALL") ? "#00ff88" : "#ff3344";
+
+                    // Update Manual
+                    document.getElementById('iaActionManual').innerText = "RECOMENDAÇÃO: " + data.action;
+                    document.getElementById('iaActionManual').style.color = color;
+                    document.getElementById('iaProbManual').innerText = "Probabilidade: " + prob;
                 }
             }, 2000);
         }
