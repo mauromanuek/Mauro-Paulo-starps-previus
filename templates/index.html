@@ -2,79 +2,140 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Previus-Starps OS | Smart Interface</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Previus-Starps OS</title>
     <link rel="stylesheet" href="/static/style.css">
     <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+    <style>
+        /* CSS Adicional para suporte às novas camadas sem alterar o style.css original */
+        #sidebar { position: fixed; left: -260px; top: 0; width: 260px; height: 100%; background: #0f0f0f; transition: 0.4s ease; z-index: 9999; border-right: 1px solid #ff4400; padding-top: 60px; }
+        #sidebar.open { left: 0; }
+        .sidebar-item { padding: 15px 20px; border-bottom: 1px solid #1a1a1a; cursor: pointer; color: #ccc; font-size: 14px; }
+        .sidebar-item:hover { background: #ff4400; color: #fff; }
+        .interface-layer { display: none; position: fixed; top: 60px; left: 0; width: 100%; height: calc(100% - 60px); background: #0a0a0a; z-index: 500; padding: 20px; overflow-y: auto; }
+        .interface-layer.active { display: block; }
+        .card-panel { background: #161616; border: 1px solid #333; padding: 20px; border-radius: 5px; margin-bottom: 20px; }
+        .btn-action { background: #ff4400; color: #fff; border: none; padding: 12px 25px; cursor: pointer; border-radius: 3px; font-weight: bold; width: 100%; margin-top: 10px; }
+        .emergency-item { color: #ff3344 !important; font-weight: bold; border-top: 1px solid #333; }
+        .status-badge { padding: 4px 8px; border-radius: 3px; font-size: 12px; }
+        .bg-up { color: #00ff88; }
+        .bg-down { color: #ff3344; }
+    </style>
 </head>
 <body>
     <div id="login-view" class="view active">
-        <div class="glass-card">
-            <h1 class="logo-neon">STARPS <span>PREVIUS</span></h1>
-            <p>SISTEMA DE INTELIGÊNCIA FINANCEIRA</p>
+        <div class="login-card">
+            <h1 style="color:#ff4400">PREVIUS-STARPS OS</h1>
+            <p>Terminal de Trading Profissional</p>
             <input type="password" id="tokenInput" placeholder="Token API Deriv">
-            <button onclick="connect()" class="btn-glow">ACESSAR TERMINAL</button>
+            <button onclick="connectToServer()">INICIALIZAR SISTEMA</button>
             <p id="status-msg"></p>
         </div>
     </div>
 
     <div id="dashboard-view" class="view">
-        <header class="main-header">
-            <button class="hamburguer" onclick="toggleMenu()">☰</button>
-            <div class="user-info">
-                <span id="balance" class="balance-text">$0.00</span>
-                <span id="acc-type" class="account-badge">DEMO</span>
+        <header>
+            <button class="menu-btn" onclick="toggleMenu()">☰ MENU</button>
+            <div class="info-bar">
+                <span id="balance-display">$0.00</span>
+                <span id="type-display" class="badge">CONTA</span>
             </div>
         </header>
 
-        <nav id="sidebar" class="sidebar-overlay">
-            <div class="sidebar-content">
-                <div class="sidebar-header">MENU DE OPERAÇÕES</div>
-                <ul class="nav-links">
-                    <li onclick="showScreen('analise')">📊 ANÁLISE GERAL</li>
-                    <li onclick="showScreen('trade-rapido')">⚡ TRADE RÁPIDO</li>
-                    <li onclick="showScreen('config')">⚙️ CONFIGURAÇÕES</li>
-                    <li onclick="emergencyStop()" class="stop-link">🛑 STOP EMERGENCY</li>
-                </ul>
-            </div>
+        <nav id="sidebar">
+            <div class="sidebar-item" onclick="showLayer('layer-chart')">📈 GRÁFICOS E INDICADORES</div>
+            <div class="sidebar-item" onclick="showLayer('layer-analysis')">📊 ANÁLISE GERAL</div>
+            <div class="sidebar-item" onclick="showLayer('layer-fast')">⚡ TRADE RÁPIDO</div>
+            <div class="sidebar-item" onclick="showLayer('layer-manual')">🎮 OPERAÇÃO MANUAL</div>
+            <div class="sidebar-item" onclick="showLayer('layer-auto')">🤖 OPERAÇÃO AUTOMÁTICA</div>
+            <div class="sidebar-item" onclick="showLayer('layer-risk')">🛡️ GESTÃO DE RISCO</div>
+            <div class="sidebar-item emergency-item" onclick="triggerEmergency()">🛑 STOP DE EMERGÊNCIA</div>
         </nav>
 
-        <main class="app-container">
-            <div class="chart-section">
-                <div id="tradingview_widget"></div>
-            </div>
-
-            <div class="decision-panel">
-                <div class="ia-intel">
-                    <div class="intel-header">
-                        <span class="status-dot"></span> IA REAL-TIME ANALYSIS
-                        <span id="iaProb" class="prob-tag">--%</span>
+        <main>
+            <section id="layer-chart" class="interface-layer active">
+                <div class="analysis-panel">
+                    <div class="signal-info">
+                        <h3>SINAL IA: <span id="iaAction">ANALISANDO</span></h3>
+                        <p id="iaReason">Processando confluência de indicadores...</p>
+                        <p>Cenário: <span id="iaScenario">---</span></p>
                     </div>
-                    <div id="iaReason" class="reason-text">Aguardando confluência de mercado para emitir sinal...</div>
+                    <div class="signal-prob">
+                        <h2 id="iaProb">--%</h2>
+                    </div>
                 </div>
+                <div id="chart-container" style="height: 65vh;"></div>
+            </section>
 
-                <div class="action-grid">
-                    <button id="btn-put" class="trade-btn put" onclick="confirmTrade('PUT')">
-                        <span class="btn-label">PUT</span>
-                        <span class="btn-sub">VENDA</span>
-                    </button>
-                    <button id="btn-call" class="trade-btn call" onclick="confirmTrade('CALL')">
-                        <span class="btn-label">CALL</span>
-                        <span class="btn-sub">COMPRA</span>
-                    </button>
+            <section id="layer-analysis" class="interface-layer">
+                <h2>ANÁLISE MACRO DO MERCADO</h2>
+                <div class="card-panel">
+                    <p>Tendência: <b id="macroTrend">---</b></p>
+                    <p>Volatilidade: <b id="macroVol">---</b></p>
+                    <p>Contexto: <b id="macroContext">---</b></p>
                 </div>
-            </div>
+            </section>
+
+            <section id="layer-fast" class="interface-layer">
+                <h2>TRADE RÁPIDO (PRÓXIMA VELA)</h2>
+                <div class="card-panel">
+                    <h1 id="fastAction" style="text-align: center;">AGUARDANDO SINAL</h1>
+                    <p>Probabilidade: <span id="fastProb">--</span></p>
+                    <p>Duração: <span id="fastDur">--</span></p>
+                    <p>Cenário: <span id="fastScen">--</span></p>
+                    <button class="btn-action" onclick="executeTrade()">CONFIRMAR ENTRADA</button>
+                </div>
+            </section>
+
+            <section id="layer-manual" class="interface-layer">
+                <h2>OPERAÇÃO MANUAL</h2>
+                <div class="card-panel">
+                    <label>Valor (USD):</label>
+                    <input type="number" id="mAmount" value="10" style="width: 100%; margin-bottom: 10px; background: #000; color: #fff; border: 1px solid #444; padding: 8px;">
+                    <label>Tipo de Contrato:</label>
+                    <select style="width: 100%; padding: 8px; background: #000; color: #fff; margin-bottom: 10px;">
+                        <option>CALL / PUT (Padrão)</option>
+                        <option>Higher / Lower</option>
+                    </select>
+                    <button class="btn-action" onclick="executeTrade()">EXECUTAR ORDEM MANUAL</button>
+                </div>
+            </section>
+
+            <section id="layer-auto" class="interface-layer">
+                <h2>OPERAÇÃO AUTOMÁTICA</h2>
+                <div class="card-panel">
+                    <p>Status: <b id="autoStatus">DESLIGADO</b></p>
+                    <button class="btn-action" style="background: #00ff88; color: #000;" onclick="updateAutoTrading(true)">ATIVAR BOT</button>
+                    <button class="btn-action" style="background: #333;" onclick="updateAutoTrading(false)">DESATIVAR</button>
+                </div>
+            </section>
+
+            <section id="layer-risk" class="interface-layer">
+                <h2>GESTÃO DE RISCO</h2>
+                <div class="card-panel">
+                    <p>Perda Diária Limite ($): <input type="number" value="50" style="background: #000; color: #fff; border: 1px solid #444;"></p>
+                    <p>Meta Diária ($): <input type="number" value="20" style="background: #000; color: #fff; border: 1px solid #444;"></p>
+                </div>
+            </section>
         </main>
     </div>
 
     <script>
-        let tvWidget = null;
+        let currentInterval = "1";
+
         function toggleMenu() { document.getElementById('sidebar').classList.toggle('open'); }
 
-        async function connect() {
+        function showLayer(layerId) {
+            document.querySelectorAll('.interface-layer').forEach(l => l.classList.remove('active'));
+            document.getElementById(layerId).classList.add('active');
+            toggleMenu();
+            if(layerId === 'layer-chart') loadChart(currentInterval);
+        }
+
+        async function connectToServer() {
             const token = document.getElementById('tokenInput').value;
-            const msg = document.getElementById('status-msg');
-            msg.innerText = "Sincronizando APP 114910...";
+            if(!token) return;
+            document.getElementById('status-msg').innerText = "Conectando...";
             const res = await fetch('/login', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -84,53 +145,64 @@
             if(data.status === 'success') {
                 document.getElementById('login-view').classList.remove('active');
                 document.getElementById('dashboard-view').classList.add('active');
-                initChart();
-                startLoops();
-            } else { msg.innerText = "Falha na Autenticação."; }
+                loadChart(currentInterval);
+                startMainEngine();
+            } else { document.getElementById('status-msg').innerText = data.message; }
         }
 
-        function initChart() {
-            tvWidget = new TradingView.widget({
-                "autosize": true,
-                "symbol": "DERIV:VOL100",
-                "interval": "1",
-                "timezone": "Etc/UTC",
+        function loadChart(interval) {
+            new TradingView.widget({
+                "width": "100%", "height": "100%",
+                "symbol": "DERIV:100",
+                "interval": interval,
                 "theme": "dark",
-                "style": "1",
-                "locale": "br",
-                "enable_publishing": false,
-                "hide_top_toolbar": true,
-                "hide_legend": true,
-                "save_image": false,
-                "container_id": "tradingview_widget"
+                "container_id": "chart-container"
             });
         }
 
-        function startLoops() {
+        async function updateAutoTrading(state) {
+            await fetch(`/toggle_auto?state=${state}`, {method: 'POST'});
+            document.getElementById('autoStatus').innerText = state ? "ATIVO" : "DESLIGADO";
+            document.getElementById('autoStatus').style.color = state ? "#00ff88" : "#ff3344";
+        }
+
+        async function triggerEmergency() {
+            await fetch('/emergency_stop', {method: 'POST'});
+            alert("SISTEMA BLOQUEADO!");
+            location.reload();
+        }
+
+        function executeTrade() { alert("Confirmando operação na Deriv..."); }
+
+        function startMainEngine() {
             setInterval(async () => {
-                const r = await fetch('/account_info');
-                const d = await r.json();
-                document.getElementById('balance').innerText = "$" + (d.balance || 0).toFixed(2);
-                document.getElementById('acc-type').innerText = (d.account_type || "demo").toUpperCase();
+                const res = await fetch('/account_info');
+                const data = await res.json();
+                document.getElementById('balance-display').innerText = "$" + (data.balance || 0).toFixed(2);
+                document.getElementById('type-display').innerText = (data.account_type || "demo").toUpperCase();
             }, 3000);
 
             setInterval(async () => {
-                const r = await fetch('/get_analysis');
-                const d = await r.json();
-                if(d.status === 'active') {
-                    const reasonEl = document.getElementById('iaReason');
-                    const probEl = document.getElementById('iaProb');
-                    reasonEl.innerText = d.reason;
-                    probEl.innerText = (d.probability * 100).toFixed(0) + "%";
-                    
-                    // Feedback Visual de Intensidade
-                    reasonEl.classList.add('pulse');
-                    setTimeout(() => reasonEl.classList.remove('pulse'), 500);
+                const res = await fetch('/get_analysis');
+                const data = await res.json();
+                if(data.status === 'active') {
+                    document.getElementById('iaAction').innerText = data.action;
+                    document.getElementById('iaAction').className = data.action.includes("CALL") ? "bg-up" : "bg-down";
+                    document.getElementById('iaProb').innerText = (data.probability * 100).toFixed(0) + "%";
+                    document.getElementById('iaReason').innerText = data.reason;
+                    document.getElementById('iaScenario').innerText = data.scenario;
+                    document.getElementById('fastAction').innerText = data.action;
+                    document.getElementById('fastProb').innerText = (data.probability * 100).toFixed(0) + "%";
+                    document.getElementById('fastDur').innerText = data.duration;
+                    document.getElementById('fastScen').innerText = data.scenario;
                 }
+                const macroRes = await fetch('/macro_stats');
+                const macro = await macroRes.json();
+                document.getElementById('macroTrend').innerText = macro.trend;
+                document.getElementById('macroVol').innerText = macro.volatility;
+                document.getElementById('macroContext').innerText = macro.context;
             }, 2000);
         }
-
-        function emergencyStop() { location.reload(); }
     </script>
 </body>
 </html>
