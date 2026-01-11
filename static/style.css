@@ -1,28 +1,143 @@
-:root { --accent: #ff4400; --bg: #0e0e15; --card: #161720; }
-body { margin: 0; background: var(--bg); color: white; font-family: 'Segoe UI', sans-serif; }
-.view { display: none; height: 100vh; }
+:root { 
+    --accent: #ff4400; 
+    --bg: #0e0e15; 
+    --card: #161720; 
+    --success: #00ff88;
+    --danger: #ff3344;
+    --text: #ffffff;
+}
+
+body { 
+    margin: 0; 
+    background: var(--bg); 
+    color: var(--text); 
+    font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
+    overflow: hidden;
+}
+
+/* Estrutura de Telas */
+.view { display: none; height: 100vh; width: 100vw; }
 .view.active { display: block; }
 
-/* Menu Lateral */
+/* Login */
+.login-card { 
+    width: 90%; 
+    max-width: 350px; 
+    margin: 100px auto; 
+    background: var(--card); 
+    padding: 30px; 
+    border-radius: 12px; 
+    text-align: center; 
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+input { 
+    width: 100%; 
+    padding: 12px; 
+    margin-bottom: 20px; 
+    background: #000; 
+    border: 1px solid #333; 
+    color: white; 
+    border-radius: 5px;
+    box-sizing: border-box;
+}
+button { 
+    width: 100%; 
+    padding: 12px; 
+    background: var(--accent); 
+    border: none; 
+    color: white; 
+    cursor: pointer; 
+    font-weight: bold; 
+    border-radius: 5px;
+    transition: 0.2s;
+}
+button:hover { opacity: 0.9; }
+
+/* Header e Navigation */
+header { 
+    height: 60px; 
+    background: var(--card); 
+    display: flex; 
+    align-items: center; 
+    padding: 0 20px; 
+    justify-content: space-between; 
+    border-bottom: 1px solid #333; 
+    position: relative;
+    z-index: 100;
+}
+.menu-btn { background: none; border: none; color: white; font-size: 24px; cursor: pointer; }
+.info-bar { display: flex; gap: 15px; align-items: center; }
+.badge { background: #333; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+
 #sidebar { 
-    position: fixed; left: -250px; top: 60px; width: 200px; height: 100%; 
-    background: var(--card); transition: 0.3s; z-index: 10; border-right: 1px solid #333;
+    position: fixed; left: -260px; top: 0; width: 250px; height: 100%; 
+    background: var(--card); transition: 0.3s; z-index: 1000; border-right: 1px solid #333;
+    padding-top: 20px;
 }
 #sidebar.open { left: 0; }
-#sidebar ul { list-style: none; padding: 20px; }
-#sidebar li { padding: 15px; cursor: pointer; border-bottom: 1px solid #222; }
-#sidebar li:hover { color: var(--accent); }
+#sidebar ul { list-style: none; padding: 0; margin-top: 40px; }
+#sidebar li { 
+    padding: 15px 25px; 
+    cursor: pointer; 
+    border-bottom: 1px solid #222; 
+    transition: 0.2s;
+}
+#sidebar li:hover { background: #1f202c; color: var(--accent); }
 
-/* Header */
-header { height: 60px; background: var(--card); display: flex; align-items: center; padding: 0 20px; justify-content: space-between; border-bottom: 1px solid #333; }
-.menu-btn { background: none; border: none; color: white; font-size: 24px; cursor: pointer; }
+/* Layout Principal */
+.main-layout { display: flex; flex-direction: column; height: calc(100vh - 60px); }
 
-/* Dashboard */
-.content { padding: 20px; height: calc(100vh - 100px); }
-.analysis-panel { background: var(--card); padding: 15px; border-radius: 8px; display: flex; justify-content: space-between; margin-bottom: 15px; border-left: 5px solid var(--accent); }
-#chart-container { background: #000; border-radius: 8px; min-height: 400px; }
+/* Área do Gráfico - Expandida */
+#chart-container { 
+    flex-grow: 1; 
+    background: #000; 
+    width: 100%;
+    position: relative;
+}
 
-/* Login */
-.login-card { width: 300px; margin: 100px auto; background: var(--card); padding: 30px; border-radius: 12px; text-align: center; }
-input { width: 90%; padding: 10px; margin-bottom: 20px; background: #000; border: 1px solid #333; color: white; }
-button { width: 100%; padding: 10px; background: var(--accent); border: none; color: white; cursor: pointer; font-weight: bold; }
+/* Painéis de Interface (Manual/Auto/Geral) */
+.interface-panel {
+    background: var(--card);
+    padding: 15px;
+    border-top: 1px solid #333;
+    max-height: 40vh;
+    overflow-y: auto;
+    display: none;
+}
+.interface-panel.active { display: block; }
+
+.panel-row { display: flex; gap: 10px; margin-bottom: 10px; }
+.panel-group { flex: 1; }
+.panel-group label { display: block; font-size: 11px; color: #888; margin-bottom: 4px; }
+.panel-group input { margin-bottom: 0; padding: 8px; font-size: 14px; }
+
+/* Botões de Operação */
+.btn-buy { background: var(--success); }
+.btn-sell { background: var(--danger); }
+.btn-auto { background: var(--accent); }
+
+/* Sinal IA */
+.analysis-summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 15px;
+    background: #1f202c;
+    border-radius: 8px;
+    margin-bottom: 10px;
+}
+.signal-text { font-weight: bold; font-size: 14px; }
+.signal-prob { color: var(--accent); font-size: 18px; font-weight: 800; }
+
+/* Status e Resultados */
+.stats-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 10px; }
+.stat-box { background: #000; padding: 10px; border-radius: 5px; text-align: center; border: 1px solid #222; }
+.stat-box small { display: block; font-size: 10px; color: #666; }
+.stat-box span { font-weight: bold; font-size: 14px; }
+
+/* Desktop Adjustment */
+@media (min-width: 1024px) {
+    .main-layout { flex-direction: row; }
+    .interface-panel { width: 350px; height: 100%; max-height: none; border-top: none; border-left: 1px solid #333; }
+    #chart-container { height: 100%; }
+}
