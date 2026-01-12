@@ -1,14 +1,36 @@
-import os
+import json
+import asyncio
 
-class Config:
-    # O APP_ID padrão da Deriv para apps genéricos é 1089, 
-    # ou o seu específico se você criou um no portal de desenvolvedores.
-    APP_ID = "114910" 
-    
-    # Este campo ficará vazio aqui por segurança. 
-    # O Bot vai receber o Token que você digitar na tela de Login.
-    DERIV_TOKEN = os.environ.get('DERIV_TOKEN', '') 
+class TradeExecutor:
+    def __init__(self, client):
+        self.client = client
+        self.last_result = None
 
-    # Configurações de Gerenciamento de Risco Padrão
-    DEFAULT_SYMBOL = "R_100"  # Volatility 100 Index
-    MIN_PROBABILITY = 0.75    # Só avisa se a chance for maior que 75%
+    async def execute_trade(self, action: str, amount: float, symbol: str = "R_100"):
+        """Executa a ordem na Deriv via WebSocket"""
+        if not self.client or not self.client.authorized:
+            return {"status": "error", "message": "Cliente não autorizado."}
+
+        # Deriv usa CALL para Compra e PUT para Venda
+        contract_type = "CALL" if "CALL" in action.upper() else "PUT"
+        
+        trade_msg = {
+            "buy": 1,
+            "subscribe": 1,
+            "price": amount,
+            "parameters": {
+                "amount": amount,
+                "basis": "stake",
+                "contract_type": contract_type,
+                "currency": "USD",
+                "duration": 1,
+                "duration_unit": "m",
+                "symbol": symbol
+            }
+        }
+
+        try:
+            await self.client.ws.send(json.dumps(trade_msg))
+            return {"status": "success", "message": f"Ordem {contract_type} enviada!", "type": contract_type}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
