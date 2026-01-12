@@ -3,6 +3,7 @@ import uuid
 from enum import Enum
 from typing import Dict, Optional, Any, List
 from strategy import generate_signal
+from executor import TradeExecutor
 
 class BotState(Enum):
     ACTIVE = "ACTIVE"
@@ -10,26 +11,28 @@ class BotState(Enum):
     ERROR = "ERROR"
 
 class TradingBot:
-    """Representa uma instância de operação do Previus-Starps"""
     def __init__(self, name: str, symbol: str, client: Any):
         self.id = str(uuid.uuid4())[:8]
         self.name = name
         self.symbol = symbol
         self.client = client
-        self.state = BotState.ACTIVE
+        self.executor = TradeExecutor(client)
+        self.state = BotState.PAUSED
         self.history = []
+        self.stats = {"wins": 0, "losses": 0, "profit": 0.0}
 
-    async def run_analysis_loop(self):
-        """Loop contínuo de análise para este bot específico"""
+    async def run_auto_loop(self, amount: float):
+        """Loop de operação automática real"""
+        self.state = BotState.ACTIVE
         while self.state == BotState.ACTIVE:
-            sinal = generate_signal()
-            if sinal:
-                self.history.append(sinal)
-                # Aqui o bot enviaria um alerta para o painel
-            await asyncio.sleep(2) # Frequência de atualização
+            signal = generate_signal()
+            # Só executa se a probabilidade for alta (conforme config.py)
+            if signal and signal.get('probability', 0) >= 0.75:
+                await self.executor.execute_trade(signal['action'], amount, self.symbol)
+                self.history.append(signal)
+            await asyncio.sleep(60) # Espera 1 minuto por vela
 
 class BotsManager:
-    """Gerencia todos os bots ativos no sistema"""
     def __init__(self):
         self.active_bots: Dict[str, TradingBot] = {}
 
@@ -41,9 +44,3 @@ class BotsManager:
     def stop_bot(self, bot_id: str):
         if bot_id in self.active_bots:
             self.active_bots[bot_id].state = BotState.PAUSED
-
-    def get_all_status(self) -> List[Dict]:
-        return [
-            {"id": b.id, "name": b.name, "state": b.state.value, "symbol": b.symbol}
-            for b in self.active_bots.values()
-        ]
