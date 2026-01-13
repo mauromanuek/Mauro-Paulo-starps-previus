@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Master Bot Deriv | Pro Terminal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root { --deriv-dark: #0b0e11; --deriv-card: #1e2329; --deriv-yellow: #f0b90b; }
+        body { font-family: 'Inter', sans-serif; background-color: var(--deriv-dark); color: #eaecef; overflow: hidden; }
+        .glass { background: rgba(30, 35, 41, 0.95); backdrop-filter: blur(10px); }
+        .sidebar-transition { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .status-pulse { animation: pulse 2s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        input[type="range"]::-webkit-slider-thumb { appearance: none; width: 15px; height: 15px; background: var(--deriv-yellow); border-radius: 50%; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div id="view-login" class="flex items-center justify-center min-h-screen p-4">
+        <div class="bg-card w-full max-w-md p-8 rounded-2xl border border-gray-800 shadow-2xl glass">
+            <div class="text-center mb-10">
+                <div class="inline-block p-4 rounded-full bg-yellow-500/10 mb-4">
+                    <i class="fas fa-shield-halved text-4xl text-yellow-500"></i>
+                </div>
+                <h1 class="text-3xl font-bold">Master Bot <span class="text-yellow-500">Deriv</span></h1>
+                <p class="text-gray-400 mt-2">Conecte-se via API Token para operar</p>
+            </div>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm text-gray-400 mb-2 font-medium">API Token</label>
+                    <input type="password" id="api-token" placeholder="Insira seu token aqui..." 
+                           class="w-full bg-black/40 border border-gray-700 rounded-xl p-4 focus:border-yellow-500 transition outline-none text-center tracking-widest">
+                </div>
+                <button onclick="derivApp.init()" id="btn-connect" 
+                        class="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-2">
+                    <i class="fas fa-plug"></i> CONECTAR TERMINAL
+                </button>
+                <div id="login-error" class="hidden text-red-500 text-center text-sm bg-red-500/10 p-2 rounded-lg border border-red-500/20">
+                    Token inválido ou erro de conexão.
+                </div>
+            </div>
+            
+            <div class="mt-8 pt-6 border-t border-gray-800 text-center">
+                <p class="text-xs text-gray-500 italic">Conectado ao App ID: 114910</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="view-main" class="hidden h-screen flex flex-col">
+        <header class="h-16 border-b border-gray-800 glass flex items-center justify-between px-6 z-20">
+            <div class="flex items-center gap-4">
+                <button onclick="derivUI.toggleSidebar()" class="text-xl hover:text-yellow-500"><i class="fas fa-bars"></i></button>
+                <div class="h-8 w-[1px] bg-gray-700"></div>
+                <h2 class="font-semibold text-lg hidden md:block">Terminal <span class="text-yellow-500">Pro</span></h2>
+            </div>
+            
+            <div class="flex items-center gap-6">
+                <div class="text-right">
+                    <p id="acc-type" class="text-[10px] font-bold text-gray-500 uppercase tracking-tighter">Conta Demo</p>
+                    <p id="acc-balance" class="text-xl font-bold text-green-500">$ 0.00</p>
+                </div>
+                <button onclick="location.reload()" class="bg-gray-800 p-2 rounded-lg hover:bg-gray-700"><i class="fas fa-sign-out-alt"></i></button>
+            </div>
+        </header>
+
+        <div class="flex flex-1 overflow-hidden relative">
+            <aside id="sidebar" class="sidebar-transition absolute left-[-280px] top-0 bottom-0 w-64 glass border-r border-gray-800 z-30 p-4">
+                <nav class="space-y-2">
+                    <button onclick="derivUI.switchTab('digit')" class="nav-btn w-full flex items-center gap-3 p-4 rounded-xl hover:bg-yellow-500/10 hover:text-yellow-500 transition active">
+                        <i class="fas fa-percentage w-5"></i> Digit Over/Under
+                    </button>
+                    <button onclick="derivUI.switchTab('manual')" class="nav-btn w-full flex items-center gap-3 p-4 rounded-xl hover:bg-yellow-500/10 hover:text-yellow-500 transition">
+                        <i class="fas fa-mouse-pointer w-5"></i> Operação Manual
+                    </button>
+                    <button onclick="derivUI.switchTab('auto')" class="nav-btn w-full flex items-center gap-3 p-4 rounded-xl hover:bg-yellow-500/10 hover:text-yellow-500 transition">
+                        <i class="fas fa-robot w-5"></i> Operação Automática
+                    </button>
+                </nav>
+            </aside>
+
+            <main class="flex-1 flex flex-col p-4 gap-4 overflow-y-auto">
+                <div class="h-3/5 bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden relative shadow-inner">
+                    <div id="tradingview_widget" class="w-full h-full"></div>
+                </div>
+
+                <div id="interface-container" class="h-2/5 grid grid-cols-1 md:grid-cols-3 gap-4">
+                    </div>
+            </main>
+        </div>
+    </div>
+
+    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+    <script>
+        // CORE LOGIC - DERIV APP
+        const derivApp = {
+            ws: null,
+            appId: 114910,
+            token: '',
+            
+            init() {
+                this.token = document.getElementById('api-token').value;
+                if (!this.token) return;
+                
+                const btn = document.getElementById('btn-connect');
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> AUTENTICANDO...';
+                
+                this.ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${this.appId}`);
+                
+                this.ws.onopen = () => {
+                    this.ws.send(jsonMsg({ "authorize": this.token }));
+                };
+
+                this.ws.onmessage = (msg) => {
+                    const data = JSON.parse(msg.data);
+                    this.handleMessages(data);
+                };
+            },
+
+            handleMessages(data) {
+                if (data.error) {
+                    document.getElementById('login-error').classList.remove('hidden');
+                    document.getElementById('btn-connect').innerText = 'CONECTAR TERMINAL';
+                    return;
+                }
+
+                if (data.msg_type === 'authorize') {
+                    document.getElementById('view-login').classList.add('hidden');
+                    document.getElementById('view-main').classList.remove('hidden');
+                    
+                    document.getElementById('acc-balance').innerText = `$ ${data.authorize.balance}`;
+                    document.getElementById('acc-type').innerText = data.authorize.is_virtual ? 'Conta Demo' : 'Conta Real';
+                    
+                    this.initChart();
+                    // Iniciar subscrição de ticks para análise global
+                    this.ws.send(jsonMsg({ "ticks": "R_100", "subscribe": 1 }));
+                }
+
+                if (data.msg_type === 'tick') {
+                    // Update global de ticks para os módulos
+                    window.dispatchEvent(new CustomEvent('tickUpdate', { detail: data.tick }));
+                }
+            },
+
+            initChart() {
+                new TradingView.widget({
+                    "autosize": true,
+                    "symbol": "DERIV:R_100",
+                    "interval": "1",
+                    "timezone": "Etc/UTC",
+                    "theme": "dark",
+                    "style": "1",
+                    "locale": "br",
+                    "container_id": "tradingview_widget",
+                    "enable_publishing": false,
+                    "hide_top_toolbar": false,
+                    "save_image": false
+                });
+            }
+        };
+
+        const derivUI = {
+            toggleSidebar() {
+                const side = document.getElementById('sidebar');
+                side.style.left = side.style.left === '0px' ? '-280px' : '0px';
+            },
+            switchTab(tab) {
+                console.log("Mudando para:", tab);
+                this.toggleSidebar();
+                // Próxima fase: Carregar HTML do componente
+            }
+        };
+
+        function jsonMsg(obj) { return JSON.stringify(obj); }
+    </script>
+</body>
+</html>
