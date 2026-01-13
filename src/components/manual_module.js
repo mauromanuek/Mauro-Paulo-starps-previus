@@ -1,50 +1,63 @@
 const ManualModule = {
-    isWorking: false,
-
+    isAnalyzing: false,
     render() {
         return `
-            <div class="flex flex-col gap-6">
-                <h2 class="text-xl font-bold text-green-500 uppercase italic">Operação Manual</h2>
+            <div class="flex flex-col gap-4">
+                <h2 class="font-bold text-green-500 uppercase">Operação Manual</h2>
+                <div class="grid grid-cols-3 gap-2 mb-4">
+                    <input type="number" placeholder="Entrada" class="bg-black p-2 rounded border border-gray-700 text-xs">
+                    <input type="number" placeholder="T.P" class="bg-black p-2 rounded border border-gray-700 text-xs">
+                    <input type="number" placeholder="S.L" class="bg-black p-2 rounded border border-gray-700 text-xs">
+                </div>
                 
-                <div class="flex flex-col gap-4">
-                    <button onclick="ManualModule.execute('CALL')" class="group bg-green-600/20 border-2 border-green-600 p-6 rounded-2xl flex items-center justify-between hover:bg-green-600 transition-all">
-                        <span class="font-bold text-xl text-green-500 group-hover:text-white uppercase">Comprar (Subida)</span>
-                        <i class="fas fa-arrow-up text-2xl text-green-500 group-hover:text-white"></i>
+                <button id="btn-man-toggle" onclick="ManualModule.toggle()" class="w-full py-4 bg-blue-600 rounded-xl font-bold mb-4">INICIAR ANÁLISE</button>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <button id="btn-call" disabled class="opacity-50 bg-gray-800 p-6 rounded-2xl flex flex-col items-center border-2 border-transparent">
+                        <i class="fas fa-arrow-up text-2xl text-green-500"></i>
+                        <span class="font-bold mt-2">COMPRAR</span>
                     </button>
-                    
-                    <button onclick="ManualModule.execute('PUT')" class="group bg-red-600/20 border-2 border-red-600 p-6 rounded-2xl flex items-center justify-between hover:bg-red-600 transition-all">
-                        <span class="font-bold text-xl text-red-500 group-hover:text-white uppercase">Vender (Descida)</span>
-                        <i class="fas fa-arrow-down text-2xl text-red-500 group-hover:text-white"></i>
+                    <button id="btn-put" disabled class="opacity-50 bg-gray-800 p-6 rounded-2xl flex flex-col items-center border-2 border-transparent">
+                        <i class="fas fa-arrow-down text-2xl text-red-500"></i>
+                        <span class="font-bold mt-2">VENDER</span>
                     </button>
                 </div>
-
-                <button id="btn-manual-toggle" onclick="ManualModule.toggle()" class="w-full py-4 rounded-xl border-2 border-gray-700 font-bold hover:border-green-500 transition-all">
-                    INICIAR OPERAR
-                </button>
+                <div id="manual-profit" class="mt-4 text-center font-bold text-xl">$ 0.00</div>
             </div>
         `;
     },
-
     toggle() {
-        this.isWorking = !this.isWorking;
-        const btn = document.getElementById('btn-manual-toggle');
-        if(this.isWorking) {
-            btn.innerText = 'DESLIGAR OPERAÇÃO';
-            btn.classList.add('active-btn');
-            app.notify("Modo Manual Ativado");
+        const btn = document.getElementById('btn-man-toggle');
+        this.isAnalyzing = !this.isAnalyzing;
+        if(this.isAnalyzing) {
+            btn.innerText = "DESLIGAR ANÁLISE";
+            btn.classList.add('btn-active');
+            app.notify("Analisando mercado para entrada manual...");
+            this.simulateAnalysis();
         } else {
-            btn.innerText = 'INICIAR OPERAR';
-            btn.classList.remove('active-btn');
-            app.notify("Modo Manual Desativado");
+            btn.innerText = "INICIAR ANÁLISE";
+            btn.classList.remove('btn-active');
+            this.resetButtons();
         }
     },
-
-    execute(side) {
-        if(!this.isWorking) {
-            app.notify("Ative o botão 'OPERAR' primeiro!");
-            return;
-        }
-        app.notify(`Executando ordem de ${side}...`);
-        // Lógica de compra/venda original mantida aqui
+    simulateAnalysis() {
+        // Simulação de análise: Acende um botão aleatoriamente após 2s
+        setTimeout(() => {
+            if(!this.isAnalyzing) return;
+            const side = Math.random() > 0.5 ? 'call' : 'put';
+            const target = document.getElementById('btn-' + side);
+            this.resetButtons();
+            target.disabled = false;
+            target.classList.remove('opacity-50', 'bg-gray-800');
+            target.classList.add('indicator-glow', side === 'call' ? 'bg-green-600' : 'bg-red-600');
+            app.notify("Sinal Detectado: " + side.toUpperCase());
+        }, 2000);
+    },
+    resetButtons() {
+        ['btn-call', 'btn-put'].forEach(id => {
+            const b = document.getElementById(id);
+            b.disabled = true;
+            b.className = "opacity-50 bg-gray-800 p-6 rounded-2xl flex flex-col items-center border-2 border-transparent text-white";
+        });
     }
 };
