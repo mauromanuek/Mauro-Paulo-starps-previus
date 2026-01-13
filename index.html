@@ -13,41 +13,47 @@
         @media (min-width: 1024px) { #chart-container { height: 100%; min-height: 600px; } }
         .btn-stop { background-color: #ef4444 !important; }
         .indicator-glow { box-shadow: 0 0 20px #22c55e; border: 2px solid #22c55e !important; }
+        /* Animacao para destaque de sinal */
+        .animate-pulse-fast { animation: pulse 0.5s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
     </style>
 </head>
 <body class="h-screen flex flex-col">
 
     <div id="view-login" class="flex-1 flex items-center justify-center p-4">
         <div class="bg-[#1e2329] p-8 rounded-2xl border border-gray-800 w-full max-w-md shadow-2xl">
-            <h1 class="text-2xl font-bold text-center mb-6">Master Bot <span class="text-yellow-500">Deriv</span></h1>
+            <h1 class="text-2xl font-bold text-center mb-6 text-white">Master Bot <span class="text-yellow-500">Deriv</span></h1>
             <input type="password" id="api-token" placeholder="Insira seu API Token" 
                    class="w-full bg-black border border-gray-700 rounded-xl p-4 mb-4 text-center outline-none focus:border-yellow-500 text-white">
             <button id="btn-connect" onclick="app.start()" class="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-4 rounded-xl transition-all">
                 CONECTAR TERMINAL
             </button>
-            <p class="text-[10px] text-gray-500 mt-4 text-center">Conexão Direta (Static Mode)</p>
+            <p class="text-[10px] text-gray-500 mt-4 text-center uppercase tracking-widest">Conexão Direta (API v3.0)</p>
         </div>
     </div>
 
     <div id="view-main" class="hidden h-screen flex flex-col">
         <header class="h-16 border-b border-gray-800 glass flex items-center justify-between px-6 z-50">
             <div class="flex items-center gap-4">
-                <button onclick="app.toggleMenu()" class="text-yellow-500 text-xl"><i class="fas fa-bars"></i></button>
+                <button onclick="app.toggleMenu()" class="text-yellow-500 text-xl hover:scale-110 transition-transform"><i class="fas fa-bars"></i></button>
                 <span class="font-bold text-yellow-500 italic uppercase leading-tight">Pro Terminal</span>
             </div>
-            <div id="acc-balance" class="text-xl font-bold text-green-500">$ 0.00</div>
+            <div id="acc-balance" class="text-xl font-bold text-green-500 font-mono">$ 0.00</div>
         </header>
 
-        <div id="side-menu" class="fixed left-0 top-16 h-full w-64 bg-[#1e2329] border-r border-gray-800 transform -translate-x-full transition-transform z-40">
+        <div id="side-menu" class="fixed left-0 top-16 h-full w-64 bg-[#1e2329] border-r border-gray-800 transform -translate-x-full transition-transform z-40 shadow-2xl">
             <nav class="p-4 flex flex-col gap-2">
-                <button onclick="app.switchInterface('general')" class="flex items-center gap-3 p-3 hover:bg-gray-800 rounded-lg text-left">
-                    <i class="fas fa-home text-blue-400"></i> Análise Geral
+                <button onclick="app.switchInterface('general')" class="flex items-center gap-3 p-4 hover:bg-gray-800 rounded-xl text-left transition-colors">
+                    <i class="fas fa-chart-line text-blue-400"></i> <span class="font-semibold">Visão Geral</span>
                 </button>
-                <button onclick="app.switchInterface('manual')" class="flex items-center gap-3 p-3 hover:bg-gray-800 rounded-lg text-left">
-                    <i class="fas fa-hand-paper text-green-400"></i> Operação Manual
+                <button onclick="app.switchInterface('manual')" class="flex items-center gap-3 p-4 hover:bg-gray-800 rounded-xl text-left transition-colors">
+                    <i class="fas fa-hand-pointer text-green-400"></i> <span class="font-semibold">Operação Manual</span>
                 </button>
-                <button onclick="app.switchInterface('digits')" class="flex items-center gap-3 p-3 hover:bg-gray-800 rounded-lg text-left">
-                    <i class="fas fa-fingerprint text-yellow-400"></i> Digit Over/Under
+                <button onclick="app.switchInterface('auto')" class="flex items-center gap-3 p-4 hover:bg-gray-800 rounded-xl text-left transition-colors">
+                    <i class="fas fa-robot text-purple-400"></i> <span class="font-semibold">Operação Automática</span>
+                </button>
+                <button onclick="app.switchInterface('digits')" class="flex items-center gap-3 p-4 hover:bg-gray-800 rounded-xl text-left transition-colors">
+                    <i class="fas fa-fingerprint text-yellow-400"></i> <span class="font-semibold">Digit Over/Under</span>
                 </button>
             </nav>
         </div>
@@ -56,39 +62,47 @@
             <div class="flex-[3] bg-black border-r border-gray-800" id="chart-container">
                 <div id="tv_widget" class="w-full h-full"></div>
             </div>
-            <div id="interface-container" class="flex-[1.5] bg-[#0b0e11] p-4 overflow-y-auto"></div>
+
+            <div id="interface-container" class="flex-[1.5] bg-[#0b0e11] p-4 overflow-y-auto shadow-inner">
+                </div>
         </main>
         
-        <footer class="h-8 bg-black border-t border-gray-800 px-4 flex items-center text-[10px] text-gray-500 italic font-mono">
-            <span id="status-text">Aguardando login...</span>
+        <footer class="h-10 bg-black border-t border-gray-800 px-6 flex items-center justify-between text-[11px] text-gray-400 font-mono">
+            <div class="flex items-center gap-2">
+                <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                <span id="status-text">Terminal pronto.</span>
+            </div>
+            <div id="result-display" class="font-bold"></div>
         </footer>
     </div>
 
     <script src="https://s3.tradingview.com/tv.js"></script>
     <script src="src/core/deriv_api.js"></script>
-    <script src="src/components/digit_module.js"></script>
+    <script src="src/components/auto_module.js"></script>
     <script src="src/components/manual_module.js"></script>
+    <script src="src/components/digit_module.js"></script>
 
     <script>
         const app = {
             isMenuOpen: false,
             chartInitialized: false,
+            token: '',
 
-            // REGRA: Sem main.py. Conectamos direto via deriv_api.js
             async start() {
-                const token = document.getElementById('api-token').value;
+                const tokenInput = document.getElementById('api-token');
                 const btn = document.getElementById('btn-connect');
+                this.token = tokenInput.value;
 
-                if (!token) return alert("Por favor, insira o token!");
+                if (!this.token) return alert("Por favor, insira o token!");
 
-                btn.innerText = "CONECTANDO...";
+                btn.innerText = "AUTENTICANDO...";
                 btn.disabled = true;
 
-                // Chamamos o deriv_api.js que criamos lá atrás
-                DerivAPI.connect(token, (response) => {
+                // Conecta direto via deriv_api.js (Static)
+                DerivAPI.connect(this.token, (response) => {
                     if (response.msg_type === 'authorize') {
                         if (response.error) {
-                            alert("Erro: " + response.error.message);
+                            alert("Erro de API: " + response.error.message);
                             btn.innerText = "CONECTAR TERMINAL";
                             btn.disabled = false;
                         } else {
@@ -96,66 +110,74 @@
                             document.getElementById('view-main').classList.remove('hidden');
                             this.initChart();
                             this.switchInterface('general');
-                            this.notify("Conectado com sucesso!");
+                            this.notify("Sistema Online.");
                         }
-                    }
-                    
-                    if (response.msg_type === 'balance') {
-                        document.getElementById('acc-balance').innerText = `$ ${response.balance.balance.toFixed(2)}`;
                     }
                 });
             },
 
             initChart() {
                 if (this.chartInitialized) return;
-                // Usando símbolo compatível com TradingView gratuito
                 new TradingView.widget({
                     "autosize": true,
                     "symbol": "BITSTAMP:BTCUSD", 
                     "interval": "1",
                     "theme": "dark",
+                    "style": "1",
                     "container_id": "tv_widget",
-                    "locale": "br"
+                    "locale": "br",
+                    "enable_publishing": false,
+                    "hide_side_toolbar": false
                 });
                 this.chartInitialized = true;
             },
 
             toggleMenu() {
                 this.isMenuOpen = !this.isMenuOpen;
-                document.getElementById('side-menu').style.transform = this.isMenuOpen ? 'translateX(0)' : 'translateX(-100%)';
+                const menu = document.getElementById('side-menu');
+                menu.style.transform = this.isMenuOpen ? 'translateX(0)' : 'translateX(-100%)';
             },
 
             switchInterface(type) {
                 const container = document.getElementById('interface-container');
-                container.innerHTML = ''; 
                 if (this.isMenuOpen) this.toggleMenu();
 
                 if (type === 'general') {
                     container.innerHTML = `
-                        <h2 class="text-xl font-bold text-blue-400 mb-4 uppercase italic">Análise Geral</h2>
-                        <div class="bg-gray-900 p-4 rounded-xl border border-gray-800 mb-4">
-                           <p class="text-xs text-gray-400 mb-2 uppercase">Configuração</p>
-                           <input type="number" id="gen-stake" value="0.35" class="w-full bg-black border border-gray-700 p-2 rounded text-white text-sm">
+                        <div class="animate-fadeIn">
+                            <h2 class="text-xl font-bold text-blue-400 mb-4 uppercase italic italic">Visão Geral</h2>
+                            <div class="bg-gray-900 p-4 rounded-xl border border-gray-800 mb-4">
+                               <p class="text-[10px] text-gray-500 mb-2 uppercase font-bold">Configuração de Entrada</p>
+                               <input type="number" id="gen-stake" value="0.35" class="w-full bg-black border border-gray-700 p-3 rounded text-white font-mono outline-none focus:border-blue-500">
+                            </div>
+                            <button id="btn-gen-toggle" onclick="app.toggleAction('gen')" class="w-full py-5 bg-blue-600 hover:bg-blue-500 rounded-xl font-bold shadow-lg transition-all">INICIAR MONITORAMENTO</button>
                         </div>
-                        <button id="btn-gen-toggle" onclick="app.toggleAction('gen')" class="w-full py-4 bg-green-600 rounded-xl font-bold shadow-lg">INICIAR ANÁLISE</button>
                     `;
-                } else if (type === 'manual') {
-                    container.innerHTML = ManualModule.render();
-                } else if (type === 'digits') {
-                    container.innerHTML = DigitModule.render();
-                }
+                } 
+                else if (type === 'manual') { container.innerHTML = ManualModule.render(); } 
+                else if (type === 'auto') { container.innerHTML = AutoModule.render(); }
+                else if (type === 'digits') { container.innerHTML = DigitModule.render(); }
             },
 
             toggleAction(mod) {
                 const btn = document.getElementById(`btn-${mod}-toggle`);
                 const isRunning = btn.innerText.includes("INICIAR");
-                btn.innerText = isRunning ? "PARAR ANÁLISE / DESLIGAR" : "INICIAR ANÁLISE";
+                btn.innerText = isRunning ? "PARAR / DESLIGAR" : "INICIAR MONITORAMENTO";
                 btn.classList.toggle('btn-stop', isRunning);
-                this.notify(isRunning ? "Análise em curso..." : "Análise interrompida.");
+                this.notify(isRunning ? "Análise Ativa..." : "Análise Pausada.");
             },
 
             notify(msg) {
                 document.getElementById('status-text').innerText = `[LOG]: ${msg}`;
+            },
+
+            displayResult(status, profit) {
+                const color = profit >= 0 ? 'text-green-500' : 'text-red-500';
+                const display = document.getElementById('result-display');
+                display.innerHTML = `ÚLTIMO: <span class="${color}">${status.toUpperCase()} ($${profit.toFixed(2)})</span>`;
+                
+                // Força atualização do saldo visual
+                DerivAPI.send({ balance: 1 });
             }
         };
     </script>
