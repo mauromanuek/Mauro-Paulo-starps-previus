@@ -1,0 +1,15 @@
+/* src/styles/theme.css */
+.btn-buy { background-color: #00c076; transition: 0.3s; }
+.btn-buy:hover { background-color: #00d985; transform: translateY(-2px); }
+
+.btn-sell { background-color: #cf304a; transition: 0.3s; }
+.btn-sell:hover { background-color: #eb3d5a; transform: translateY(-2px); }
+
+.bg-card-modern {
+    background: linear-gradient(145deg, #1e2329, #161a1e);
+    box-shadow: 10px 10px 20px #0a0c0e, -10px -10px 20px #12161a;
+}
+
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: #0b0e11; }
+::-webkit-scrollbar-thumb { background: #2b3139; border-radius: 10px; }
