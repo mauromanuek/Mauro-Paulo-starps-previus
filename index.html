@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Master Bot Deriv | Pro Terminal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body { background-color: #0b0e11; color: #eaecef; font-family: 'Inter', sans-serif; overflow: hidden; margin: 0; }
+        .active-view { display: flex !important; flex-direction: column; height: 100%; width: 100%; }
+        .hidden-view { display: none !important; }
+        #chart-container { height: 50vh; width: 100%; border-bottom: 2px solid #1e2329; }
+        @media (min-width: 1024px) { #chart-container { height: 65vh; } }
+        .btn-stop { background-color: #ef4444 !important; }
+        #overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 30; }
+    </style>
+</head>
+<body class="h-screen flex flex-col">
+
+    <div id="overlay" onclick="app.toggleMenu()"></div>
+
+    <div id="view-login" class="flex-1 flex items-center justify-center p-4">
+        <div class="bg-[#1e2329] p-8 rounded-2xl border border-gray-800 w-full max-w-md shadow-2xl">
+            <h1 class="text-2xl font-bold text-center mb-6 text-white">Master Bot <span class="text-yellow-500">Deriv</span></h1>
+            <input type="password" id="api-token" placeholder="Insira seu API Token" class="w-full bg-black border border-gray-700 rounded-xl p-4 mb-4 text-center text-white outline-none">
+            <button onclick="app.start()" class="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-4 rounded-xl transition-all">CONECTAR TERMINAL</button>
+        </div>
+    </div>
+
+    <div id="view-main" class="hidden-view h-screen flex flex-col">
+        <header class="h-16 border-b border-gray-800 bg-[#1e2329] flex items-center justify-between px-6 z-50">
+            <button onclick="app.toggleMenu()" class="text-yellow-500 text-2xl z-50"><i class="fas fa-bars"></i></button>
+            <span class="font-bold text-yellow-500 italic uppercase">Pro Terminal</span>
+            <div id="acc-balance" class="text-lg font-bold text-green-500 font-mono">$ 0.00</div>
+        </header>
+
+        <div id="side-menu" class="fixed left-0 top-0 h-full w-64 bg-[#1e2329] border-r border-gray-800 transform -translate-x-full transition-transform z-40 shadow-2xl pt-20">
+            <nav class="p-4 flex flex-col gap-2">
+                <button onclick="app.switchInterface('general')" class="flex items-center gap-3 p-4 hover:bg-gray-800 rounded-xl text-left">
+                    <i class="fas fa-home text-blue-400"></i> Análise Geral
+                </button>
+                <button onclick="app.switchInterface('manual')" class="flex items-center gap-3 p-4 hover:bg-gray-800 rounded-xl text-left">
+                    <i class="fas fa-hand-paper text-green-400"></i> Operação Manual
+                </button>
+                <button onclick="app.switchInterface('auto')" class="flex items-center gap-3 p-4 hover:bg-gray-800 rounded-xl text-left">
+                    <i class="fas fa-robot text-purple-400"></i> Operação Automática
+                </button>
+                <button onclick="app.switchInterface('digits')" class="flex items-center gap-3 p-4 hover:bg-gray-800 rounded-xl text-left">
+                    <i class="fas fa-fingerprint text-yellow-400"></i> Digit Over/Under
+                </button>
+            </nav>
+        </div>
+
+        <main class="flex-1 relative overflow-hidden flex flex-col">
+            <div id="interface-general" class="hidden-view">
+                <div id="chart-container">
+                    <div id="tv_widget" class="w-full h-full"></div>
+                </div>
+                <div class="flex-1 flex flex-col items-center justify-center p-6 bg-[#0b0e11]">
+                    <div id="analysis-display" class="w-full max-w-lg bg-gray-900 border-2 border-gray-800 rounded-3xl p-8 text-center shadow-2xl">
+                        <h2 class="text-gray-500 text-xs uppercase tracking-widest mb-4">Sinal de Mercado</h2>
+                        <div id="signal-text" class="text-5xl lg:text-7xl font-black text-gray-700 mb-6">AGUARDANDO</div>
+                        <button id="btn-gen-toggle" onclick="app.toggleGeneralAnalysis()" class="w-full py-4 bg-blue-600 rounded-2xl font-bold text-lg shadow-lg transition-all">INICIAR ANÁLISE</button>
+                    </div>
+                    <div id="status-text" class="mt-4 text-[10px] text-gray-600 font-mono italic">Aguardando comando...</div>
+                </div>
+            </div>
+
+            <div id="interface-others" class="hidden-view flex-1 bg-[#0b0e11] p-4 overflow-y-auto">
+                <div id="module-content"></div>
+            </div>
+        </main>
+        
+        <footer id="footer-bar" class="h-8 bg-black border-t border-gray-800 px-6 flex items-center justify-between text-[10px] text-gray-500 font-mono">
+            <span id="footer-log">Conexão Estável</span>
+            <div id="result-display"></div>
+        </footer>
+    </div>
+
+    <script src="https://s3.tradingview.com/tv.js"></script>
+    <script src="src/core/deriv_api.js"></script>
+    <script src="src/components/auto_module.js"></script>
+    <script src="src/components/manual_module.js"></script>
+    <script src="src/components/digit_module.js"></script>
+
+    <script>
+        const app = {
+            isMenuOpen: false,
+            isAnalyzing: false,
+
+            start() {
+                const token = document.getElementById('api-token').value;
+                if (!token) return alert("Insira o Token!");
+                
+                DerivAPI.connect(token, (res) => {
+                    if (res.msg_type === 'authorize' && !res.error) {
+                        document.getElementById('view-login').classList.add('hidden-view');
+                        document.getElementById('view-main').classList.remove('hidden-view');
+                        document.getElementById('view-main').classList.add('active-view');
+                        this.switchInterface('general');
+                    }
+                });
+            },
+
+            toggleMenu() {
+                this.isMenuOpen = !this.isMenuOpen;
+                const menu = document.getElementById('side-menu');
+                const overlay = document.getElementById('overlay');
+                menu.style.transform = this.isMenuOpen ? 'translateX(0)' : 'translateX(-100%)';
+                overlay.style.display = this.isMenuOpen ? 'block' : 'none';
+            },
+
+            switchInterface(type) {
+                const general = document.getElementById('interface-general');
+                const others = document.getElementById('interface-others');
+                const content = document.getElementById('module-content');
+                
+                // Reset Total
+                general.classList.add('hidden-view');
+                general.classList.remove('active-view');
+                others.classList.add('hidden-view');
+                others.classList.remove('active-view');
+                
+                if (this.isMenuOpen) this.toggleMenu();
+
+                if (type === 'general') {
+                    general.classList.add('active-view');
+                    general.classList.remove('hidden-view');
+                    this.initChart();
+                } else {
+                    others.classList.add('active-view');
+                    others.classList.remove('hidden-view');
+                    
+                    // Renderiza o módulo específico no container
+                    if (type === 'manual') content.innerHTML = ManualModule.render();
+                    if (type === 'auto') content.innerHTML = AutoModule.render();
+                    if (type === 'digits') content.innerHTML = DigitModule.render();
+                }
+            },
+
+            initChart() {
+                // TradingView widget - só recarrega se o container estiver visível
+                new TradingView.widget({
+                    "autosize": true,
+                    "symbol": "BITSTAMP:BTCUSD",
+                    "interval": "1",
+                    "theme": "dark",
+                    "container_id": "tv_widget",
+                    "locale": "br"
+                });
+            },
+
+            toggleGeneralAnalysis() {
+                const btn = document.getElementById('btn-gen-toggle');
+                const signal = document.getElementById('signal-text');
+                this.isAnalyzing = !this.isAnalyzing;
+
+                if (this.isAnalyzing) {
+                    btn.innerText = "PARAR ANÁLISE";
+                    btn.classList.add('btn-stop');
+                    signal.innerText = "ANALISANDO...";
+                    signal.className = "text-5xl lg:text-7xl font-black text-yellow-500 animate-pulse";
+                    
+                    // Simulação de resultado (Mantenha sua lógica original aqui)
+                    setTimeout(() => {
+                        if(!this.isAnalyzing) return;
+                        signal.innerText = "COMPRA";
+                        signal.className = "text-5xl lg:text-7xl font-black text-green-500";
+                    }, 3000);
+                } else {
+                    btn.innerText = "INICIAR ANÁLISE";
+                    btn.classList.remove('btn-stop');
+                    signal.innerText = "AGUARDANDO";
+                    signal.className = "text-5xl lg:text-7xl font-black text-gray-700";
+                }
+            },
+
+            displayResult(status, profit) {
+                const color = profit >= 0 ? 'text-green-500' : 'text-red-500';
+                document.getElementById('result-display').innerHTML = 
+                    `<span class="${color} font-bold font-mono">Último: ${status} ($${profit})</span>`;
+            }
+        };
+    </script>
+</body>
+</html>
