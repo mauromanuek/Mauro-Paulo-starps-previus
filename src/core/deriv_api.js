@@ -1,29 +1,34 @@
 const DerivAPI = {
     socket: null,
-    app_id: 114910,
+    app_id: 1089, // App ID padrão para testes ou o seu próprio
 
     connect(token, callback) {
         this.socket = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${this.app_id}`);
-        this.socket.onopen = () => this.socket.send(JSON.stringify({ authorize: token }));
+
+        this.socket.onopen = () => {
+            this.socket.send(JSON.stringify({ authorize: token }));
+        };
+
         this.socket.onmessage = (msg) => {
             const data = JSON.parse(msg.data);
-            if(data.msg_type === 'authorize') {
+            
+            // Ao autorizar, já pede o saldo automaticamente
+            if (data.msg_type === 'authorize' && !data.error) {
                 this.socket.send(JSON.stringify({ balance: 1, subscribe: 1 }));
-                this.socket.send(JSON.stringify({ ticks: 'R_100', subscribe: 1 }));
             }
+            
             callback(data);
+        };
+
+        this.socket.onerror = (err) => {
+            console.error("Erro Socket:", err);
+            alert("Erro na conexão com a Deriv.");
         };
     },
 
-    // Item 6: Envio de ordens reais
-    buyContract(type, amount, symbol) {
-        const proposal = {
-            proposal: 1, amount: amount, barrier: "0", 
-            basis: "stake", contract_type: type, 
-            currency: "USD", duration: 1, duration_unit: "t", 
-            symbol: symbol
-        };
-        this.socket.send(JSON.stringify(proposal));
-        app.notify(`Enviando ordem ${type} de $${amount}...`);
+    send(data) {
+        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+            this.socket.send(JSON.stringify(data));
+        }
     }
 };
