@@ -3,122 +3,124 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Master Bot Deriv | Pro Terminal</title>
+    <title>Master Bot Deriv | Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
-        :root { --deriv-dark: #0b0e11; --deriv-card: #1e2329; --deriv-yellow: #f0b90b; }
-        body { font-family: 'Inter', sans-serif; background-color: var(--deriv-dark); color: #eaecef; overflow: hidden; height: 100vh; }
+        body { background-color: #0b0e11; color: #eaecef; font-family: 'Inter', sans-serif; }
         .glass { background: rgba(30, 35, 41, 0.95); backdrop-filter: blur(10px); }
-        .sidebar-transition { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
-        #sidebar { left: -280px; }
-        #sidebar.active { left: 0px; }
-        .bg-card { background-color: var(--deriv-card); }
+        /* Garantir que o container de interface não sobreponha o gráfico no mobile */
+        @media (max-width: 768px) {
+            .main-layout { flex-direction: column; overflow-y: auto; }
+            .chart-container { height: 300px; min-height: 300px; }
+            .interface-container { height: auto; min-height: 400px; }
+        }
     </style>
 </head>
-<body>
+<body class="h-screen flex flex-col overflow-hidden">
 
-    <div id="view-login" class="flex items-center justify-center min-h-screen p-4">
-        <div class="bg-card w-full max-w-md p-8 rounded-2xl border border-gray-800 shadow-2xl glass">
-            <div class="text-center mb-10">
-                <h1 class="text-3xl font-bold">Master Bot <span class="text-yellow-500">Deriv</span></h1>
-                <p class="text-gray-400 mt-2">App ID: 114910</p>
-            </div>
-            <div class="space-y-4">
-                <input type="password" id="api-token" placeholder="Insira seu API Token" 
-                       class="w-full bg-black/40 border border-gray-700 rounded-xl p-4 focus:border-yellow-500 outline-none text-center">
-                <button onclick="app.start()" id="btn-connect" class="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-4 rounded-xl transition-all">
-                    CONECTAR
-                </button>
-            </div>
+    <div id="view-login" class="flex-1 flex items-center justify-center p-4">
+        <div class="bg-[#1e2329] p-8 rounded-2xl border border-gray-800 w-full max-w-md shadow-2xl">
+            <h1 class="text-2xl font-bold text-center mb-6">Master Bot <span class="text-yellow-500">Deriv</span></h1>
+            <input type="password" id="api-token" placeholder="Insira seu API Token" 
+                   class="w-full bg-black border border-gray-700 rounded-xl p-4 mb-4 text-center outline-none focus:border-yellow-500">
+            <button onclick="app.start()" class="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-4 rounded-xl transition-all">
+                CONECTAR TERMINAL
+            </button>
+            <p class="text-center text-xs text-gray-500 mt-4 italic">App ID: 114910 Conectado</p>
         </div>
     </div>
 
     <div id="view-main" class="hidden h-screen flex flex-col">
         <header class="h-16 border-b border-gray-800 glass flex items-center justify-between px-6 z-50">
             <div class="flex items-center gap-4">
-                <button onclick="ui.toggleMenu()" class="text-xl"><i class="fas fa-bars"></i></button>
-                <span class="font-bold text-yellow-500">PRO TERMINAL</span>
+                <button onclick="app.toggleMenu()" class="text-yellow-500 text-xl"><i class="fas fa-bars"></i></button>
+                <span class="font-bold text-yellow-500 italic">PRO TERMINAL</span>
             </div>
-            <div class="flex gap-4 items-center">
-                <div class="text-right">
-                    <p id="acc-type" class="text-[10px] text-gray-500 uppercase">Conta</p>
-                    <p id="acc-balance" class="text-lg font-bold text-green-500">$ 0.00</p>
-                </div>
+            <div class="text-right">
+                <p id="acc-balance" class="text-xl font-bold text-green-500">$ 0.00</p>
             </div>
         </header>
 
-        <div class="flex flex-1 overflow-hidden relative">
-            <aside id="sidebar" class="sidebar-transition absolute top-0 bottom-0 w-64 bg-card border-r border-gray-800 z-40 p-4">
-                <nav class="mt-4 space-y-2">
-                    <button onclick="ui.switchModule('digit')" class="w-full text-left p-4 rounded-xl hover:bg-gray-800 transition"><i class="fas fa-percentage mr-3"></i> Digits Over/Under</button>
-                    <button onclick="ui.switchModule('manual')" class="w-full text-left p-4 rounded-xl hover:bg-gray-800 transition"><i class="fas fa-hand-pointer mr-3"></i> Operação Manual</button>
-                    <button onclick="ui.switchModule('auto')" class="w-full text-left p-4 rounded-xl hover:bg-gray-800 transition"><i class="fas fa-robot mr-3"></i> Operação Automática</button>
-                </nav>
-            </aside>
-
-            <main class="flex-1 flex flex-col p-4 gap-4 overflow-y-auto">
-                <div class="h-[450px] bg-black rounded-2xl border border-gray-800 overflow-hidden shadow-2xl">
-                    <div id="tv_chart" class="w-full h-full"></div>
-                </div>
-
-                <div id="interface-container" class="grid grid-cols-1 md:grid-cols-3 gap-4 min-h-[200px]">
-                    <div class="col-span-3 text-center p-10 text-gray-500 italic">
-                        Selecione um módulo no menu lateral para começar.
-                    </div>
-                </div>
-            </main>
+        <div id="side-menu" class="fixed left-0 top-16 h-full w-64 bg-[#1e2329] border-r border-gray-800 transform -translate-x-full transition-transform z-40">
+            <nav class="p-4 flex flex-col gap-2">
+                <button onclick="app.switchInterface('general')" class="flex items-center gap-3 p-3 hover:bg-gray-800 rounded-lg text-left">
+                    <i class="fas fa-home text-blue-400"></i> Análise Geral
+                </button>
+                <button onclick="app.switchInterface('digits')" class="flex items-center gap-3 p-3 hover:bg-gray-800 rounded-lg text-left">
+                    <i class="fas fa-fingerprint text-yellow-400"></i> Digits Over/Under
+                </button>
+                <button onclick="app.switchInterface('manual')" class="flex items-center gap-3 p-3 hover:bg-gray-800 rounded-lg text-left">
+                    <i class="fas fa-hand-paper text-green-400"></i> Operação Manual
+                </button>
+                <button onclick="app.switchInterface('auto')" class="flex items-center gap-3 p-3 hover:bg-gray-800 rounded-lg text-left">
+                    <i class="fas fa-robot text-purple-400"></i> Automatizada
+                </button>
+            </nav>
         </div>
+
+        <main class="flex-1 flex main-layout overflow-hidden p-2 gap-2">
+            <div class="flex-[3] bg-black rounded-xl border border-gray-800 chart-container">
+                <div id="tv_chart" class="w-full h-full"></div>
+            </div>
+
+            <div id="interface-container" class="flex-[2] bg-[#0b0e11] rounded-xl border border-gray-800 p-4 overflow-y-auto interface-container">
+                </div>
+        </main>
     </div>
 
+    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
     <script src="src/core/deriv_api.js"></script>
     <script src="src/components/digit_module.js"></script>
     <script src="src/components/manual_module.js"></script>
-    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+    <script src="src/components/auto_module.js"></script>
 
     <script>
-        // Lógica de Inicialização e Controle de UI
         const app = {
+            isMenuOpen: false,
             start() {
                 const token = document.getElementById('api-token').value;
-                if(!token) return alert("Insira o Token!");
-                
-                // Conecta usando o arquivo src/core/deriv_api.js
+                if(!token) return;
                 DerivAPI.connect(token, (data) => {
                     if(data.msg_type === 'authorize' && !data.error) {
-                        document.getElementById('view-login').classList.add('hidden');
+                        document.getElementById('view-login').style.display = 'none';
                         document.getElementById('view-main').classList.remove('hidden');
-                        this.initChart();
+                        this.initChart("R_100");
+                        this.switchInterface('digits'); // Inicia no Digits
                     }
                     if(data.msg_type === 'balance') {
-                        document.getElementById('acc-balance').innerText = `$ ${data.balance.balance}`;
-                    }
-                    if(data.msg_type === 'tick') {
-                        // Avisa o módulo de Digits que chegou um novo número
-                        const lastDigit = parseInt(data.tick.quote.toString().slice(-1));
-                        if(typeof DigitModule !== 'undefined') DigitModule.updateStats(lastDigit);
+                        document.getElementById('acc-balance').innerText = `$ ${data.balance.balance.toFixed(2)}`;
                     }
                 });
             },
-            initChart() {
-                new TradingView.widget({
-                    "autosize": true, "symbol": "DERIV:R_100", "interval": "1",
-                    "theme": "dark", "style": "1", "container_id": "tv_chart"
-                });
-            }
-        };
-
-        const ui = {
-            toggleMenu() { document.getElementById('sidebar').classList.toggle('active'); },
-            switchModule(mod) {
-                this.toggleMenu();
+            toggleMenu() {
+                this.isMenuOpen = !this.isMenuOpen;
+                const menu = document.getElementById('side-menu');
+                menu.style.transform = this.isMenuOpen ? 'translateX(0)' : 'translateX(-100%)';
+            },
+            switchInterface(module) {
                 const container = document.getElementById('interface-container');
-                container.dataset.active = mod;
+                container.innerHTML = ''; // Limpa atual (Item 2)
                 
-                if(mod === 'digit') container.innerHTML = DigitModule.render();
-                if(mod === 'manual') container.innerHTML = ManualModule.render();
-                if(mod === 'auto') container.innerHTML = '<div class="col-span-3 p-10 text-center">Módulo Automático em breve...</div>';
+                if(module === 'general') { location.reload(); return; }
+                
+                if(module === 'digits') container.innerHTML = DigitModule.render();
+                if(module === 'manual') container.innerHTML = ManualModule.render();
+                if(module === 'auto') container.innerHTML = AutoModule.render();
+                
+                this.toggleMenu(); // Fecha menu após seleção
+            },
+            initChart(symbol) {
+                // Item 3: Correção de símbolos Deriv para TradingView
+                new TradingView.widget({
+                    "autosize": true,
+                    "symbol": "DERIV:" + symbol,
+                    "interval": "1",
+                    "theme": "dark",
+                    "style": "1",
+                    "container_id": "tv_chart",
+                    "locale": "br"
+                });
             }
         };
     </script>
