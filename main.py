@@ -9,7 +9,7 @@ import uvicorn
 
 from strategy import generate_signal 
 from deriv_client import DerivClient
-from executor import TradeExecutor
+from core.executor import TradeExecutor
 from bots_manager import BotsManager
 
 app = FastAPI()
