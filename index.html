@@ -16,7 +16,7 @@
         @media (min-width: 1024px) { #chart-container { height: 60vh; } }
     </style>
 </head>
-<body class="h-screen flex flex-col">
+<body class="h-screen flex flex-col" onclick="app.externalClick(event)">
 
     <div id="view-login" class="flex-1 flex items-center justify-center p-4">
         <div class="bg-[#1e2329] p-8 rounded-2xl border border-gray-800 w-full max-w-md shadow-2xl">
@@ -28,7 +28,7 @@
 
     <div id="view-main" class="hidden h-screen flex flex-col">
         <header class="h-16 border-b border-gray-800 bg-[#1e2329] flex items-center justify-between px-6 z-50">
-            <button onclick="app.toggleMenu()" class="text-yellow-500 text-2xl"><i class="fas fa-bars"></i></button>
+            <button id="menu-trigger" onclick="app.toggleMenu(event)" class="text-yellow-500 text-2xl"><i class="fas fa-bars"></i></button>
             <span class="font-bold text-yellow-500 italic uppercase">Pro Terminal</span>
             <div id="acc-balance" class="text-lg font-bold text-green-500 font-mono">$ 0.00</div>
         </header>
@@ -94,6 +94,7 @@
         const app = {
             isMenuOpen: false,
             isAnalyzing: false,
+            sessionProfit: 0.00,
 
             start() {
                 const token = document.getElementById('api-token').value;
@@ -108,60 +109,68 @@
                 });
             },
 
-            toggleMenu() {
+            toggleMenu(e) {
+                if(e) e.stopPropagation();
                 this.isMenuOpen = !this.isMenuOpen;
                 const menu = document.getElementById('side-menu');
                 menu.style.transform = this.isMenuOpen ? 'translateX(0)' : 'translateX(-100%)';
+            },
+
+            externalClick(e) {
+                const menu = document.getElementById('side-menu');
+                const trigger = document.getElementById('menu-trigger');
+                if (this.isMenuOpen && !menu.contains(e.target) && !trigger.contains(e.target)) {
+                    this.toggleMenu();
+                }
             },
 
             switchInterface(type) {
                 document.querySelectorAll('.view-section').forEach(sec => {
                     sec.classList.remove('active');
                 });
-
                 const target = document.getElementById(`interface-${type}`);
                 target.classList.add('active');
-
                 if (type === 'manual') document.getElementById('manual-render').innerHTML = ManualModule.render();
                 if (type === 'auto') document.getElementById('auto-render').innerHTML = AutoModule.render();
                 if (type === 'digits') document.getElementById('digits-render').innerHTML = DigitModule.render();
-                
-                if (type === 'general') {
-                    this.initChart();
-                }
-
+                if (type === 'general') { this.initChart(); }
                 if (this.isMenuOpen) this.toggleMenu();
             },
 
             initChart() {
                 new TradingView.widget({
-                    "autosize": true,
-                    "symbol": "BITSTAMP:BTCUSD",
-                    "interval": "1",
-                    "theme": "dark",
-                    "container_id": "tv_widget",
-                    "locale": "br"
+                    "autosize": true, "symbol": "BITSTAMP:BTCUSD", "interval": "1",
+                    "theme": "dark", "container_id": "tv_widget", "locale": "br"
                 });
+            },
+
+            checkLimits(tp, sl) {
+                if (this.sessionProfit >= tp) {
+                    alert("📩 SMS DO BOT: TAKE PROFIT ATINGIDO! Meta concluída.");
+                    this.resetSession(); return true;
+                }
+                if (this.sessionProfit <= (sl * -1)) {
+                    alert("📩 SMS DO BOT: STOP LOSS ATINGIDO! Proteção ativada.");
+                    this.resetSession(); return true;
+                }
+                return false;
+            },
+
+            resetSession() {
+                this.sessionProfit = 0;
+                this.switchInterface('general');
             },
 
             generateReport() {
                 const btn = document.getElementById('btn-gen-toggle');
                 const report = document.getElementById('report-content');
-                
                 this.isAnalyzing = !this.isAnalyzing;
-
                 if (this.isAnalyzing) {
                     btn.innerText = "PARAR ANÁLISE";
                     btn.classList.replace('bg-blue-600', 'bg-red-600');
                     report.innerHTML = `<span class="animate-pulse text-yellow-500">ANALISANDO MERCADO...</span>`;
-                    
                     this.analysisTimer = setTimeout(() => {
-                        report.innerHTML = `
-                            <div class="text-left space-y-2 animate-fadeIn">
-                                <p class="text-blue-500 text-xs font-bold uppercase">Tendência: ALTA</p>
-                                <p class="text-sm text-gray-300">Mercado em zona de acumulação com viés comprador.</p>
-                                <p class="text-2xl font-black text-green-500 mt-2">SUGESTÃO: COMPRA</p>
-                            </div>`;
+                        report.innerHTML = `<div class="text-left space-y-2"><p class="text-green-500 text-2xl font-black">SUGESTÃO: COMPRA FORTE</p></div>`;
                     }, 3000);
                 } else {
                     btn.innerText = "INICIAR ANÁLISE";
