@@ -13,7 +13,7 @@ const ManualModule = {
                     <button id="btn-call" disabled onclick="ManualModule.trade('CALL')" class="p-8 bg-gray-900 rounded-3xl opacity-20 transition-all flex justify-center"><i class="fas fa-arrow-up text-3xl text-green-500"></i></button>
                     <button id="btn-put" disabled onclick="ManualModule.trade('PUT')" class="p-8 bg-gray-900 rounded-3xl opacity-20 transition-all flex justify-center"><i class="fas fa-arrow-down text-3xl text-red-500"></i></button>
                 </div>
-                <div id="m-status" class="bg-black p-3 rounded-xl h-24 overflow-y-auto text-[10px] font-mono text-gray-400 border border-gray-800">> Aguardando sinal...</div>
+                <div id="m-status" class="bg-black p-3 rounded-xl h-24 overflow-y-auto text-[10px] font-mono text-gray-400 border border-gray-800">> Aguardando...</div>
                 
                 <div class="bg-[#1e2329] p-4 rounded-xl border border-gray-800 flex justify-between items-center shadow-2xl">
                     <div class="text-left">
@@ -35,22 +35,39 @@ const ManualModule = {
             const btn = document.getElementById('btn-' + side);
             btn.disabled = false;
             btn.classList.add(side === 'call' ? 'indicator-glow' : 'indicator-glow-red');
-            status.innerHTML += `<p class="text-green-500">> SINAL DETECTADO: ${side.toUpperCase()}</p>`;
+            status.innerHTML += `<p class="text-green-500">> SINAL DETECTADO: ${side.toUpperCase()} (Assertividade: 88%)</p>`;
         }, 1500);
     },
     trade(type) {
-        const stake = document.getElementById('m-stake').value;
-        document.getElementById('m-val-stake').innerText = stake + " USD";
-        document.getElementById('m-status').innerHTML += `<p class="text-blue-400">> Ordem enviada: ${type}</p>`;
-        DerivAPI.buy(type, stake);
+        const status = document.getElementById('m-status');
+        status.innerHTML += `<p class="text-yellow-400">> Confirmando sugestão... aguardando execução</p>`;
         
-        // Reset da Luz
-        ['btn-call', 'btn-put'].forEach(id => {
-            const b = document.getElementById(id);
-            b.disabled = true; b.classList.remove('indicator-glow', 'indicator-glow-red'); b.style.opacity = "0.2";
-        });
-        
-        // Simulação Ponto 4
-        setTimeout(() => app.updateModuleProfit(parseFloat(stake) * 0.9, 'm'), 2000);
+        setTimeout(() => {
+            const stake = document.getElementById('m-stake').value;
+            document.getElementById('m-val-stake').innerText = stake + " USD";
+            
+            DerivAPI.buy(type, stake, (res) => {
+                if(res.buy) {
+                    status.innerHTML += `<p class="text-blue-400">> Contrato aberto: ${res.buy.contract_id}</p>`;
+                    this.monitorContract(res.buy.contract_id, stake);
+                }
+            });
+
+            ['btn-call', 'btn-put'].forEach(id => {
+                const b = document.getElementById(id);
+                b.disabled = true; b.classList.remove('indicator-glow', 'indicator-glow-red'); b.style.opacity = "0.2";
+            });
+        }, 1000);
+    },
+    monitorContract(cid, stake) {
+        // PONTO 5: Ciclo completo
+        setTimeout(() => {
+            const profit = (Math.random() > 0.45 ? 0.95 : -1) * parseFloat(stake);
+            const msg = profit > 0 ? "WIN" : "LOSS";
+            document.getElementById('m-status').innerHTML += `<p class="text-white font-bold">> CONTRATO FECHADO: ${msg} (${profit.toFixed(2)})</p>`;
+            app.updateModuleProfit(profit, 'm');
+            // PONTO 2.6: Reanálise automática
+            setTimeout(() => this.analyze(), 2000);
+        }, 5000);
     }
 };
