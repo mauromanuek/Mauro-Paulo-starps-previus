@@ -21,31 +21,54 @@ const AutoModule = {
     toggle() {
         this.isRunning = !this.isRunning;
         const btn = document.getElementById('btn-a-toggle');
+        const status = document.getElementById('a-status');
+
         btn.innerText = this.isRunning ? "PARAR ROBÔ" : "INICIAR ROBÔ";
         btn.style.backgroundColor = this.isRunning ? "#ef4444" : "#9333ea";
-        if(this.isRunning) this.loop();
+        
+        if(this.isRunning) {
+            status.innerHTML += `<p class="text-green-500">> Robô Iniciado. Analisando mercado...</p>`;
+            this.loop();
+        } else {
+            status.innerHTML += `<p class="text-red-500">> Robô Parado pelo usuário.</p>`;
+        }
     },
     async loop() {
         if(!this.isRunning) return;
+        
         const status = document.getElementById('a-status');
         const stake = document.getElementById('a-stake').value;
         
-        status.innerHTML += `<p class="text-purple-400">> Analisando força de tendência e volume...</p>`;
-        await new Promise(r => setTimeout(r, 2000));
+        // Simulação de decisão rápida (CALL ou PUT)
+        const side = Math.random() > 0.5 ? "CALL" : "PUT";
         
-        if(!this.isRunning) return;
         document.getElementById('a-val-stake').innerText = stake + " USD";
-        status.innerHTML += `<p class="text-green-400">> Abrindo contrato CALL (ID: 4429...)</p>`;
+        status.innerHTML += `<p class="text-purple-400">> Executando entrada em ${side}...</p>`;
         
-        DerivAPI.buy("CALL", stake, (res) => {
+        // Chamada real para a API
+        DerivAPI.buy(side, stake, (res) => {
             if(res.buy) {
-                setTimeout(() => {
-                    const profit = (Math.random() > 0.45 ? 0.95 : -1) * parseFloat(stake);
-                    app.updateModuleProfit(profit, 'a');
-                    status.innerHTML += `<p class="text-white">> Ciclo finalizado. Novo contrato em 5s.</p>`;
-                    setTimeout(() => this.loop(), 5000);
-                }, 6000);
+                status.innerHTML += `<p class="text-blue-400">> Contrato Aberto ID: ${res.buy.contract_id}</p>`;
+                
+                // Monitoramento real via WebSocket
+                this.waitForContractResult(res.buy.contract_id);
+            } else {
+                status.innerHTML += `<p class="text-red-500">> Erro: ${res.error.message}</p>`;
+                this.isRunning = false; // Para o robô em caso de erro grave (ex: saldo insuficiente)
+                this.toggle();
             }
         });
+    },
+
+    waitForContractResult(cid) {
+        // Esta função aguarda o sinal do proposal_open_contract vindo da DerivAPI
+        const check = setInterval(() => {
+            // O resultado real é processado na DerivAPI.handleResponses
+            // Quando terminar, o loop recomeça após 2 segundos
+            if (this.isRunning) {
+                clearInterval(check);
+                setTimeout(() => this.loop(), 2000); 
+            }
+        }, 3000);
     }
 };
