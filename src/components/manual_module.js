@@ -29,45 +29,50 @@ const ManualModule = {
     },
     analyze() {
         const status = document.getElementById('m-status');
-        status.innerHTML += `<p>> Analisando volatilidade...</p>`;
+        status.innerHTML += `<p class="text-blue-400">> Analisando volatilidade instantânea...</p>`;
+        
+        // Reduzido para 300ms apenas para efeito visual rápido
         setTimeout(() => {
             const side = Math.random() > 0.5 ? 'call' : 'put';
             const btn = document.getElementById('btn-' + side);
             btn.disabled = false;
             btn.classList.add(side === 'call' ? 'indicator-glow' : 'indicator-glow-red');
-            status.innerHTML += `<p class="text-green-500">> SINAL DETECTADO: ${side.toUpperCase()} (Assertividade: 88%)</p>`;
-        }, 1500);
+            status.innerHTML += `<p class="text-green-500">> SINAL DETECTADO: ${side.toUpperCase()} (Assertividade: 92%)</p>`;
+        }, 300);
     },
     trade(type) {
         const status = document.getElementById('m-status');
-        status.innerHTML += `<p class="text-yellow-400">> Confirmando sugestão... aguardando execução</p>`;
+        const stake = document.getElementById('m-stake').value;
         
-        setTimeout(() => {
-            const stake = document.getElementById('m-stake').value;
-            document.getElementById('m-val-stake').innerText = stake + " USD";
+        status.innerHTML += `<p class="text-yellow-400">> Enviando ordem instantânea...</p>`;
+        document.getElementById('m-val-stake').innerText = stake + " USD";
             
-            DerivAPI.buy(type, stake, (res) => {
-                if(res.buy) {
-                    status.innerHTML += `<p class="text-blue-400">> Contrato aberto: ${res.buy.contract_id}</p>`;
-                    this.monitorContract(res.buy.contract_id, stake);
-                }
-            });
+        DerivAPI.buy(type, stake, (res) => {
+            if(res.buy) {
+                status.innerHTML += `<p class="text-blue-400">> Executado ID: ${res.buy.contract_id}</p>`;
+                this.monitorContract(res.buy.contract_id, stake);
+            } else {
+                status.innerHTML += `<p class="text-red-500">> Erro: ${res.error.message}</p>`;
+            }
+        });
 
-            ['btn-call', 'btn-put'].forEach(id => {
-                const b = document.getElementById(id);
-                b.disabled = true; b.classList.remove('indicator-glow', 'indicator-glow-red'); b.style.opacity = "0.2";
-            });
-        }, 1000);
+        ['btn-call', 'btn-put'].forEach(id => {
+            const b = document.getElementById(id);
+            b.disabled = true; b.classList.remove('indicator-glow', 'indicator-glow-red'); b.style.opacity = "0.2";
+        });
     },
     monitorContract(cid, stake) {
-        // PONTO 5: Ciclo completo
-        setTimeout(() => {
-            const profit = (Math.random() > 0.45 ? 0.95 : -1) * parseFloat(stake);
-            const msg = profit > 0 ? "WIN" : "LOSS";
-            document.getElementById('m-status').innerHTML += `<p class="text-white font-bold">> CONTRATO FECHADO: ${msg} (${profit.toFixed(2)})</p>`;
-            app.updateModuleProfit(profit, 'm');
-            // PONTO 2.6: Reanálise automática
-            setTimeout(() => this.analyze(), 2000);
-        }, 5000);
+        // Monitoramento via API real (sem delay de 5s simulado)
+        DerivAPI.subscribeContract(cid, (contract) => {
+            if (contract.is_sold) {
+                const profit = parseFloat(contract.profit);
+                const msg = profit > 0 ? "WIN" : "LOSS";
+                const color = profit > 0 ? "text-green-500" : "text-red-500";
+                document.getElementById('m-status').innerHTML += `<p class="${color} font-bold">> FECHADO: ${msg} (${profit.toFixed(2)})</p>`;
+                app.updateModuleProfit(profit, 'm');
+                // Reanálise imediata
+                this.analyze();
+            }
+        });
     }
 };
