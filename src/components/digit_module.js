@@ -48,7 +48,6 @@ const DigitModule = {
         if (this.isAnalysisRunning) return;
         this.isAnalysisRunning = true;
         
-        // Simulação de recebimento de ticks (Integrar com DerivAPI.subscribeTicks se disponível)
         this.tickInterval = setInterval(() => {
             const lastDigit = Math.floor(Math.random() * 10);
             this.tickBuffer.push(lastDigit);
@@ -67,7 +66,6 @@ const DigitModule = {
         const probOver = Math.round((overCount / total) * 100);
         const probUnder = 100 - probOver;
 
-        // Atualiza Interface (PONTO 2)
         const pOver = document.getElementById('perc-over');
         const pUnder = document.getElementById('perc-under');
         const bOver = document.getElementById('box-over');
@@ -77,7 +75,6 @@ const DigitModule = {
             pOver.innerText = probOver + "%";
             pUnder.innerText = probUnder + "%";
 
-            // Destaque visual (Glow)
             if (probOver > probUnder) {
                 bOver.className = "bg-gray-900 p-4 rounded-2xl border-2 border-yellow-500 indicator-glow text-center";
                 bUnder.className = "bg-gray-900 p-4 rounded-2xl border-2 border-transparent opacity-50 text-center";
@@ -98,7 +95,6 @@ const DigitModule = {
         
         status.innerHTML += `<p>> Analisando vantagem estatística...</p>`;
 
-        // PONTO 3: COMPORTAMENTO
         setTimeout(() => {
             const minProb = 55;
             let chosenType = "";
@@ -106,7 +102,7 @@ const DigitModule = {
             if (this.currentProbOver >= minProb) chosenType = "DIGITOVER";
             else if (this.currentProbUnder >= minProb) chosenType = "DIGITUNDER";
 
-            if (chosenType !== "") {
+            if (chosenType !== "" && !this.isTrading) {
                 status.innerHTML += `<p class="text-green-500">> Vantagem detectada! Comprando ${chosenType}...</p>`;
                 this.executeTrade(chosenType, stake);
             } else {
@@ -116,31 +112,44 @@ const DigitModule = {
     },
 
     executeTrade(type, stake) {
+        this.isTrading = true;
         document.getElementById('d-val-stake').innerText = stake + " USD";
         
-        // PONTO 4 & 5: EXECUÇÃO E RESULTADO
+        // Parâmetros reais para a Deriv API (PONTO 4)
+        const params = {
+            amount: parseFloat(stake),
+            basis: 'stake',
+            contract_type: type,
+            currency: 'USD',
+            duration: 1,
+            duration_unit: 't',
+            symbol: 'R_100',
+            barrier: "5"
+        };
+
         DerivAPI.buy(type, stake, (response) => {
             if (response.buy) {
                 const contractId = response.buy.contract_id;
                 this.trackContract(contractId);
+            } else {
+                this.isTrading = false;
+                document.getElementById('d-status').innerHTML += `<p class="text-red-500">> Erro na compra: ${response.error.message}</p>`;
             }
-        });
+        }, params);
     },
 
     trackContract(contractId) {
         const status = document.getElementById('d-status');
-        status.innerHTML += `<p class="text-yellow-500">> Contrato ${contractId} em monitoramento...</p>`;
+        status.innerHTML += `<p class="text-yellow-500">> Contrato ${contractId} aberto. Monitorando...</p>`;
 
-        // PONTO 5: ACOMPANHAMENTO OBRIGATÓRIO
-        // Simulação de monitoramento (is_sold === true)
-        const checkContract = setInterval(() => {
-            // Aqui entraria o DerivAPI.getContractStatus(contractId)
-            const win = Math.random() > 0.4; // Simulação
-            const profit = win ? parseFloat(document.getElementById('d-stake').value) * 0.9 : -parseFloat(document.getElementById('d-stake').value);
-
-            clearInterval(checkContract); // Encerra subscrição (PONTO 6)
-            this.finishTrade(win, profit);
-        }, 5000);
+        // Subscrição real para fechar o ciclo (PONTO 5)
+        DerivAPI.subscribeContract(contractId, (contract) => {
+            if (contract.is_sold) {
+                const profit = parseFloat(contract.profit);
+                const win = profit > 0;
+                this.finishTrade(win, profit);
+            }
+        });
     },
 
     finishTrade(win, profit) {
@@ -150,17 +159,20 @@ const DigitModule = {
 
         status.innerHTML += `<p class="${color} font-bold">> OPERAÇÃO FINALIZADA: ${msg} (${profit.toFixed(2)} USD)</p>`;
         
-        // Atualiza Ponto 4 Global
         app.updateModuleProfit(profit, 'd');
         
-        // PONTO 6: ESTABILIDADE
-        this.cleanup();
+        // PONTO 6: ESTABILIDADE E CICLO CONTÍNUO
+        this.isTrading = false;
+        setTimeout(() => {
+            if (this.isAnalysisRunning) this.analyze();
+        }, 3000);
     },
 
     cleanup() {
         if (this.tickInterval) clearInterval(this.tickInterval);
         this.isAnalysisRunning = false;
+        this.isTrading = false;
         this.tickBuffer = [];
-        // Forget_all logic aqui se necessário
+        DerivAPI.send({ "forget_all": "proposal_open_contract" });
     }
 };
