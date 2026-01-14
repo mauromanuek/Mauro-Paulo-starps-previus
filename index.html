@@ -144,6 +144,16 @@
                 });
             },
 
+            // Lógica para atualizar o Ponto 4 (Cor e Valor)
+            updateModuleProfit(val, prefix) {
+                this.sessionProfit += val;
+                const profitEl = document.getElementById(`${prefix}-val-profit`);
+                if(profitEl) {
+                    profitEl.innerText = (this.sessionProfit >= 0 ? "+" : "") + this.sessionProfit.toFixed(2) + " USD";
+                    profitEl.className = `text-xl font-black ${this.sessionProfit >= 0 ? 'text-green-500' : 'text-red-500'}`;
+                }
+            },
+
             checkLimits(tp, sl) {
                 if (this.sessionProfit >= tp) {
                     alert("📩 SMS DO BOT: TAKE PROFIT ATINGIDO! Meta concluída.");
