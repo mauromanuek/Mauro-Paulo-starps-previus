@@ -2,7 +2,7 @@ const DigitModule = {
     tickBuffer: [],
     maxTicks: 100,
     isAnalysisRunning: false,
-    contractSubscription: null,
+    isTrading: false,
 
     render() {
         return `
@@ -43,26 +43,23 @@ const DigitModule = {
             </div>`;
     },
 
-    // LÓGICA DE ANÁLISE (PONTO 1)
     initTickStream() {
         if (this.isAnalysisRunning) return;
         this.isAnalysisRunning = true;
-        
         this.tickInterval = setInterval(() => {
             const lastDigit = Math.floor(Math.random() * 10);
             this.tickBuffer.push(lastDigit);
             if (this.tickBuffer.length > this.maxTicks) this.tickBuffer.shift();
-            
             this.updateProbabilities();
+            // PONTO: Verifica entrada a cada novo tick para ser imediato
+            this.checkAutoEntry();
         }, 1000);
     },
 
     updateProbabilities() {
-        if (this.tickBuffer.length < 10) return;
-
-        const overCount = this.tickBuffer.filter(d => d > 5).length;
+        if (this.tickBuffer.length < 5) return;
         const total = this.tickBuffer.length;
-        
+        const overCount = this.tickBuffer.filter(d => d > 5).length;
         const probOver = Math.round((overCount / total) * 100);
         const probUnder = 100 - probOver;
 
@@ -71,51 +68,46 @@ const DigitModule = {
         const bOver = document.getElementById('box-over');
         const bUnder = document.getElementById('box-under');
 
-        if (pOver && pUnder) {
+        if (pOver) {
             pOver.innerText = probOver + "%";
             pUnder.innerText = probUnder + "%";
-
-            if (probOver > probUnder) {
-                bOver.className = "bg-gray-900 p-4 rounded-2xl border-2 border-yellow-500 indicator-glow text-center";
-                bUnder.className = "bg-gray-900 p-4 rounded-2xl border-2 border-transparent opacity-50 text-center";
-            } else if (probUnder > probOver) {
-                bUnder.className = "bg-gray-900 p-4 rounded-2xl border-2 border-blue-500 indicator-glow text-center";
-                bOver.className = "bg-gray-900 p-4 rounded-2xl border-2 border-transparent opacity-50 text-center";
-            }
+            bOver.className = `bg-gray-900 p-4 rounded-2xl border-2 transition-all text-center ${probOver > 55 ? 'border-yellow-500 indicator-glow' : 'border-transparent opacity-50'}`;
+            bUnder.className = `bg-gray-900 p-4 rounded-2xl border-2 transition-all text-center ${probUnder > 55 ? 'border-blue-500 indicator-glow' : 'border-transparent opacity-50'}`;
         }
-
         this.currentProbOver = probOver;
         this.currentProbUnder = probUnder;
     },
 
+    checkAutoEntry() {
+        if (!this.autoTradeActive || this.isTrading) return;
+        const minProb = 58;
+        if (this.currentProbOver >= minProb) this.executeTrade("DIGITOVER", document.getElementById('d-stake').value);
+        else if (this.currentProbUnder >= minProb) this.executeTrade("DIGITUNDER", document.getElementById('d-stake').value);
+    },
+
     analyze() {
         this.initTickStream();
+        this.autoTradeActive = !this.autoTradeActive;
+        const btn = document.getElementById('btn-d-start');
         const status = document.getElementById('d-status');
-        const stake = document.getElementById('d-stake').value;
         
-        status.innerHTML += `<p>> Analisando vantagem estatística...</p>`;
-
-        setTimeout(() => {
-            const minProb = 55;
-            let chosenType = "";
-
-            if (this.currentProbOver >= minProb) chosenType = "DIGITOVER";
-            else if (this.currentProbUnder >= minProb) chosenType = "DIGITUNDER";
-
-            if (chosenType !== "" && !this.isTrading) {
-                status.innerHTML += `<p class="text-green-500">> Vantagem detectada! Comprando ${chosenType}...</p>`;
-                this.executeTrade(chosenType, stake);
-            } else {
-                status.innerHTML += `<p class="text-red-400">> Sem vantagem estatística no momento (Aguardando > ${minProb}%)...</p>`;
-            }
-        }, 3000);
+        if(this.autoTradeActive) {
+            btn.innerText = "PARAR ESTRATÉGIA";
+            btn.classList.replace('bg-yellow-600', 'bg-red-600');
+            status.innerHTML += `<p class="text-yellow-500">> Robô de Dígitos Ligado...</p>`;
+        } else {
+            btn.innerText = "EXECUTAR ESTRATÉGIA";
+            btn.classList.replace('bg-red-600', 'bg-yellow-600');
+            status.innerHTML += `<p class="text-gray-500">> Robô de Dígitos Desligado.</p>`;
+        }
     },
 
     executeTrade(type, stake) {
         this.isTrading = true;
+        const status = document.getElementById('d-status');
         document.getElementById('d-val-stake').innerText = stake + " USD";
         
-        // Parâmetros reais para a Deriv API (PONTO 4)
+        // PONTO 4: PAYLOAD TÉCNICO COMPLETO (Essencial para funcionar)
         const params = {
             amount: parseFloat(stake),
             basis: 'stake',
@@ -123,31 +115,26 @@ const DigitModule = {
             currency: 'USD',
             duration: 1,
             duration_unit: 't',
-            symbol: 'R_100',
-            barrier: "5"
+            symbol: 'R_100', // Volatility 100
+            barrier: "5"      // OBRIGATÓRIO para Over/Under 5
         };
 
         DerivAPI.buy(type, stake, (response) => {
             if (response.buy) {
-                const contractId = response.buy.contract_id;
-                this.trackContract(contractId);
+                status.innerHTML += `<p class="text-green-400">> Ordem ${type} enviada!</p>`;
+                this.trackContract(response.buy.contract_id);
             } else {
                 this.isTrading = false;
-                document.getElementById('d-status').innerHTML += `<p class="text-red-500">> Erro na compra: ${response.error.message}</p>`;
+                status.innerHTML += `<p class="text-red-500">> Falha: ${response.error.message}</p>`;
             }
         }, params);
     },
 
     trackContract(contractId) {
-        const status = document.getElementById('d-status');
-        status.innerHTML += `<p class="text-yellow-500">> Contrato ${contractId} aberto. Monitorando...</p>`;
-
-        // Subscrição real para fechar o ciclo (PONTO 5)
         DerivAPI.subscribeContract(contractId, (contract) => {
             if (contract.is_sold) {
                 const profit = parseFloat(contract.profit);
-                const win = profit > 0;
-                this.finishTrade(win, profit);
+                this.finishTrade(profit > 0, profit);
             }
         });
     },
@@ -155,24 +142,16 @@ const DigitModule = {
     finishTrade(win, profit) {
         const status = document.getElementById('d-status');
         const color = win ? "text-green-500" : "text-red-500";
-        const msg = win ? "WIN" : "LOSS";
-
-        status.innerHTML += `<p class="${color} font-bold">> OPERAÇÃO FINALIZADA: ${msg} (${profit.toFixed(2)} USD)</p>`;
-        
+        status.innerHTML += `<p class="${color} font-bold">> DIGIT ${win ? 'WIN' : 'LOSS'} (${profit.toFixed(2)})</p>`;
         app.updateModuleProfit(profit, 'd');
-        
-        // PONTO 6: ESTABILIDADE E CICLO CONTÍNUO
         this.isTrading = false;
-        setTimeout(() => {
-            if (this.isAnalysisRunning) this.analyze();
-        }, 3000);
     },
 
     cleanup() {
         if (this.tickInterval) clearInterval(this.tickInterval);
         this.isAnalysisRunning = false;
+        this.autoTradeActive = false;
         this.isTrading = false;
-        this.tickBuffer = [];
         DerivAPI.send({ "forget_all": "proposal_open_contract" });
     }
 };
