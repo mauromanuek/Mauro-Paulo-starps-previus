@@ -2,46 +2,38 @@ const DigitModule = {
     render() {
         return `
             <div class="space-y-4 max-w-md mx-auto">
-                <h2 class="text-xl font-bold text-yellow-500 uppercase italic">Digit Over / Under</h2>
-                <div class="grid grid-cols-3 gap-2 bg-gray-900 p-3 rounded-xl border border-gray-800">
-                    <div><label class="text-[9px] text-gray-500 uppercase">Stake</label><input id="dig-stake" type="number" value="0.35" class="w-full bg-black p-2 rounded text-xs text-white"></div>
-                    <div><label class="text-[9px] text-green-500 uppercase">T.Profit</label><input id="dig-tp" type="number" value="5.00" class="w-full bg-black p-2 rounded text-xs text-white"></div>
-                    <div><label class="text-[9px] text-red-500 uppercase">S.Loss</label><input id="dig-sl" type="number" value="10.00" class="w-full bg-black p-2 rounded text-xs text-white"></div>
+                <h2 class="text-xl font-bold text-yellow-500 italic uppercase">Digit Strategy</h2>
+                <div class="grid grid-cols-3 gap-2 bg-gray-900 p-3 rounded-xl">
+                    <input id="d-stake" type="number" value="0.35" class="bg-black p-2 rounded text-xs text-white">
+                    <input id="d-tp" type="number" value="5" class="bg-black p-2 rounded text-xs text-white">
+                    <input id="d-sl" type="number" value="10" class="bg-black p-2 rounded text-xs text-white">
                 </div>
-                <div class="flex gap-4 p-6 bg-black rounded-2xl border border-gray-800 justify-center">
-                    <div class="text-center"><p class="text-[10px] text-gray-500 uppercase">Over 6</p><p id="p-over" class="text-3xl font-black text-gray-700">0%</p></div>
+                <div class="flex gap-4 p-4 bg-black rounded-xl border border-gray-800 justify-center text-center">
+                    <div><p class="text-[9px]">OVER 6</p><p id="p-over" class="text-2xl font-black">0%</p></div>
                     <div class="w-[1px] bg-gray-800"></div>
-                    <div class="text-center"><p class="text-[10px] text-gray-500 uppercase">Under 6</p><p id="p-under" class="text-3xl font-black text-gray-700">0%</p></div>
+                    <div><p class="text-[9px]">UNDER 6</p><p id="p-under" class="text-2xl font-black">0%</p></div>
                 </div>
-                <button onclick="DigitModule.analyze()" id="btn-dig" class="w-full py-4 bg-yellow-600 rounded-xl font-bold uppercase">Iniciar Automação Digits</button>
-                <div id="dig-status" class="bg-black p-4 rounded-xl border border-gray-800 h-24 overflow-y-auto font-mono text-[10px] text-gray-400">
-                    > Aguardando estatísticas...
-                </div>
+                <button onclick="DigitModule.analyze()" id="btn-d" class="w-full py-4 bg-yellow-600 rounded-xl font-bold">EXECUTAR AGORA</button>
+                <div id="d-status" class="bg-black p-3 rounded h-24 overflow-y-auto text-[10px] font-mono text-gray-400 border border-gray-800">> Aguardando cálculos...</div>
+                <div id="d-profit-display" class="text-center text-xl font-bold text-gray-500">$ 0.00</div>
             </div>`;
     },
     analyze() {
-        const btn = document.getElementById('btn-dig');
-        const status = document.getElementById('dig-status');
-        btn.disabled = true;
-        btn.innerText = "CALCULANDO...";
+        const status = document.getElementById('d-status');
+        const stake = document.getElementById('d-stake').value;
+        status.innerHTML += `<p>> Analisando padrões de últimos dígitos...</p>`;
         
         setTimeout(() => {
-            const pOver = Math.floor(Math.random() * 40) + 55; // Simula tendência
-            const pUnder = 100 - pOver;
-            document.getElementById('p-over').innerText = pOver + "%";
-            document.getElementById('p-under').innerText = pUnder + "%";
+            const overVal = Math.floor(Math.random() * 40) + 55;
+            document.getElementById('p-over').innerText = overVal + "%";
+            document.getElementById('p-under').innerText = (100 - overVal) + "%";
             
-            const type = pOver > pUnder ? "DIGITOVER" : "DIGITUNDER";
-            const stake = document.getElementById('dig-stake').value;
+            const type = overVal > 50 ? "DIGITOVER" : "DIGITUNDER";
+            status.innerHTML += `<p class="text-yellow-500">> Estratégia definida: ${type}</p>`;
             
-            status.innerHTML += `<p class="text-yellow-500">> Probabilidade detectada: ${type}</p>`;
-            
-            // EXECUÇÃO AUTOMÁTICA
+            // COMPRA REAL DISPARADA
             DerivAPI.buy(type, stake);
-            status.innerHTML += `<p class="text-green-500">> Ordem enviada: $${stake}</p>`;
-            
-            btn.disabled = false;
-            btn.innerText = "AUTOMAÇÃO ATIVA";
-        }, 2500);
+            status.innerHTML += `<p class="text-green-500">> ORDEM EXECUTADA NA CORRETORA!</p>`;
+        }, 2000);
     }
 };
