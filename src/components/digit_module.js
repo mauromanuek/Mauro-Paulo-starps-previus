@@ -93,12 +93,9 @@ const DigitModule = {
             subscribe: 1
         }));
 
-        // Listener de ticks único
-        const tickHandler = (msg) => {
-            if (!this.isAnalysisRunning) {
-                // Idealmente enviar um 'forget_all' ticks aqui se necessário
-                return;
-            }
+        // AJUSTE: Usando addEventListener para não sobrescrever o onmessage do deriv_api.js
+        DerivAPI.socket.addEventListener('message', (msg) => {
+            if (!this.isAnalysisRunning) return;
             
             const data = JSON.parse(msg.data);
             if (data.msg_type === 'tick' && data.tick.symbol === "R_100") {
@@ -111,8 +108,7 @@ const DigitModule = {
                 this.updateUI();
                 this.checkStrategy();
             }
-        };
-        DerivAPI.socket.onmessage = tickHandler; // Nota: DerivAPI.connect sobrepõe isso, ideal é usar addEventListener no core
+        });
     },
 
     updateUI() {
@@ -157,7 +153,7 @@ const DigitModule = {
         this.isTrading = true;
         window.currentModulePrefix = 'd';
         
-        this.log(`[ESTRATÉGIA] Probabilidade alta detectada. Entrando ${type}...`, "text-blue-400");
+        this.log(`[ESTRATÉGIA] Sinal Confirmado. Entrando ${type}...`, "text-blue-400");
 
         const params = { 
             barrier: "5", 
@@ -169,31 +165,40 @@ const DigitModule = {
             if (res.error) {
                 this.log(`[ERRO] ${res.error.message}`, "text-red-500");
                 this.isTrading = false;
-            } else {
-                this.log(`[ABERTO] Contrato: ${res.buy.contract_id}`, "text-yellow-500");
+            } else if (res.buy) {
+                const cid = res.buy.contract_id;
+                this.log(`[ABERTO] Contrato: ${cid}`, "text-yellow-500");
+                
+                // AJUSTE: Vincula o monitoramento do contrato ao ciclo de vida
+                DerivAPI.subscribeContract(cid, (c) => {
+                    if (c.is_sold) {
+                        this.onContractResult(parseFloat(c.profit));
+                    }
+                });
             }
         }, params);
     },
 
-    setupCycleListener() {
-        const handler = (e) => {
-            if (e.detail.prefix === 'd') {
-                const profit = e.detail.profit;
-                this.currentProfit += profit;
-                
-                this.stats.total++;
-                profit > 0 ? this.stats.wins++ : this.stats.losses++;
-                
-                this.updateStatsUI(profit);
+    // AJUSTE: Nova função para lidar com o resultado e preparar a reentrada
+    onContractResult(profit) {
+        this.currentProfit += profit;
+        this.stats.total++;
+        profit > 0 ? this.stats.wins++ : this.stats.losses++;
+        
+        this.updateStatsUI(profit);
 
-                // Libera para a próxima operação após delay de segurança
-                setTimeout(() => {
-                    this.isTrading = false;
-                    if (this.isAnalysisRunning) this.log("[SISTEMA] Aguardando nova oportunidade...", "text-gray-500");
-                }, 1000);
+        // Libera para a próxima operação após delay de segurança
+        setTimeout(() => {
+            this.isTrading = false;
+            if (this.isAnalysisRunning) {
+                this.log("[SISTEMA] Aguardando nova oportunidade...", "text-gray-500");
             }
-        };
-        document.addEventListener('contract_finished', handler);
+        }, 1500);
+    },
+
+    setupCycleListener() {
+        // Esta função agora é gerenciada pelo subscribeContract no executeTrade
+        // Mantida apenas para compatibilidade de estrutura
     },
 
     checkLimits() {
