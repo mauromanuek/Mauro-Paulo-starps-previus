@@ -1,5 +1,7 @@
 const AutoModule = {
     isRunning: false,
+    isTrading: false, // Novo estado para controle de fluxo
+    currentProfit: 0,
 
     render() {
         return `
@@ -31,27 +33,63 @@ const AutoModule = {
     toggle() {
         this.isRunning = !this.isRunning;
         const btn = document.getElementById('btn-a-toggle');
+        const status = document.getElementById('a-status');
+        
         btn.innerText = this.isRunning ? "PARAR ROBÔ" : "INICIAR ROBÔ";
         btn.style.backgroundColor = this.isRunning ? "#ef4444" : "#9333ea";
-        if (this.isRunning) this.loop();
+
+        if (this.isRunning) {
+            status.innerHTML += `<p class="text-blue-400 font-bold">> [SISTEMA] Robô Iniciado...</p>`;
+            this.setupListener(); // Ativa a escuta do ciclo de vida
+            this.loop();
+        } else {
+            status.innerHTML += `<p class="text-red-400">> [SISTEMA] Parando robô...</p>`;
+            this.isTrading = false;
+        }
+    },
+
+    // Escuta o evento de finalização enviado pelo deriv_api.js
+    setupListener() {
+        // Remove ouvinte antigo se existir para evitar duplicidade
+        document.removeEventListener('contract_finished', this.handleFinished.bind(this));
+        document.addEventListener('contract_finished', this.handleFinished.bind(this));
+    },
+
+    handleFinished(e) {
+        if (!this.isRunning || e.detail.prefix !== 'a') return;
+
+        this.isTrading = false; // Libera para a próxima operação
+        const status = document.getElementById('a-status');
+        
+        // Pequena pausa de segurança antes da próxima entrada (2 segundos)
+        status.innerHTML += `<p class="text-gray-500">> Aguardando 2s para reentrada...</p>`;
+        setTimeout(() => {
+            if (this.isRunning) this.loop();
+        }, 2000);
     },
 
     loop() {
-        if (!this.isRunning) return;
+        if (!this.isRunning || this.isTrading) return;
+
         window.currentModulePrefix = 'a';
         const stake = document.getElementById('a-stake').value;
+        const status = document.getElementById('a-status');
+        
+        // Simulação de análise (pode ser substituída por lógica real do analysis_engine)
         const side = Math.random() > 0.5 ? "CALL" : "PUT";
+        
+        status.innerHTML += `<p class="text-purple-400">> [ANALISANDO] Sinal detectado: ${side}</p>`;
+        
+        this.isTrading = true; // Bloqueia novas entradas até este contrato fechar
         
         DerivAPI.buy(side, stake, (res) => {
             if (res.buy) {
-                const check = setInterval(() => {
-                    if (document.querySelector('[data-finished]')) {
-                        clearInterval(check);
-                        setTimeout(() => this.loop(), 2000);
-                    }
-                }, 1000);
-            } else {
-                this.toggle();
+                status.innerHTML += `<p class="text-green-400">> [EXECUTADO] Contrato ${res.buy.contract_id} aberto.</p>`;
+                status.scrollTop = status.scrollHeight;
+            } else if (res.error) {
+                status.innerHTML += `<p class="text-red-500">> [ERRO] ${res.error.message}</p>`;
+                this.isTrading = false;
+                this.toggle(); // Para o robô em caso de erro crítico (ex: falta de saldo)
             }
         });
     }
