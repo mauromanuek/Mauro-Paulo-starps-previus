@@ -28,6 +28,21 @@ const DerivAPI = {
         };
     },
 
+    // --- NOVA FUNÇÃO DE CONEXÃO COM O ANALISTA GERAL ---
+    subscribeCandles(callback) {
+        this.callbacks['candles'] = callback;
+        // Solicita as últimas 50 velas de 1 minuto (60 segundos) para análise técnica
+        this.socket.send(JSON.stringify({
+            ticks_history: "R_100",
+            adjust_start_time: 1,
+            count: 50,
+            end: "latest",
+            granularity: 60,
+            style: "candles",
+            subscribe: 1
+        }));
+    },
+
     // Inscrição específica para monitorar um contrato até o fim
     subscribeContract(contract_id, callback) {
         this.callbacks['contract_update'] = callback;
@@ -69,6 +84,16 @@ const DerivAPI = {
     },
 
     handleResponses(data) {
+        // --- HANDLER PARA DADOS DE VELAS (ANÁLISE GERAL) ---
+        if (data.msg_type === 'ohlc' || data.msg_type === 'candles') {
+            if (this.callbacks['candles']) {
+                // Se for fluxo contínuo (ohlc), enviamos a vela atualizada
+                // Se for histórico (candles), enviamos a lista
+                const candlesData = data.candles ? data.candles : [data.ohlc];
+                this.callbacks['candles'](candlesData);
+            }
+        }
+
         // Atualização de Saldo no Header
         if (data.msg_type === 'balance') {
             const el = document.getElementById('acc-balance');
