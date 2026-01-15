@@ -2,28 +2,34 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Master Bot Deriv | Pro Terminal</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
-        body { background-color: #0b0e11; color: #eaecef; font-family: 'Inter', sans-serif; overflow: hidden; }
-        .view-section { display: none; flex-direction: column; height: 100%; width: 100%; }
+        body { background-color: #0b0e11; color: #eaecef; font-family: 'Inter', sans-serif; overflow: hidden; height: 100vh; }
+        .view-section { display: none; flex-direction: column; height: 100%; width: 100%; overflow-y: auto; }
         .view-section.active { display: flex; }
         .indicator-glow { box-shadow: 0 0 20px #22c55e; border: 2px solid #22c55e !important; opacity: 1 !important; }
         .indicator-glow-red { box-shadow: 0 0 20px #ef4444; border: 2px solid #ef4444 !important; opacity: 1 !important; }
-        #chart-container { height: 50vh; width: 100%; border-bottom: 2px solid #1e2329; }
+        #chart-container { height: 40vh; min-height: 250px; width: 100%; border-bottom: 2px solid #1e2329; }
         @media (min-width: 1024px) { #chart-container { height: 60vh; } }
         .log-win { color: #22c55e; font-weight: bold; }
         .log-loss { color: #ef4444; font-weight: bold; }
 
         /* Estilo para o Botão Toggle ON/OFF Avançado */
-        .switch { position: relative; display: inline-block; width: 40px; height: 20px; }
+        .switch { position: relative; display: inline-block; width: 34px; height: 18px; }
         .switch input { opacity: 0; width: 0; height: 0; }
         .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #333; transition: .4s; border-radius: 20px; }
-        .slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+        .slider:before { position: absolute; content: ""; height: 12px; width: 12px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
         input:checked + .slider { background-color: #22c55e; }
-        input:checked + .slider:before { transform: translateX(20px); }
+        input:checked + .slider:before { transform: translateX(16px); }
+        
+        /* Ajuste para telas pequenas */
+        @media (max-height: 700px) {
+            #chart-container { height: 35vh; }
+            .analysis-card { padding: 1rem !important; }
+        }
     </style>
 </head>
 <body class="h-screen flex flex-col" onclick="app.externalClick(event)">
@@ -36,72 +42,75 @@
         </div>
     </div>
 
-    <div id="view-main" class="hidden h-screen flex flex-col">
-        <header class="h-16 border-b border-gray-800 bg-[#1e2329] flex items-center justify-between px-6 z-50">
+    <div id="view-main" class="hidden h-screen flex flex-col overflow-hidden">
+        <header class="h-14 border-b border-gray-800 bg-[#1e2329] flex items-center justify-between px-4 z-50">
             <div class="flex items-center gap-4">
-                <button id="menu-trigger" onclick="app.toggleMenu(event)" class="text-yellow-500 text-2xl"><i class="fas fa-bars"></i></button>
-                <div class="hidden md:block">
-                    <span class="text-[10px] text-gray-500 block uppercase">Ativo Selecionado</span>
-                    <span id="current-asset-name" class="text-white font-bold text-sm">Sincronizando...</span>
+                <button id="menu-trigger" onclick="app.toggleMenu(event)" class="text-yellow-500 text-xl"><i class="fas fa-bars"></i></button>
+                <div class="hidden sm:block">
+                    <span id="current-asset-name" class="text-white font-bold text-xs">Sincronizando...</span>
                 </div>
             </div>
             
             <div class="flex flex-col items-center">
-                <span class="font-bold text-yellow-500 italic uppercase text-xs">Pro Terminal</span>
+                <span class="font-bold text-yellow-500 italic uppercase text-[10px]">Pro Terminal</span>
                 <div class="flex items-center gap-2">
-                    <span class="text-[9px] text-gray-400">RADAR</span>
+                    <span class="text-[8px] text-gray-400">RADAR</span>
                     <label class="switch">
                         <input type="checkbox" id="scanner-toggle" onchange="app.toggleScanner()">
                         <span class="slider"></span>
                     </label>
-                    <span id="status-mode" class="text-[9px] text-red-500 font-bold">OFF</span>
+                    <span id="status-mode" class="text-[8px] text-red-500 font-bold uppercase">OFF</span>
                 </div>
             </div>
 
-            <div id="acc-balance" class="text-lg font-bold text-green-500 font-mono">$ 0.00</div>
+            <div id="acc-balance" class="text-md font-bold text-green-500 font-mono">$ 0.00</div>
         </header>
 
-        <div id="ai-connection-status" class="bg-black/80 text-[10px] px-6 py-1 flex justify-between border-b border-gray-900">
+        <div id="ai-connection-status" class="bg-black/80 text-[9px] px-4 py-1 flex justify-between border-b border-gray-900">
             <span>INTELIGÊNCIA: <span id="ai-status-text" class="text-blue-400 font-bold uppercase">STANDBY</span></span>
             <span id="ai-source" class="text-gray-600 italic">XAI-GROK-BETA</span>
         </div>
 
-        <div id="side-menu" class="fixed left-0 top-16 h-full w-64 bg-[#1e2329] border-r border-gray-800 transform -translate-x-full transition-transform z-40 shadow-2xl">
-            <nav class="p-4 flex flex-col gap-2">
-                <button onclick="app.switchInterface('general')" class="flex items-center gap-3 p-4 hover:bg-gray-800 rounded-xl text-left transition-colors">
-                    <i class="fas fa-home text-blue-400"></i> Análise Geral
+        <div id="side-menu" class="fixed left-0 top-0 h-full w-64 bg-[#1e2329] border-r border-gray-800 transform -translate-x-full transition-transform z-[100] shadow-2xl">
+            <div class="p-4 border-b border-gray-800 flex justify-between items-center">
+                <span class="text-yellow-500 font-bold">MENU</span>
+                <button onclick="app.toggleMenu()" class="text-gray-500"><i class="fas fa-times"></i></button>
+            </div>
+            <nav class="p-2 flex flex-col gap-1">
+                <button onclick="app.switchInterface('general')" class="flex items-center gap-3 p-3 hover:bg-gray-800 rounded-xl text-left text-sm">
+                    <i class="fas fa-home text-blue-400 w-5"></i> Análise Geral
                 </button>
-                <button onclick="app.switchInterface('manual')" class="flex items-center gap-3 p-4 hover:bg-gray-800 rounded-xl text-left transition-colors">
-                    <i class="fas fa-hand-pointer text-green-400"></i> Operação Manual
+                <button onclick="app.switchInterface('manual')" class="flex items-center gap-3 p-3 hover:bg-gray-800 rounded-xl text-left text-sm">
+                    <i class="fas fa-hand-pointer text-green-400 w-5"></i> Operação Manual
                 </button>
-                <button onclick="app.switchInterface('auto')" class="flex items-center gap-3 p-4 hover:bg-gray-800 rounded-xl text-left transition-colors">
-                    <i class="fas fa-robot text-purple-400"></i> Operação Automática
+                <button onclick="app.switchInterface('auto')" class="flex items-center gap-3 p-3 hover:bg-gray-800 rounded-xl text-left text-sm">
+                    <i class="fas fa-robot text-purple-400 w-5"></i> Operação Automática
                 </button>
-                <button onclick="app.switchInterface('digits')" class="flex items-center gap-3 p-4 hover:bg-gray-800 rounded-xl text-left transition-colors">
-                    <i class="fas fa-fingerprint text-yellow-400"></i> Digit Over / Under
+                <button onclick="app.switchInterface('digits')" class="flex items-center gap-3 p-3 hover:bg-gray-800 rounded-xl text-left text-sm">
+                    <i class="fas fa-fingerprint text-yellow-400 w-5"></i> Digit Over / Under
                 </button>
             </nav>
         </div>
 
         <main class="flex-1 relative overflow-hidden flex flex-col">
             <section id="interface-general" class="view-section active">
-                <div id="strategy-info" class="bg-blue-900/20 px-6 py-2 border-b border-blue-800/30 text-[11px] flex justify-between">
-                    <span id="strategy-label" class="text-blue-400 font-bold uppercase">> [MODO SNIPER] AGUARDANDO CICLO DE 30S</span>
-                    <span id="asset-timeframe" class="text-gray-500 italic">TIMEFRAME: AUTO</span>
+                <div id="strategy-info" class="bg-blue-900/20 px-4 py-1.5 border-b border-blue-800/30 text-[10px] flex justify-between">
+                    <span id="strategy-label" class="text-blue-400 font-bold uppercase">> AGUARDANDO CICLO</span>
+                    <span id="asset-timeframe" class="text-gray-500 italic uppercase">AUTO</span>
                 </div>
                 <div id="chart-container">
                     <div id="tv_widget" class="w-full h-full"></div>
                 </div>
-                <div class="flex-1 flex flex-col items-center justify-start p-4 bg-[#0b0e11] overflow-y-auto">
-                    <div id="analysis-report" class="w-full max-w-lg bg-gray-900 border border-gray-800 rounded-3xl p-6 text-center shadow-2xl mb-4">
-                        <div id="report-content" class="text-2xl font-black text-gray-700 mb-4 uppercase">Aguardando Início</div>
-                        <button id="btn-gen-toggle" onclick="app.generateReport()" class="w-full py-4 bg-blue-600 rounded-2xl font-bold shadow-lg">INICIAR ANÁLISE GERAL</button>
+                <div class="flex-1 flex flex-col items-center justify-start p-4 bg-[#0b0e11] overflow-y-auto pb-20">
+                    <div id="analysis-report" class="analysis-card w-full max-w-lg bg-gray-900 border border-gray-800 rounded-2xl p-5 text-center shadow-2xl mb-4">
+                        <div id="report-content" class="text-xl font-black text-gray-700 mb-4 uppercase">Aguardando Início</div>
+                        <button id="btn-gen-toggle" onclick="app.generateReport()" class="w-full py-3.5 bg-blue-600 rounded-xl font-bold shadow-lg text-sm">INICIAR ANÁLISE GERAL</button>
                     </div>
 
-                    <div id="market-radar" class="w-full max-w-lg bg-black/40 rounded-2xl p-4 border border-gray-800 hidden">
-                        <h3 class="text-[10px] text-gray-500 uppercase font-bold mb-3"><i class="fas fa-satellite-dish mr-2"></i> Top 3 Oportunidades na Categoria</h3>
-                        <div id="radar-list" class="space-y-2">
-                            <div class="flex justify-between text-xs text-gray-400 p-2 bg-gray-800/30 rounded-lg">
+                    <div id="market-radar" class="w-full max-w-lg bg-black/40 rounded-xl p-3 border border-gray-800 hidden">
+                        <h3 class="text-[9px] text-gray-500 uppercase font-bold mb-2"><i class="fas fa-satellite-dish mr-2 text-blue-500"></i> Radar de Oportunidades</h3>
+                        <div id="radar-list" class="space-y-1">
+                            <div class="flex justify-between text-[10px] text-gray-400 p-2 bg-gray-800/30 rounded-lg">
                                 <span>Volatility 50 Index</span>
                                 <span class="text-green-500 font-bold">88% Under</span>
                             </div>
@@ -110,22 +119,14 @@
                 </div>
             </section>
 
-            <section id="interface-manual" class="view-section p-4 overflow-y-auto bg-[#0b0e11]">
-                <div id="manual-render"></div>
-            </section>
-
-            <section id="interface-auto" class="view-section p-4 overflow-y-auto bg-[#0b0e11]">
-                <div id="auto-render"></div>
-            </section>
-
-            <section id="interface-digits" class="view-section p-4 overflow-y-auto bg-[#0b0e11]">
-                <div id="digits-render"></div>
-            </section>
+            <section id="interface-manual" class="view-section p-4 bg-[#0b0e11]"></section>
+            <section id="interface-auto" class="view-section p-4 bg-[#0b0e11]"></section>
+            <section id="interface-digits" class="view-section p-4 bg-[#0b0e11]"></section>
         </main>
         
-        <footer class="h-8 bg-black border-t border-gray-800 px-6 flex items-center justify-between text-[10px] text-gray-500 font-mono">
+        <footer class="h-8 bg-black border-t border-gray-800 px-4 flex items-center justify-between text-[9px] text-gray-500 font-mono">
             <span id="status-text">Terminal Conectado</span>
-            <div id="result-display"></div>
+            <div id="result-display" class="flex gap-2"></div>
         </footer>
     </div>
 
@@ -138,6 +139,7 @@
 
     <script>
         const app = {
+            // Chave corrigida com 'x' minúsculo conforme imagem do terminal
             grokKey: "xai-VMufbThWmMU35plvCkgTu1cFHY3JTawcWha4PKKJpXlRFSJmt4QUB63gVWwiXxwwAVBKa922p2S4Lwfg",
             analista: null,
             isMenuOpen: false,
@@ -151,7 +153,6 @@
                 const token = document.getElementById('api-token').value;
                 if (!token) return alert("Insira o Token!");
                 
-                // Inicializa o motor de análise com a chave do Grok
                 this.analista = new AnaliseGeral(this.grokKey);
 
                 DerivAPI.connect(token, (res) => {
@@ -162,7 +163,6 @@
                         this.updateFooter();
                         this.initAssetObserver(); 
 
-                        // Ativa a recepção de velas da API para o Analista
                         DerivAPI.subscribeCandles((dados) => {
                             if (this.analista) this.analista.adicionarDados(dados);
                         });
@@ -182,6 +182,7 @@
                     observer.observe(target, { childList: true, subtree: true, characterData: true });
                     display.innerText = target.innerText;
                 }
+                this.initChart("DERIV:V100");
             },
 
             onAssetChange(newAssetName) {
@@ -210,12 +211,12 @@
                     status.innerText = "ON";
                     status.classList.replace('text-red-500', 'text-green-500');
                     radar.classList.remove('hidden');
-                    label.innerText = "> [MODO RADAR] ANALISANDO CATEGORIA GERAL";
+                    label.innerText = "> [MODO RADAR] ANALISANDO CATEGORIA";
                 } else {
                     status.innerText = "OFF";
                     status.classList.replace('text-green-500', 'text-red-500');
                     radar.classList.add('hidden');
-                    label.innerText = "> [MODO SNIPER] FOCO EM ATIVO ÚNICO";
+                    label.innerText = "> [MODO SNIPER] FOCO EM ATIVO";
                 }
             },
 
@@ -237,6 +238,7 @@
             switchInterface(type) {
                 document.querySelectorAll('.view-section').forEach(sec => {
                     sec.classList.remove('active');
+                    sec.innerHTML = ""; 
                 });
                 
                 const chartCont = document.getElementById('chart-container');
@@ -245,8 +247,6 @@
                 if (type === 'general') {
                     chartCont.style.display = 'block';
                     strategyInfo.style.display = 'flex';
-                    const currentName = document.getElementById('current-asset-name').innerText;
-                    this.onAssetChange(currentName);
                 } else {
                     chartCont.style.display = 'none';
                     strategyInfo.style.display = 'none';
@@ -255,9 +255,9 @@
                 const target = document.getElementById(`interface-${type}`);
                 if (target) {
                     target.classList.add('active');
-                    if (type === 'manual') document.getElementById('manual-render').innerHTML = ManualModule.render();
-                    if (type === 'auto') document.getElementById('auto-render').innerHTML = AutoModule.render();
-                    if (type === 'digits') document.getElementById('digits-render').innerHTML = DigitModule.render();
+                    if (type === 'manual') target.innerHTML = ManualModule.render();
+                    if (type === 'auto') target.innerHTML = AutoModule.render();
+                    if (type === 'digits') target.innerHTML = DigitModule.render();
                 }
                 if (this.isMenuOpen) this.toggleMenu();
             },
@@ -266,7 +266,7 @@
                 new TradingView.widget({
                     "autosize": true, "symbol": symbol, "interval": "1",
                     "theme": "dark", "container_id": "tv_widget", "locale": "br",
-                    "style": "1", "hide_side_toolbar": false, "allow_symbol_change": true, "save_image": false
+                    "style": "1", "hide_side_toolbar": true, "allow_symbol_change": true, "save_image": false
                 });
             },
 
@@ -300,10 +300,9 @@
                 const footer = document.getElementById('result-display');
                 if (footer) {
                     footer.innerHTML = `
-                        <span class="mr-3">LUCRO: <span class="text-green-500">$${this.stats.totalProfit.toFixed(2)}</span></span>
-                        <span class="mr-3">PERDA: <span class="text-red-500">$${this.stats.totalLoss.toFixed(2)}</span></span>
-                        <span class="mr-3">WIN: ${this.stats.wins}</span>
-                        <span>LOSS: ${this.stats.losses}</span>
+                        <span class="mr-2">W: <span class="text-green-500">${this.stats.wins}</span></span>
+                        <span class="mr-2">L: <span class="text-red-500">${this.stats.losses}</span></span>
+                        <span>NET: <span class="${(this.stats.totalProfit - this.stats.totalLoss) >= 0 ? 'text-green-500' : 'text-red-500'}">$${(this.stats.totalProfit - this.stats.totalLoss).toFixed(2)}</span></span>
                     `;
                 }
             },
@@ -319,7 +318,6 @@
                 if (prefix === 'd' && DigitModule.isAnalysisRunning) DigitModule.toggle();
             },
 
-            // LÓGICA DE ANÁLISE INTEGRADA COM O MOTOR ANALISE GERAL
             async generateReport() {
                 const btn = document.getElementById('btn-gen-toggle');
                 const report = document.getElementById('report-content');
@@ -331,45 +329,32 @@
                 if (this.isAnalyzing) {
                     btn.innerText = "PARAR ANÁLISE";
                     btn.classList.replace('bg-blue-600', 'bg-red-600');
-                    report.innerHTML = `<span class="animate-pulse text-yellow-500">CONSULTANDO INTELIGÊNCIA COM DADOS REAIS...</span>`;
-                    aiStatus.innerText = "PROCESSANDO GROK...";
+                    report.innerHTML = `<span class="animate-pulse text-yellow-500 text-sm">CONSULTANDO DADOS REAIS...</span>`;
+                    aiStatus.innerText = "PROCESSANDO...";
                     aiStatus.className = "text-yellow-500 font-bold uppercase";
 
                     try {
-                        // Chama o método que envia dados reais do mercado para o Grok
                         const veredito = await this.analista.obterVereditoCompleto();
-
-                        aiStatus.innerText = "GROK (IA) ATIVO";
+                        aiStatus.innerText = "IA ATIVA";
                         aiStatus.className = "text-green-500 font-bold uppercase";
-                        strategyLabel.innerText = `> [GROK AI] SINAL: ${veredito.direcao}`;
+                        strategyLabel.innerText = `> [SINAL IA] ${veredito.direcao}`;
                         
                         report.innerHTML = `
-                            <div class="text-left">
-                                <p class="${veredito.direcao === 'CALL' ? 'text-green-500' : (veredito.direcao === 'PUT' ? 'text-red-500' : 'text-yellow-500')} text-xl font-black uppercase">
-                                    RECOMENDAÇÃO: ${veredito.direcao}
-                                </p>
-                                <p class="text-gray-400 text-sm italic">${veredito.motivo}</p>
+                            <div class="text-left bg-black/30 p-3 rounded-lg border-l-4 ${veredito.direcao === 'CALL' ? 'border-green-500' : 'border-red-500'}">
+                                <p class="${veredito.direcao === 'CALL' ? 'text-green-500' : 'text-red-500'} font-black text-sm uppercase">RECOMENDAÇÃO: ${veredito.direcao}</p>
+                                <p class="text-gray-400 text-[10px] mt-1">${veredito.motivo}</p>
                             </div>`;
-
                     } catch (e) {
-                        // FALLBACK: MODO AUTÔNOMO LOCAL SE A IA FALHAR
-                        aiStatus.innerText = "MODO AUTÔNOMO (LOCAL)";
+                        aiStatus.innerText = "MODO LOCAL (EBOOK)";
                         aiStatus.className = "text-orange-500 font-bold uppercase";
-                        strategyLabel.innerText = "> [LOCAL] TEORIA DE DOW ATIVA";
-                        
                         const local = this.analista.calcularIndicadoresLocais();
-                        report.innerHTML = `
-                            <div class="text-left">
-                                <p class="text-orange-500 text-xl font-black uppercase">SINAL LOCAL (EBOOK)</p>
-                                <p class="text-gray-400 text-sm italic">Tendência: ${local.tendenciaDow}. IA Offline, usando análise matemática de topos e fundos.</p>
-                            </div>`;
+                        report.innerHTML = `<div class="text-left p-2"><p class="text-orange-500 font-bold text-xs uppercase">SINAL LOCAL</p><p class="text-gray-500 text-[10px]">Tendência: ${local.tendenciaDow}. IA indisponível (verifique créditos xAI).</p></div>`;
                     }
                 } else {
                     btn.innerText = "INICIAR ANÁLISE GERAL";
                     btn.classList.replace('bg-red-600', 'bg-blue-600');
-                    report.innerText = "Aguardando Início";
+                    report.innerText = "Aguardando";
                     aiStatus.innerText = "STANDBY";
-                    aiStatus.className = "text-blue-400 font-bold uppercase";
                 }
             }
         };
