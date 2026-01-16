@@ -9,7 +9,7 @@ class AnaliseGeral {
     }
 
     calcularIndicadoresLocais() {
-        if (this.historicoVelas.length < 5) return { tendenciaDow: "NEUTRA", isMartelo: false };
+        if (this.historicoVelas.length < 5) return { tendenciaDow: "NEUTRA", isMartelo: false, rsi: 50 };
 
         const v = this.historicoVelas;
         const atual = v[v.length - 1];
@@ -23,17 +23,27 @@ class AnaliseGeral {
         const sombraInferior = atual.close > atual.open ? (atual.open - atual.low) : (atual.close - atual.low);
         const isMartelo = sombraInferior > (corpo * 2);
 
-        // 3. RSI Simplificado (Força do Mercado)
-        const rsi = this.historicoVelas.reduce((acc, cur) => acc + (cur.close > cur.open ? 1 : -1), 0);
+        // 3. RSI Real (Força Relativa - Baseado nas últimas 14 velas ou disponíveis)
+        let ganhos = 0;
+        let perdas = 0;
+        const periodoRSI = Math.min(this.historicoVelas.length - 1, 14);
+        
+        for (let i = v.length - periodoRSI; i < v.length; i++) {
+            const diferenca = v[i].close - v[i-1].close;
+            if (diferenca >= 0) ganhos += diferenca;
+            else perdas += Math.abs(diferenca);
+        }
+        
+        const rsi = perdas === 0 ? 100 : 100 - (100 / (1 + (ganhos / perdas)));
 
-        return { tendenciaDow, isMartelo, rsi };
+        return { tendenciaDow, isMartelo, rsi: Math.round(rsi) };
     }
 
     async obterVereditoCompleto() {
         const indicadores = this.calcularIndicadoresLocais();
         const contexto = {
             ativo: document.getElementById('current-asset-name').innerText,
-            velas: this.historicoVelas.slice(-5).map(v => ({ o: v.open, h: v.high, l: v.low, c: v.close })),
+            velas: this.historicoVelas.slice(-10).map(v => ({ o: v.open, h: v.high, l: v.low, c: v.close })),
             analiseTecnica: indicadores
         };
 
@@ -53,23 +63,28 @@ class AnaliseGeral {
                     messages: [
                         { 
                             role: "system", 
-                            content: `Você é um Trader Expert da Deriv. Use estas regras do eBook: 
-                            - Se Tendência ALTA + Martelo em Suporte: CALL.
-                            - Se Tendência BAIXA + Estrela Cadente: PUT.
-                            - Se RSI > 70: Cuidado com PUT.
-                            - Responda apenas JSON: {"direcao": "CALL"|"PUT"|"WAIT", "motivo": "frase curta"}`
+                            content: `Você é um Trader Expert da Deriv. Analise os dados reais do mercado.
+                            Regras do eBook: 
+                            - Tendência ALTA + Martelo em Suporte: CALL.
+                            - Tendência BAIXA + Estrela Cadente: PUT.
+                            - RSI > 70 indica sobrecompra (procure PUT), RSI < 30 sobrevenda (procure CALL).
+                            Responda estritamente em JSON: {"direcao": "CALL"|"PUT"|"WAIT", "confianca": 0-100, "motivo": "frase curta"}`
                         },
-                        { role: "user", content: `Analise estes dados: ${JSON.stringify(contexto)}` }
+                        { role: "user", content: `Analise estes dados agora: ${JSON.stringify(contexto)}` }
                     ],
-                    temperature: 0.2
+                    temperature: 0.1
                 })
             });
 
-            if (!response.ok) throw new Error();
+            if (!response.ok) throw new Error("Erro na API Grok");
             const data = await response.json();
-            return JSON.parse(data.choices[0].message.content);
+            
+            // Limpa o conteúdo de possíveis marcações markdown antes de dar o parse
+            const content = data.choices[0].message.content.replace(/```json|```/g, '').trim();
+            return JSON.parse(content);
         } catch (e) {
-            throw e; // Lança o erro para o index ativar o modo Fallback
+            console.error("Falha na análise Grok:", e);
+            throw e; // Lança o erro para o index ativar o modo Fallback (Local)
         }
     }
 }
