@@ -1,6 +1,6 @@
 class AnaliseGeral {
     constructor(backendUrl) {
-        // Aponta para o seu backend no Render que agora gerencia a conexão com o Groq
+        // Preserva a URL vinda do app ou usa a padrão do Render
         this.backendUrl = backendUrl || "https://mauro-paulo-starps-previus-2.onrender.com/analisar";
         this.historicoVelas = [];
     }
@@ -10,21 +10,22 @@ class AnaliseGeral {
     }
 
     calcularIndicadoresLocais() {
-        if (this.historicoVelas.length < 5) return { tendenciaDow: "NEUTRA", isMartelo: false, rsi: 50 };
+        // Aumentado para 10 velas para garantir precisão no RSI inicial
+        if (this.historicoVelas.length < 10) return { tendenciaDow: "NEUTRA", isMartelo: false, rsi: 50 };
 
         const v = this.historicoVelas;
         const atual = v[v.length - 1];
         const anterior = v[v.length - 2];
 
-        // 1. Teoria de Dow (Topos e Fundos simplificados)
+        // 1. Teoria de Dow (Topos e Fundos simplificados) - Mantida lógica original
         const tendenciaDow = atual.close > anterior.close ? "ALTA" : "BAIXA";
 
-        // 2. Padrão Martelo (Price Action)
+        // 2. Padrão Martelo (Price Action) - CORREÇÃO CIRÚRGICA na variável errada (Problema 5)
         const corpo = Math.abs(atual.open - atual.close);
-        const sombraInferior = atual.close > atual.open ? (atual.open - atual.low) : (atual.close - unders.low);
+        const sombraInferior = atual.close > atual.open ? (atual.open - atual.low) : (atual.close - atual.low);
         const isMartelo = sombraInferior > (corpo * 2);
 
-        // 3. RSI Real (Relative Strength Index)
+        // 3. RSI Real (Relative Strength Index) - Mantida lógica original
         let ganhos = 0;
         let perdas = 0;
         const periodoRSI = Math.min(this.historicoVelas.length - 1, 14);
@@ -44,14 +45,21 @@ class AnaliseGeral {
         const indicadores = this.calcularIndicadoresLocais();
         const assetName = document.getElementById('current-asset-name')?.innerText || "Ativo Desconhecido";
         
-        // Payload estruturado para o Backend (O backend enviará isso ao Groq)
+        // Payload enriquecido para IA Oportunista (Problema 3)
+        // Agora enviamos Open, High, Low e Close (OHLC) para o Llama entender volatilidade
         const payload = {
             contexto: `Ativo: ${assetName} | Timeframe: M1`,
             indicadores: {
                 dow: indicadores.tendenciaDow,
                 martelo: indicadores.isMartelo,
                 rsi_atual: indicadores.rsi,
-                price_action: this.historicoVelas.slice(-10).map(v => ({ c: v.close }))
+                // Enviamos dados mais completos das últimas 10 velas para identificar Scalp
+                price_action: this.historicoVelas.slice(-10).map(v => ({
+                    o: v.open,
+                    h: v.high,
+                    l: v.low,
+                    c: v.close
+                }))
             }
         };
 
@@ -75,12 +83,11 @@ class AnaliseGeral {
 
             const data = await response.json();
             
-            // O backend limpa o JSON e devolve no formato: { choices: [{ message: { content: "{...}" } }] }
+            // Tratamento de resposta preservado conforme lógica original
             if (data.choices && data.choices[0] && data.choices[0].message) {
                 const content = data.choices[0].message.content;
                 const veredito = JSON.parse(content);
                 
-                // Validação de campos obrigatórios do veredito
                 if (!veredito.direcao || veredito.confianca === undefined) {
                     throw new Error("JSON da IA com campos incompletos");
                 }
@@ -92,7 +99,6 @@ class AnaliseGeral {
 
         } catch (e) {
             console.error("Erro na análise via Groq:", e.message);
-            // Re-lança o erro para o index.js/AutoModule ativar o backup local
             throw e; 
         }
     }
