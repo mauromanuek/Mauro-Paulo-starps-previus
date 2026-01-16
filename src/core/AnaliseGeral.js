@@ -1,6 +1,7 @@
 class AnaliseGeral {
-    constructor(apiKey) {
-        this.apiKey = apiKey;
+    constructor(backendUrl) {
+        // Agora recebe a URL do seu backend no Render em vez da API Key direta
+        this.backendUrl = backendUrl || "https://mauro-paulo-starps-previus-2.onrender.com/analisar";
         this.historicoVelas = [];
     }
 
@@ -41,50 +42,52 @@ class AnaliseGeral {
 
     async obterVereditoCompleto() {
         const indicadores = this.calcularIndicadoresLocais();
-        const contexto = {
-            ativo: document.getElementById('current-asset-name').innerText,
-            velas: this.historicoVelas.slice(-10).map(v => ({ o: v.open, h: v.high, l: v.low, c: v.close })),
-            analiseTecnica: indicadores
+        const assetName = document.getElementById('current-asset-name')?.innerText || "Ativo Desconhecido";
+        
+        // Formata os dados exatamente como o Backend Flask espera
+        const payload = {
+            contexto: `Ativo: ${assetName} | Timeframe: M1 | Últimas 10 velas processadas.`,
+            indicadores: JSON.stringify({
+                dow: indicadores.tendenciaDow,
+                martelo: indicadores.isMartelo,
+                rsi_atual: indicadores.rsi,
+                price_action: this.historicoVelas.slice(-5).map(v => ({ c: v.close }))
+            })
         };
 
-        return await this.chamarGrok(contexto);
+        return await this.chamarGrok(payload);
     }
 
-    async chamarGrok(contexto) {
+    async chamarGrok(payload) {
         try {
-            const response = await fetch("https://api.x.ai/v1/chat/completions", {
+            // Chamada agora é feita para o SEU BACKEND no Render
+            const response = await fetch(this.backendUrl, {
                 method: "POST",
                 headers: {
-                    "Authorization": `Bearer ${this.apiKey}`,
                     "Content-Type": "application/json"
                 },
-                body: JSON.stringify({
-                    model: "grok-beta",
-                    messages: [
-                        { 
-                            role: "system", 
-                            content: `Você é um Trader Expert da Deriv. Analise os dados reais do mercado.
-                            Regras do eBook: 
-                            - Tendência ALTA + Martelo em Suporte: CALL.
-                            - Tendência BAIXA + Estrela Cadente: PUT.
-                            - RSI > 70 indica sobrecompra (procure PUT), RSI < 30 sobrevenda (procure CALL).
-                            Responda estritamente em JSON: {"direcao": "CALL"|"PUT"|"WAIT", "confianca": 0-100, "motivo": "frase curta"}`
-                        },
-                        { role: "user", content: `Analise estes dados agora: ${JSON.stringify(contexto)}` }
-                    ],
-                    temperature: 0.1
-                })
+                body: JSON.stringify(payload)
             });
 
-            if (!response.ok) throw new Error("Erro na API Grok");
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.erro || "Erro na comunicação com o Backend");
+            }
+
             const data = await response.json();
             
-            // Limpa o conteúdo de possíveis marcações markdown antes de dar o parse
-            const content = data.choices[0].message.content.replace(/```json|```/g, '').trim();
-            return JSON.parse(content);
+            // O backend já sanitizou o JSON no campo 'content'
+            // O frontend apenas faz o parse final para retornar o objeto direcao/confianca
+            if (data.choices && data.choices[0] && data.choices[0].message) {
+                const content = data.choices[0].message.content;
+                return JSON.parse(content);
+            } else {
+                throw new Error("Resposta da IA com estrutura inválida");
+            }
+
         } catch (e) {
-            console.error("Falha na análise Grok:", e);
-            throw e; // Lança o erro para o index ativar o modo Fallback (Local)
+            console.error("Falha na análise via Backend/Grok:", e.message);
+            throw e; // Lança para o index ativar o modo Fallback (Local)
         }
     }
 }
