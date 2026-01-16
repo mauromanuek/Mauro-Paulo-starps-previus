@@ -122,7 +122,8 @@ const AutoModule = {
                 });
             } else {
                 // Intervalo curto entre análises para não perder oportunidades rápidas
-                this.log(`SINAL FRACO (${veredito.confianca}%). REAVALIANDO EM 3S...`, "text-gray-600");
+                const reason = veredito.direcao === "WAIT" || veredito.direcao === "NEUTRAL" ? "MERCADO NEUTRO" : `SINAL FRACO (${veredito.confianca}%)`;
+                this.log(`${reason}. REAVALIANDO EM 3S...`, "text-gray-600");
                 setTimeout(() => this.runCycle(), 3000);
             }
 
@@ -131,16 +132,21 @@ const AutoModule = {
             const local = app.analista.calcularIndicadoresLocais();
             
             let direcao = "WAIT";
-            // Lógica técnica agressiva para fallback
+            // Lógica técnica agressiva para fallback híbrido
             if (local.isMartelo || (local.tendenciaDow === "ALTA" && local.rsi < 65)) direcao = "CALL";
             else if (local.rsi > 75) direcao = "PUT";
 
             if (direcao !== "WAIT") {
                 this.isTrading = true;
+                this.log(`ENTRADA LOCAL: ${direcao} (RSI: ${local.rsi})`, "text-orange-400");
                 DerivAPI.buy(direcao, document.getElementById('a-stake').value, 'a', (res) => {
-                    if (res.error) { this.isTrading = false; setTimeout(() => this.runCycle(), 3000); }
+                    if (res.error) { 
+                        this.isTrading = false; 
+                        setTimeout(() => this.runCycle(), 3000); 
+                    }
                 });
             } else {
+                this.log("AGUARDANDO CONDIÇÕES TÉCNICAS LOCAIS...", "text-gray-600");
                 setTimeout(() => this.runCycle(), 3000);
             }
         }
@@ -163,8 +169,12 @@ const AutoModule = {
     },
 
     checkLimits() {
-        const tp = parseFloat(document.getElementById('a-tp').value);
-        const sl = parseFloat(document.getElementById('a-sl').value);
+        const tpInput = document.getElementById('a-tp');
+        const slInput = document.getElementById('a-sl');
+        if (!tpInput || !slInput) return false;
+
+        const tp = parseFloat(tpInput.value);
+        const sl = parseFloat(slInput.value);
 
         if (this.currentProfit >= tp) {
             this.log("META ATINGIDA! DESLIGANDO...", "text-green-500 font-black");
@@ -186,7 +196,9 @@ const AutoModule = {
             profitEl.className = `text-xl font-black ${this.currentProfit >= 0 ? 'text-green-500' : 'text-red-500'}`;
         }
 
-        document.getElementById('a-stat-w').innerText = this.stats.wins;
-        document.getElementById('a-stat-l').innerText = this.stats.losses;
+        const winStat = document.getElementById('a-stat-w');
+        const lossStat = document.getElementById('a-stat-l');
+        if (winStat) winStat.innerText = this.stats.wins;
+        if (lossStat) lossStat.innerText = this.stats.losses;
     }
 };
