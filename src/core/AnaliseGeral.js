@@ -1,6 +1,6 @@
 class AnaliseGeral {
     constructor(backendUrl) {
-        // Agora recebe a URL do seu backend no Render em vez da API Key direta
+        // Aponta para o seu backend no Render que agora gerencia a conexão com o Groq
         this.backendUrl = backendUrl || "https://mauro-paulo-starps-previus-2.onrender.com/analisar";
         this.historicoVelas = [];
     }
@@ -16,15 +16,15 @@ class AnaliseGeral {
         const atual = v[v.length - 1];
         const anterior = v[v.length - 2];
 
-        // 1. Teoria de Dow (Topos e Fundos)
+        // 1. Teoria de Dow (Topos e Fundos simplificados)
         const tendenciaDow = atual.close > anterior.close ? "ALTA" : "BAIXA";
 
-        // 2. Padrão Martelo (Corpo pequeno, sombra inferior longa)
+        // 2. Padrão Martelo (Price Action)
         const corpo = Math.abs(atual.open - atual.close);
-        const sombraInferior = atual.close > atual.open ? (atual.open - atual.low) : (atual.close - atual.low);
+        const sombraInferior = atual.close > atual.open ? (atual.open - atual.low) : (atual.close - unders.low);
         const isMartelo = sombraInferior > (corpo * 2);
 
-        // 3. RSI Real (Força Relativa - Baseado nas últimas 14 velas ou disponíveis)
+        // 3. RSI Real (Relative Strength Index)
         let ganhos = 0;
         let perdas = 0;
         const periodoRSI = Math.min(this.historicoVelas.length - 1, 14);
@@ -44,23 +44,22 @@ class AnaliseGeral {
         const indicadores = this.calcularIndicadoresLocais();
         const assetName = document.getElementById('current-asset-name')?.innerText || "Ativo Desconhecido";
         
-        // Formata os dados exatamente como o Backend Flask espera
+        // Payload estruturado para o Backend (O backend enviará isso ao Groq)
         const payload = {
-            contexto: `Ativo: ${assetName} | Timeframe: M1 | Últimas 10 velas processadas.`,
-            indicadores: JSON.stringify({
+            contexto: `Ativo: ${assetName} | Timeframe: M1`,
+            indicadores: {
                 dow: indicadores.tendenciaDow,
                 martelo: indicadores.isMartelo,
                 rsi_atual: indicadores.rsi,
-                price_action: this.historicoVelas.slice(-5).map(v => ({ c: v.close }))
-            })
+                price_action: this.historicoVelas.slice(-10).map(v => ({ c: v.close }))
+            }
         };
 
-        return await this.chamarGrok(payload);
+        return await this.chamarGroq(payload);
     }
 
-    async chamarGrok(payload) {
+    async chamarGroq(payload) {
         try {
-            // Chamada agora é feita para o SEU BACKEND no Render
             const response = await fetch(this.backendUrl, {
                 method: "POST",
                 headers: {
@@ -71,23 +70,30 @@ class AnaliseGeral {
 
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.erro || "Erro na comunicação com o Backend");
+                throw new Error(errorData.erro || "Falha na comunicação com Backend");
             }
 
             const data = await response.json();
             
-            // O backend já sanitizou o JSON no campo 'content'
-            // O frontend apenas faz o parse final para retornar o objeto direcao/confianca
+            // O backend limpa o JSON e devolve no formato: { choices: [{ message: { content: "{...}" } }] }
             if (data.choices && data.choices[0] && data.choices[0].message) {
                 const content = data.choices[0].message.content;
-                return JSON.parse(content);
+                const veredito = JSON.parse(content);
+                
+                // Validação de campos obrigatórios do veredito
+                if (!veredito.direcao || veredito.confianca === undefined) {
+                    throw new Error("JSON da IA com campos incompletos");
+                }
+                
+                return veredito;
             } else {
-                throw new Error("Resposta da IA com estrutura inválida");
+                throw new Error("Estrutura de resposta inesperada da IA");
             }
 
         } catch (e) {
-            console.error("Falha na análise via Backend/Grok:", e.message);
-            throw e; // Lança para o index ativar o modo Fallback (Local)
+            console.error("Erro na análise via Groq:", e.message);
+            // Re-lança o erro para o index.js/AutoModule ativar o backup local
+            throw e; 
         }
     }
 }
