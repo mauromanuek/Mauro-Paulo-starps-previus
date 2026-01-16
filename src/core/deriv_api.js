@@ -3,6 +3,7 @@ const DerivAPI = {
     isAuthorized: false,
     callbacks: {},
     activeContracts: {}, // Mapeia contract_id -> prefixo do módulo ('m', 'a', 'd')
+    currentSymbol: "R_100", // Armazena o ativo atual para sincronia
 
     connect(token, callback) {
         // Mantendo a estrutura de conexão original
@@ -19,6 +20,12 @@ const DerivAPI = {
                 this.isAuthorized = true;
                 // Inscrição de saldo obrigatória para o footer
                 this.socket.send(JSON.stringify({ balance: 1, subscribe: 1 }));
+                
+                // NOVO: Subscreve para detectar quando o usuário troca de ativo na plataforma
+                this.socket.send(JSON.stringify({ 
+                    proposal_open_contract: 1, 
+                    subscribe: 1 
+                }));
             }
 
             // Encaminhamento para handlers internos
@@ -31,9 +38,9 @@ const DerivAPI = {
     // --- NOVA FUNÇÃO DE CONEXÃO COM O ANALISTA GERAL ---
     subscribeCandles(callback) {
         this.callbacks['candles'] = callback;
-        // Solicita as últimas 50 velas de 1 minuto (60 segundos) para análise técnica
+        // Agora usa o this.currentSymbol em vez de ficar fixo em R_100
         this.socket.send(JSON.stringify({
-            ticks_history: "R_100",
+            ticks_history: this.currentSymbol,
             adjust_start_time: 1,
             count: 50,
             end: "latest",
@@ -75,7 +82,7 @@ const DerivAPI = {
                 currency: 'USD',
                 duration: 1,
                 duration_unit: 't',
-                symbol: "R_100", // Volatilidade 100 padrão conforme index
+                symbol: this.currentSymbol, // USANDO O ATIVO SINCRONIZADO EM TEMPO REAL
                 ...extraParams
             }
         };
@@ -87,8 +94,6 @@ const DerivAPI = {
         // --- HANDLER PARA DADOS DE VELAS (ANÁLISE GERAL) ---
         if (data.msg_type === 'ohlc' || data.msg_type === 'candles') {
             if (this.callbacks['candles']) {
-                // Se for fluxo contínuo (ohlc), enviamos a vela atualizada
-                // Se for histórico (candles), enviamos a lista
                 const candlesData = data.candles ? data.candles : [data.ohlc];
                 this.callbacks['candles'](candlesData);
             }
@@ -106,10 +111,8 @@ const DerivAPI = {
                 const contractId = data.buy.contract_id;
                 const prefix = window.currentModulePrefix || 'm';
                 
-                // Mapeia o ID do contrato ao módulo correspondente
                 this.activeContracts[contractId] = prefix;
 
-                // INÍCIO DO CICLO: Subscreve para acompanhar o fechamento
                 this.socket.send(JSON.stringify({
                     proposal_open_contract: 1,
                     contract_id: contractId,
@@ -117,7 +120,6 @@ const DerivAPI = {
                 }));
             }
             
-            // Executa o callback do módulo (Manual, Auto ou Digit)
             if (this.callbacks['buy']) {
                 this.callbacks['buy'](data);
             }
@@ -129,21 +131,25 @@ const DerivAPI = {
             
             if (!c) return;
 
+            // NOVO: SINCRONIA DE ATIVO (Se o ativo mudar na Deriv, o bot percebe aqui)
+            if (c.underlying && c.underlying !== this.currentSymbol) {
+                this.currentSymbol = c.underlying;
+                if (window.app && typeof app.onAssetChange === 'function') {
+                    app.onAssetChange(c.underlying);
+                }
+            }
+
             // Se o contrato acabou de ser vendido (Fechado)
             if (c.is_sold) {
                 const prefix = this.activeContracts[c.contract_id] || window.currentModulePrefix || 'm';
                 const profit = parseFloat(c.profit);
                 
-                // 1. Atualiza Lucro no App (Lógica do index.html)
                 if (window.app && typeof app.updateModuleProfit === 'function') {
                     app.updateModuleProfit(profit, prefix);
                 }
 
-                // 2. Limpa o mapeamento para liberar memória
                 delete this.activeContracts[c.contract_id];
                 
-                // 3. GATILHO DE CICLO DE VIDA: 
-                // Dispara evento para que o módulo saiba que pode operar novamente
                 const event = new CustomEvent('contract_finished', { 
                     detail: { 
                         prefix: prefix, 
@@ -154,7 +160,6 @@ const DerivAPI = {
                 document.dispatchEvent(event);
             }
 
-            // Callback genérico de update se necessário
             if (this.callbacks['contract_update']) {
                 this.callbacks['contract_update'](c);
             }
