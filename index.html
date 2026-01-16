@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Master Bot Deriv | Pro Terminal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body { background-color: #0b0e11; color: #eaecef; font-family: 'Inter', sans-serif; overflow: hidden; height: 100vh; }
+        .view-section { display: none; flex-direction: column; height: 100%; width: 100%; overflow-y: auto; }
+        .view-section.active { display: flex; }
+        #chart-container { height: 40vh; min-height: 250px; width: 100%; border-bottom: 2px solid #1e2329; }
+        @media (min-width: 1024px) { #chart-container { height: 60vh; } }
+        .log-win { color: #22c55e; font-weight: bold; }
+        .log-loss { color: #ef4444; font-weight: bold; }
+
+        /* Estilização do Switch do Radar */
+        .switch { position: relative; display: inline-block; width: 34px; height: 18px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #333; transition: .4s; border-radius: 20px; }
+        .slider:before { position: absolute; content: ""; height: 12px; width: 12px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: #22c55e; }
+        input:checked + .slider:before { transform: translateX(16px); }
+    </style>
+</head>
+<body class="h-screen flex flex-col" onclick="app.externalClick(event)">
+
+    <div id="view-login" class="flex-1 flex items-center justify-center p-4">
+        <div class="bg-[#1e2329] p-8 rounded-2xl border border-gray-800 w-full max-w-md shadow-2xl">
+            <h1 class="text-2xl font-bold text-center mb-6 text-white">Master Bot <span class="text-yellow-500">Deriv</span></h1>
+            <input type="password" id="api-token" placeholder="Insira seu API Token" class="w-full bg-black border border-gray-700 rounded-xl p-4 mb-4 text-center text-white outline-none">
+            <button id="btn-conectar-main" onclick="app.start()" class="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-4 rounded-xl transition-all">CONECTAR TERMINAL</button>
+        </div>
+    </div>
+
+    <div id="view-main" class="hidden h-screen flex flex-col overflow-hidden">
+        <header class="h-14 border-b border-gray-800 bg-[#1e2329] flex items-center justify-between px-4 z-50">
+            <div class="flex items-center gap-4">
+                <button id="menu-trigger" onclick="app.toggleMenu(event)" class="text-yellow-500 text-xl"><i class="fas fa-bars"></i></button>
+                <span id="current-asset-name" class="text-white font-bold text-xs uppercase">Detectando Ativo...</span>
+            </div>
+            
+            <div class="flex flex-col items-center">
+                <span class="font-bold text-yellow-500 italic uppercase text-[10px]">Pro Terminal</span>
+                <div class="flex items-center gap-2">
+                    <span class="text-[8px] text-gray-400">RADAR</span>
+                    <label class="switch">
+                        <input type="checkbox" id="scanner-toggle" onchange="app.toggleScanner()">
+                        <span class="slider"></span>
+                    </label>
+                    <span id="status-mode" class="text-[8px] text-red-500 font-bold uppercase">OFF</span>
+                </div>
+            </div>
+
+            <div id="acc-balance" class="text-md font-bold text-green-500 font-mono">$ 0.00</div>
+        </header>
+
+        <div id="ai-connection-status" class="bg-black/80 text-[9px] px-4 py-1 flex justify-between border-b border-gray-900">
+            <span>IA: <span id="ai-status-text" class="text-blue-400 font-bold uppercase">STANDBY</span></span>
+            <span class="text-gray-600 italic">XAI-GROK-LAMA-3.3</span>
+        </div>
+
+        <div id="side-menu" class="fixed left-0 top-0 h-full w-64 bg-[#1e2329] border-r border-gray-800 transform -translate-x-full transition-transform z-[100] shadow-2xl">
+            <div class="p-4 border-b border-gray-800 flex justify-between items-center">
+                <span class="text-yellow-500 font-bold">MENU</span>
+                <button onclick="app.toggleMenu()" class="text-gray-500"><i class="fas fa-times"></i></button>
+            </div>
+            <nav class="p-2 flex flex-col gap-1">
+                <button onclick="app.switchInterface('general')" class="flex items-center gap-3 p-3 hover:bg-gray-800 rounded-xl text-left text-sm">
+                    <i class="fas fa-home text-blue-400 w-5"></i> Análise Geral
+                </button>
+                <button onclick="app.switchInterface('manual')" class="flex items-center gap-3 p-3 hover:bg-gray-800 rounded-xl text-left text-sm">
+                    <i class="fas fa-hand-pointer text-green-400 w-5"></i> Operação Manual
+                </button>
+                <button onclick="app.switchInterface('auto')" class="flex items-center gap-3 p-3 hover:bg-gray-800 rounded-xl text-left text-sm">
+                    <i class="fas fa-robot text-purple-400 w-5"></i> Operação Automática
+                </button>
+                <button onclick="app.switchInterface('digits')" class="flex items-center gap-3 p-3 hover:bg-gray-800 rounded-xl text-left text-sm">
+                    <i class="fas fa-fingerprint text-yellow-400 w-5"></i> Digit Over / Under
+                </button>
+            </nav>
+        </div>
+
+        <main class="flex-1 relative overflow-hidden flex flex-col">
+            <section id="interface-general" class="view-section active">
+                <div id="strategy-info" class="bg-blue-900/20 px-4 py-1.5 border-b border-blue-800/30 text-[10px] flex justify-between">
+                    <span id="strategy-label" class="text-blue-400 font-bold uppercase">> AGUARDANDO CICLO</span>
+                    <span class="text-gray-500 italic">M1 OHLC DATA</span>
+                </div>
+                <div id="chart-container">
+                    <div id="tv_widget" class="w-full h-full"></div>
+                </div>
+                <div class="flex-1 p-4 bg-[#0b0e11] overflow-y-auto pb-20 flex flex-col items-center">
+                    <div id="analysis-report" class="w-full max-w-lg bg-gray-900 border border-gray-800 rounded-2xl p-5 text-center shadow-2xl mb-4">
+                        <div id="report-content" class="text-lg font-black text-gray-700 mb-4 uppercase">Aguardando Início</div>
+                        <button id="btn-gen-toggle" onclick="app.generateReport()" class="w-full py-3.5 bg-blue-600 rounded-xl font-bold shadow-lg">INICIAR ANÁLISE GERAL</button>
+                    </div>
+
+                    <div id="market-radar" class="w-full max-w-lg bg-black/40 rounded-xl p-3 border border-gray-800 hidden">
+                        <h3 class="text-[9px] text-gray-500 uppercase font-bold mb-2"><i class="fas fa-satellite-dish mr-2 text-blue-500"></i> Radar de Varredura</h3>
+                        <div id="radar-list" class="space-y-1"></div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="interface-manual" class="view-section p-4 bg-[#0b0e11]"></section>
+            <section id="interface-auto" class="view-section p-4 bg-[#0b0e11]"></section>
+            <section id="interface-digits" class="view-section p-4 bg-[#0b0e11]"></section>
+        </main>
+        
+        <footer class="h-8 bg-black border-t border-gray-800 px-4 flex items-center justify-between text-[9px] text-gray-500 font-mono">
+            <span id="status-text">Terminal Conectado</span>
+            <div id="result-display" class="flex gap-2"></div>
+        </footer>
+    </div>
+
+    <script src="https://s3.tradingview.com/tv.js"></script>
+    <script src="src/core/AnaliseGeral.js"></script>
+    <script src="src/core/deriv_api.js"></script>
+    <script src="src/components/auto_module.js"></script>
+    <script src="src/components/manual_module.js"></script>
+    <script src="src/components/digit_module.js"></script>
+
+    <script>
+        const app = {
+            backendURL: "https://mauro-paulo-starps-previus-2.onrender.com/analisar",
+            analista: null,
+            isMenuOpen: false,
+            isAnalyzing: false,
+            isScannerOn: false,
+            moduleProfits: { 'a': 0, 'm': 0, 'd': 0 },
+            stats: { wins: 0, losses: 0, totalProfit: 0, totalLoss: 0 },
+            currentAsset: "R_100",
+            assetNames: { 
+                "R_10": "Volatility 10 Index", "R_25": "Volatility 25 Index", "R_50": "Volatility 50 Index", 
+                "R_75": "Volatility 75 Index", "R_100": "Volatility 100 Index", 
+                "1Z10": "Volatility 10 (1s)", "1HZ15V": "Volatility 15 (1s)", "1HZ100V": "Volatility 100 (1s)"
+            },
+
+            start() {
+                const token = document.getElementById('api-token').value.trim();
+                if (!token) return alert("Insira o Token!");
+                
+                document.getElementById('btn-conectar-main').innerText = "VERIFICANDO...";
+                
+                if (typeof AnaliseGeral !== 'undefined') this.analista = new AnaliseGeral(this.backendURL);
+
+                DerivAPI.connect(token, (res) => {
+                    if (res.error) {
+                        alert("Erro: " + res.error.message);
+                        document.getElementById('btn-conectar-main').innerText = "CONECTAR TERMINAL";
+                        return;
+                    } 
+                    if (res.msg_type === 'authorize') {
+                        document.getElementById('view-login').style.display = 'none';
+                        document.getElementById('view-main').classList.remove('hidden');
+                        this.switchInterface('general');
+                        this.onAssetChange(this.currentAsset);
+                        
+                        DerivAPI.subscribeCandles((dados) => {
+                            if (this.analista) this.analista.adicionarDados(dados);
+                        });
+                    }
+                });
+            },
+
+            onAssetChange(symbol) {
+                // Sincronização profunda para resolver Problema 1 (Ativo Preso)
+                this.currentAsset = symbol;
+                document.getElementById('current-asset-name').innerText = this.assetNames[symbol] || symbol;
+                
+                // Limpa relatórios antigos ao trocar ativo
+                document.getElementById('report-content').innerText = "Aguardando";
+                this.isAnalyzing = false;
+                const btn = document.getElementById('btn-gen-toggle');
+                if(btn) {
+                    btn.innerText = "INICIAR ANÁLISE GERAL";
+                    btn.classList.replace('bg-red-600', 'bg-blue-600');
+                }
+
+                const mapping = {
+                    "R_10": "10", "R_25": "25", "R_50": "50", "R_75": "75", "R_100": "100",
+                    "1Z10": "10S", "1HZ15V": "15S", "1HZ100V": "100S"
+                };
+                
+                this.initChart("DERIV:" + (mapping[symbol] || symbol));
+                
+                if (DerivAPI.isAuthorized) {
+                    DerivAPI.changeSymbol(symbol);
+                }
+            },
+
+            initChart(symbol) {
+                const container = document.getElementById('tv_widget');
+                if (container) container.innerHTML = '';
+                new TradingView.widget({
+                    "autosize": true, "symbol": symbol, "interval": "1",
+                    "theme": "dark", "container_id": "tv_widget", "locale": "br",
+                    "style": "1", "hide_side_toolbar": true, "allow_symbol_change": false
+                });
+            },
+
+            toggleScanner() {
+                this.isScannerOn = document.getElementById('scanner-toggle').checked;
+                const status = document.getElementById('status-mode');
+                const radar = document.getElementById('market-radar');
+                if (this.isScannerOn) {
+                    status.innerText = "ON";
+                    status.classList.replace('text-red-500', 'text-green-500');
+                    radar.classList.remove('hidden');
+                    this.runRadarAnalysis();
+                } else {
+                    status.innerText = "OFF";
+                    status.classList.replace('text-green-500', 'text-red-500');
+                    radar.classList.add('hidden');
+                }
+            },
+
+            async runRadarAnalysis() {
+                if (!this.isScannerOn) return;
+                const radarList = document.getElementById('radar-list');
+                const scanAtivos = ["R_100", "R_50", "1HZ15V"];
+                
+                let html = "";
+                for (let id of scanAtivos) {
+                    try {
+                        // Envia payload minimalista mas real para evitar Problema 2 (Sempre Neutro)
+                        const payload = { 
+                            contexto: `RADAR SCAN FAST`, 
+                            asset: this.assetNames[id] || id,
+                            indicadores: { rsi_valor: 50, tendencia: "VARREDURA_ATIVA" } 
+                        };
+                        const resp = await fetch(this.backendURL, {
+                            method: "POST", headers: {"Content-Type": "application/json"},
+                            body: JSON.stringify(payload)
+                        });
+                        const data = await resp.json();
+                        const ver = JSON.parse(data.choices[0].message.content);
+                        const cor = ver.direcao === "CALL" ? "text-green-500" : ver.direcao === "PUT" ? "text-red-500" : "text-gray-500";
+                        html += `
+                            <div class="flex justify-between text-[10px] p-2 bg-gray-800/40 rounded mb-1 border-l-2 ${ver.direcao === 'CALL' ? 'border-green-500' : 'border-red-500' || 'border-gray-500'}">
+                                <span>${this.assetNames[id] || id}</span>
+                                <span class="${cor} font-bold">${ver.direcao} (${ver.confianca}%)</span>
+                            </div>`;
+                    } catch (e) { html += `<div class="p-1 text-[9px] text-gray-600">${id}: OFFLINE</div>`; }
+                }
+                radarList.innerHTML = html;
+                if (this.isScannerOn) setTimeout(() => this.runRadarAnalysis(), 30000);
+            },
+
+            async generateReport() {
+                const btn = document.getElementById('btn-gen-toggle');
+                const report = document.getElementById('report-content');
+                const aiStatus = document.getElementById('ai-status-text');
+
+                this.isAnalyzing = !this.isAnalyzing;
+                if (this.isAnalyzing) {
+                    btn.innerText = "PARAR ANÁLISE";
+                    btn.classList.replace('bg-blue-600', 'bg-red-600');
+                    report.innerHTML = `<span class="animate-pulse text-yellow-500">CONSULTANDO IA...</span>`;
+                    try {
+                        const veredito = await this.analista.obterVereditoCompleto();
+                        aiStatus.innerText = "IA ATIVA (LAMA 3.3)";
+                        aiStatus.className = "text-green-500 font-bold uppercase";
+                        report.innerHTML = `
+                            <div class="text-left bg-black/40 p-3 rounded-lg border-l-4 ${veredito.direcao === 'CALL' ? 'border-green-500' : veredito.direcao === 'PUT' ? 'border-red-500' : 'border-gray-500'}">
+                                <p class="${veredito.direcao === 'CALL' ? 'text-green-500' : veredito.direcao === 'PUT' ? 'text-red-500' : 'text-gray-500'} font-black uppercase">${veredito.direcao} (${veredito.confianca}%)</p>
+                                <p class="text-gray-400 text-xs mt-1">${veredito.motivo}</p>
+                            </div>`;
+                    } catch (e) { report.innerText = "ERRO NA IA"; }
+                } else {
+                    btn.innerText = "INICIAR ANÁLISE GERAL";
+                    btn.classList.replace('bg-red-600', 'bg-blue-600');
+                    report.innerText = "Aguardando";
+                }
+            },
+
+            toggleMenu(e) {
+                if(e) e.stopPropagation();
+                this.isMenuOpen = !this.isMenuOpen;
+                document.getElementById('side-menu').style.transform = this.isMenuOpen ? 'translateX(0)' : 'translateX(-100%)';
+            },
+
+            externalClick(e) {
+                if (this.isMenuOpen && !document.getElementById('side-menu').contains(e.target)) this.toggleMenu();
+            },
+
+            switchInterface(type) {
+                document.querySelectorAll('.view-section').forEach(sec => sec.classList.remove('active'));
+                const target = document.getElementById(`interface-${type}`);
+                if (target) {
+                    target.classList.add('active');
+                    if (type === 'auto') target.innerHTML = AutoModule.render();
+                    if (type === 'manual') target.innerHTML = typeof ManualModule !== 'undefined' ? ManualModule.render() : '';
+                    if (type === 'digits') target.innerHTML = typeof DigitModule !== 'undefined' ? DigitModule.render() : '';
+                }
+                if (this.isMenuOpen) this.toggleMenu();
+            },
+
+            updateFooter() {
+                const net = (this.stats.totalProfit - this.stats.totalLoss);
+                document.getElementById('result-display').innerHTML = `
+                    <span class="text-green-500">W: ${this.stats.wins}</span> | 
+                    <span class="text-red-500">L: ${this.stats.losses}</span> | 
+                    <span class="${net >= 0 ? 'text-green-500' : 'text-red-500'}">NET: $${net.toFixed(2)}</span>
+                `;
+            },
+
+            updateModuleProfit(val, prefix) {
+                this.moduleProfits[prefix] = (this.moduleProfits[prefix] || 0) + val;
+                if (val > 0) { this.stats.wins++; this.stats.totalProfit += val; } 
+                else { this.stats.losses++; this.stats.totalLoss += Math.abs(val); }
+                this.updateFooter();
+                const statusEl = document.getElementById(`${prefix}-status`);
+                if(statusEl) {
+                    statusEl.innerHTML += `<p class="${val > 0 ? 'text-green-500' : 'text-red-500'}">> [CONTRATO] ${val > 0 ? 'WIN' : 'LOSS'} (${val.toFixed(2)})</p>`;
+                    statusEl.scrollTop = statusEl.scrollHeight;
+                }
+                const profitEl = document.getElementById(`${prefix}-val-profit`);
+                if(profitEl) profitEl.innerText = `${this.moduleProfits[prefix].toFixed(2)} USD`;
+            }
+        };
+    </script>
+</body>
+</html>
