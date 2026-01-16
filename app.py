@@ -23,28 +23,31 @@ def analisar():
 
     dados_mercado = request.json
     
-    # Payload otimizado para Scalping e Oportunismo (Problema 3 e 5)
+    # Payload otimizado para Scalping Agressivo (Resolve Problemas 2, 4 e 5)
     payload = {
         "model": "llama-3.3-70b-versatile",
         "messages": [
             {
                 "role": "system", 
                 "content": (
-                    "Você é um Especialista em Scalping nos Índices Sintéticos da Deriv. "
-                    "Sua missão é ser OPORTUNISTA. Analise Price Action e Indicadores para identificar "
-                    "micro-tendências e reversões rápidas. Mesmo que a tendência principal seja estável, "
-                    "busque entradas de curto prazo. "
-                    "Responda EXCLUSIVAMENTE em formato JSON puro: "
-                    "{\"direcao\":\"CALL\"|\"PUT\"|\"NEUTRO\", \"confianca\": 0-100, \"motivo\": \"curto\"}"
+                    "Você é um Engenheiro de Trading Quantitativo especialista em Scalping na Deriv. "
+                    "Sua estratégia é baseada em Momentum e Rejeição de Preço (Price Action). "
+                    "DIRETRIZ: Seja OPORTUNISTA. Procure por sinais de entrada rápida mesmo em tendências curtas. "
+                    "Se o RSI estiver em zonas de exaustão ou houver padrões de vela (como Martelo), priorize a entrada. "
+                    "REGRAS DE RESPOSTA: "
+                    "1. Retorne APENAS JSON puro. "
+                    "2. Campos: 'direcao' (CALL, PUT ou NEUTRO), 'confianca' (0-100), 'motivo' (máx 10 palavras). "
+                    "3. Não use blocos de código ou explicações fora do JSON."
                 )
             },
             {
                 "role": "user", 
-                "content": f"Dados Técnicos Atuais: {json.dumps(dados_mercado)}"
+                "content": f"Analise estes dados OHLC e Indicadores para Scalp M1: {json.dumps(dados_mercado)}"
             }
         ],
-        "temperature": 0.4, # Aumentado para permitir identificação de padrões de risco/recompensa
-        "max_tokens": 150
+        "temperature": 0.6, # Aumentado para reduzir neutralidade excessiva
+        "max_tokens": 100,
+        "response_format": {"type": "json_object"} # Força a API a retornar JSON válido
     }
     
     headers = {
@@ -53,45 +56,53 @@ def analisar():
     }
 
     try:
-        # Chamada para API Groq
-        response = requests.post("https://api.groq.com/openai/v1/chat/completions", json=payload, headers=headers, timeout=20)
+        # Chamada para API Groq com tratamento de tempo de resposta
+        response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions", 
+            json=payload, 
+            headers=headers, 
+            timeout=25
+        )
         
         if response.status_code != 200:
-            return jsonify({"erro": f"Erro na API Groq: {response.status_code}", "detalhes": response.text}), response.status_code
+            return jsonify({
+                "erro": f"Erro na API Groq: {response.status_code}", 
+                "detalhes": response.text
+            }), response.status_code
 
         res_data = response.json()
         
         if 'choices' in res_data and len(res_data['choices']) > 0:
             content = res_data['choices'][0]['message']['content'].strip()
             
-            # Limpeza robusta de Markdown e caracteres extras (Problema 3)
-            if "```" in content:
-                content = content.split("```")
-                content = content[1] if len(content) > 1 else content[0]
-                content = content.replace("json", "").strip()
-            
             try:
-                # Validamos e limpamos o JSON antes de retornar ao frontend
-                json_valido = json.loads(content)
-                # Forçamos a estrutura correta para evitar erros no parse do JS
+                # Parse do conteúdo retornado pela IA
+                veredito = json.loads(content)
+                
+                # Normalização de Segurança (Garante que o Frontend receba o que espera)
+                veredito['direcao'] = str(veredito.get('direcao', 'NEUTRO')).upper()
+                veredito['confianca'] = int(veredito.get('confianca', 0))
+                
+                # Encapsulamento no formato esperado pelo analiseGeral.js
                 return jsonify({
                     "choices": [{
                         "message": {
-                            "content": json.dumps(json_valido)
+                            "content": json.dumps(veredito)
                         }
                     }]
                 })
-            except json.JSONDecodeError:
-                # Fallback: tenta encontrar JSON dentro de strings sujas
-                return jsonify({"erro": "Erro de formatação na IA", "raw": content}), 500
+            except (json.JSONDecodeError, ValueError) as e:
+                # Em caso de erro de formato, enviamos um log para o frontend tratar
+                return jsonify({"erro": "IA retornou formato inválido", "raw": content}), 500
         
-        return jsonify({"erro": "Resposta da IA vazia"}), 500
+        return jsonify({"erro": "Resposta da IA vazia ou malformada"}), 500
 
     except requests.exceptions.Timeout:
-        return jsonify({"erro": "Timeout na comunicação com Groq"}), 504
+        return jsonify({"erro": "A API da Groq demorou muito para responder"}), 504
     except Exception as e:
-        return jsonify({"erro": str(e)}), 500
+        return jsonify({"erro": f"Erro interno no servidor: {str(e)}"}), 500
 
 if __name__ == '__main__':
+    # O Render fornece a porta automaticamente pela variável de ambiente PORT
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
