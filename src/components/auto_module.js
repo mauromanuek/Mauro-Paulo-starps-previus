@@ -91,50 +91,56 @@ const AutoModule = {
         this.log("[IA] Solicitando veredito ao Grok...", "text-blue-400");
         
         try {
-            // Usa o analista global para obter uma decisão real da IA
             const veredito = await app.analista.obterVereditoCompleto();
             
             if (!this.isRunning) return;
 
-            // Só entra se a IA tiver confiança e direção clara
-            if ((veredito.direcao === "CALL" || veredito.direcao === "PUT") && veredito.confianca >= 65) {
+            // Ajuste de Confiança para Oportunismo (Problema 3)
+            // Reduzido de 65 para 55 para permitir scalps mais agressivos validados pela IA
+            if ((veredito.direcao === "CALL" || veredito.direcao === "PUT") && veredito.confianca >= 55) {
                 
                 const stake = document.getElementById('a-stake').value;
                 this.log(`[ENTRADA] IA confirmou ${veredito.direcao} (${veredito.confianca}%)`, "text-green-500");
-                this.log(`[MOTIVO] ${veredito.motivo}`, "text-gray-500");
+                this.log(`[MOTIVO] ${veredito.motivo}`, "text-gray-500 text-[8px]");
 
                 this.isTrading = true;
                 
-                // Compra passando o prefixo 'a' explicitamente para evitar erro de atribuição
                 DerivAPI.buy(veredito.direcao, stake, 'a', (res) => {
                     if (res.buy) {
                         this.log(`[ATIVO] Contrato: ${res.buy.contract_id}`, "text-yellow-500");
                     } else if (res.error) {
-                        this.log(`[API ERROR] ${res.error.message}`, "text-red-500");
+                        this.log(`[ERRO API] ${res.error.message}`, "text-red-500");
                         this.isTrading = false;
+                        // Tenta novamente após erro de API
+                        setTimeout(() => this.runCycle(), 2000);
                     }
                 });
             } else {
-                this.log(`[AGUARDANDO] Sinal fraco ou neutro (${veredito.confianca}%). Reanalisando em 5s...`, "text-gray-500");
-                setTimeout(() => this.runCycle(), 5000);
+                // Reduzido tempo de espera de 5s para 2s para não perder o timing do mercado
+                this.log(`[AGUARDANDO] Sinal insuficiente (${veredito.confianca}%). Reanalisando...`, "text-gray-600");
+                setTimeout(() => this.runCycle(), 2000);
             }
 
         } catch (e) {
-            this.log("[FALLBACK] IA indisponível. Usando análise técnica local...", "text-orange-500");
+            this.log("[FALLBACK] IA indisponível. Usando lógica técnica...", "text-orange-500");
             const local = app.analista.calcularIndicadoresLocais();
             
-            // Lógica simples de backup caso a IA falhe
+            // Backup Local mais inteligente usando Price Action (Problema 5)
             let direcao = "WAIT";
-            if (local.tendenciaDow === "ALTA" && local.rsi < 70) direcao = "CALL";
-            if (local.tendenciaDow === "BAIXA" && local.rsi > 30) direcao = "PUT";
+            if ((local.tendenciaDow === "ALTA" || local.isMartelo) && local.rsi < 75) direcao = "CALL";
+            else if (local.tendenciaDow === "BAIXA" && local.rsi > 25) direcao = "PUT";
 
             if (direcao !== "WAIT") {
                 this.isTrading = true;
+                this.log(`[LOCAL] Entrada via ${local.isMartelo ? 'Price Action' : 'Tendência'}`, "text-orange-400");
                 DerivAPI.buy(direcao, document.getElementById('a-stake').value, 'a', (res) => {
-                    if (res.error) this.isTrading = false;
+                    if (res.error) {
+                        this.isTrading = false;
+                        setTimeout(() => this.runCycle(), 2000);
+                    }
                 });
             } else {
-                setTimeout(() => this.runCycle(), 5000);
+                setTimeout(() => this.runCycle(), 2000);
             }
         }
     },
@@ -149,14 +155,19 @@ const AutoModule = {
         this.updateUI(profit);
 
         if (this.isRunning) {
-            this.log("[PAUSA] Ciclo concluído. Nova análise em 3s...", "text-gray-500");
-            setTimeout(() => this.runCycle(), 3000);
+            // Ciclo de scalp rápido: redução do tempo de pausa entre contratos
+            this.log("[PROXIMO] Buscando nova oportunidade...", "text-gray-500");
+            setTimeout(() => this.runCycle(), 1000);
         }
     },
 
     checkLimits() {
-        const tp = parseFloat(document.getElementById('a-tp').value);
-        const sl = parseFloat(document.getElementById('a-sl').value);
+        const tpInput = document.getElementById('a-tp');
+        const slInput = document.getElementById('a-sl');
+        if (!tpInput || !slInput) return false;
+
+        const tp = parseFloat(tpInput.value);
+        const sl = parseFloat(slInput.value);
 
         if (this.currentProfit >= tp) {
             this.log("[META] TAKE PROFIT ATINGIDO!", "text-green-500 font-black");
@@ -173,7 +184,7 @@ const AutoModule = {
 
     updateUI(lastProfit) {
         const color = lastProfit >= 0 ? 'text-green-500' : 'text-red-500';
-        this.log(`[RESULTADO] ${lastProfit > 0 ? 'VITÓRIA' : 'DERROTA'} (${lastProfit.toFixed(2)} USD)`, color);
+        this.log(`[RESULTADO] ${lastProfit > 0 ? 'WIN' : 'LOSS'} (${lastProfit.toFixed(2)} USD)`, color);
         
         const profitEl = document.getElementById('a-val-profit');
         if (profitEl) {
@@ -181,7 +192,9 @@ const AutoModule = {
             profitEl.className = `text-xl font-black ${this.currentProfit >= 0 ? 'text-green-500' : 'text-red-500'}`;
         }
 
-        document.getElementById('a-stat-w').innerText = this.stats.wins;
-        document.getElementById('a-stat-l').innerText = this.stats.losses;
+        const winEl = document.getElementById('a-stat-w');
+        const lossEl = document.getElementById('a-stat-l');
+        if (winEl) winEl.innerText = this.stats.wins;
+        if (lossEl) lossEl.innerText = this.stats.losses;
     }
 };
