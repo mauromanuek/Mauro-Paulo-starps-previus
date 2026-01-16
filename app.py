@@ -1,32 +1,34 @@
-from flask import Flask, request, jsonify
+import os
+from flask import Flask, request, jsonify, redirect
 from flask_cors import CORS
 import requests
-import os
 
 app = Flask(__name__)
-CORS(app) # Resolve o bloqueio do navegador
+CORS(app)
 
-# A CHAVE FICA AQUI, LONGE DO HTML
-GROK_API_KEY = "xai-VMufbThWmMU35plvCkgTu1cFHY3JTawcWha4PKKJpXlRFSJmt4QUB63gVWwiXxwwAVBKa922p2S4Lwfg"
+# CONFIGURAÇÕES
+LINK_DO_BOT = "https://mauromanuek.github.io/Mauro-Paulo-starps-previus/"
+GROK_API_KEY = os.environ.get("GROK_API_KEY") # BUSCA A CHAVE NO RENDER
+
+@app.route('/')
+def index():
+    return redirect(LINK_DO_BOT)
 
 @app.route('/analisar', methods=['POST'])
 def analisar():
+    if not GROK_API_KEY:
+        return jsonify({"erro": "Chave não configurada no Render"}), 500
+
     dados_mercado = request.json
-    
-    # Payload para o Grok focado em Filtro de Qualidade
     payload = {
         "model": "grok-beta",
         "messages": [
             {"role": "system", "content": "Você é um validador de tendência. Responda APENAS JSON: {'direcao':'CALL'|'PUT'|'NEUTRO', 'confianca': 0-100, 'motivo': 'curto'}"},
-            {"role": "user", "content": f"Analise este contexto: {dados_mercado['contexto']}. Indicadores: {dados_mercado['indicadores']}"}
+            {"role": "user", "content": f"Analise este contexto: {dados_mercado.get('contexto')}. Indicadores: {dados_mercado.get('indicadores')}"}
         ],
         "temperature": 0.3
     }
-
-    headers = {
-        "Authorization": f"Bearer {GROK_API_KEY}",
-        "Content-Type": "application/json"
-    }
+    headers = {"Authorization": f"Bearer {GROK_API_KEY}", "Content-Type": "application/json"}
 
     try:
         response = requests.post("https://api.x.ai/v1/chat/completions", json=payload, headers=headers)
@@ -35,6 +37,5 @@ def analisar():
         return jsonify({"erro": str(e)}), 500
 
 if __name__ == '__main__':
-    # Ajuste para rodar no Render (porta 10000 e host 0.0.0.0)
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
