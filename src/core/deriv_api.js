@@ -9,6 +9,7 @@ const DerivAPI = {
     connect(token, callback) {
         if (this.socket) this.socket.close();
         
+        // Mantendo o app_id original conforme solicitado
         this.socket = new WebSocket('wss://ws.derivws.com/websockets/v3?app_id=1089');
 
         this.socket.onopen = () => {
@@ -18,8 +19,8 @@ const DerivAPI = {
         this.socket.onmessage = (msg) => {
             const data = JSON.parse(msg.data);
             
-            // Tratamento de Erro Global (Problema 2)
             if (data.error) {
+                // Tratamento de erro preservado
                 if (callback) callback(data);
                 return;
             }
@@ -27,7 +28,6 @@ const DerivAPI = {
             if (data.msg_type === 'authorize') {
                 this.isAuthorized = true;
                 this.socket.send(JSON.stringify({ balance: 1, subscribe: 1 }));
-                // Inscrição para monitoramento geral de eventos da conta
                 this.socket.send(JSON.stringify({ 
                     proposal_open_contract: 1, 
                     subscribe: 1 
@@ -43,17 +43,21 @@ const DerivAPI = {
         };
     },
 
-    // Troca o ativo e limpa inscrições anteriores (Problema 3)
+    // Troca o ativo e garante limpeza de subscrições (Problema 2 e 6)
     changeSymbol(newSymbol) {
-        if (this.currentSymbol === newSymbol) return;
-        
-        // Cancela inscrição de velas anterior se existir
+        // Removemos a trava de igualdade para permitir re-subscrição em caso de erro
         if (this.candleSubscriptionId) {
             this.socket.send(JSON.stringify({ forget: this.candleSubscriptionId }));
             this.candleSubscriptionId = null;
         }
         
         this.currentSymbol = newSymbol;
+        
+        // Limpa o histórico no analista antes de começar o novo ativo
+        if (window.app && app.analista) {
+            app.analista.historicoVelas = [];
+        }
+
         this.subscribeCandles(this.callbacks['candles']);
     },
 
@@ -66,7 +70,7 @@ const DerivAPI = {
             adjust_start_time: 1,
             count: 50,
             end: "latest",
-            granularity: 60,
+            granularity: 60, // Mantido 1 minuto (M1)
             style: "candles",
             subscribe: 1
         }));
@@ -76,10 +80,10 @@ const DerivAPI = {
         if (!this.isAuthorized) return;
 
         this.callbacks['buy'] = callback;
-        
-        // Armazena temporariamente qual prefixo solicitou a compra
         this._pendingPrefix = prefix || 'm';
 
+        // Ajuste cirúrgico: Permitir que o parâmetro duration venha de fora (extraParams)
+        // Se não vier, mantém o padrão, mas prioriza consistência com M1
         const request = {
             buy: 1,
             price: parseFloat(stake),
@@ -88,8 +92,8 @@ const DerivAPI = {
                 basis: 'stake',
                 contract_type: type,
                 currency: 'USD',
-                duration: 1,
-                duration_unit: 't',
+                duration: extraParams.duration || 1,
+                duration_unit: extraParams.duration_unit || 'm', // Mudado para 'm' (minutos) para alinhar com análise M1
                 symbol: this.currentSymbol,
                 ...extraParams
             }
@@ -99,7 +103,6 @@ const DerivAPI = {
     },
 
     handleResponses(data) {
-        // Captura o ID da inscrição de velas para poder cancelar depois
         if (data.msg_type === 'candles' && data.subscription) {
             this.candleSubscriptionId = data.subscription.id;
         }
@@ -118,7 +121,6 @@ const DerivAPI = {
 
         if (data.msg_type === 'buy' && !data.error) {
             const contractId = data.buy.contract_id;
-            // Vincula o contrato ao módulo de forma confiável (Problema 5)
             this.activeContracts[contractId] = this._pendingPrefix;
             
             this.socket.send(JSON.stringify({
@@ -132,12 +134,10 @@ const DerivAPI = {
             const c = data.proposal_open_contract;
             if (!c) return;
 
-            // Sincronia de Ativo via contrato (Problema 3)
+            // Sincronia de Ativo (Problema 2 e 6)
             if (c.underlying && c.underlying !== this.currentSymbol) {
+                // Apenas atualiza a variável, sem disparar onAssetChange para evitar loop infinito
                 this.currentSymbol = c.underlying;
-                if (window.app && typeof app.onAssetChange === 'function') {
-                    app.onAssetChange(c.underlying);
-                }
             }
 
             if (c.is_sold) {
